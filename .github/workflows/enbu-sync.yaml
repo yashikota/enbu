@@ -21,11 +21,10 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install enbu
-        env:
-          ENBU_SHA256: bc4737e16d76f9cccaaf2fa7a23ff6651ad690fc63ec123bb431b3cad04a9ac4
         run: |
           curl -fsSL https://github.com/yashikota/enbu/releases/download/v0.1/enbu_linux_amd64.tar.gz -o enbu.tar.gz
-          echo "${ENBU_SHA256}  enbu.tar.gz" | sha256sum -c -
+          curl -fsSL https://github.com/yashikota/enbu/releases/download/v0.1/checksums.txt -o checksums.txt
+          grep enbu_linux_amd64.tar.gz checksums.txt | sha256sum -c -
           tar xzf enbu.tar.gz enbu
           install enbu /usr/local/bin/enbu
 
