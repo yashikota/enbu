@@ -1,0 +1,30 @@
+name: Auto Sync Secrets
+
+on:
+  registry_package:
+    types: [published]
+
+jobs:
+  sync:
+    if: github.event.registry_package.name == format('{0}-enbu', github.event.repository.name) && startsWith(github.event.registry_package.package_version.container_metadata.tag.name, 'recipient-')
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install enbu
+        run: go install github.com/yashikota/enbu@latest
+
+      - name: Run Sync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ENBU_SECRET_KEY: ${{ secrets.ENBU_SECRET_KEY }}
+        run: enbu sync

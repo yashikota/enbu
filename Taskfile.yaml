@@ -1,0 +1,36 @@
+version: '3'
+
+tasks:
+  test:
+    cmds:
+      - go test ./...
+
+  test:integration:
+    cmds:
+      - go test -tags=integration ./...
+
+  test:e2e:
+    cmds:
+      - go test -tags=e2e ./...
+
+  test:all:
+    cmds:
+      - task: test
+      - task: test:integration
+
+  lint:
+    cmds:
+      - golangci-lint run ./...
+
+  fmt:
+    cmds:
+      - golangci-lint fmt ./...
+
+  build:
+    cmds:
+      - go build -o enbu .
+
+  check:
+    cmds:
+      - task: lint
+      - task: test
