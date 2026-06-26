@@ -10,21 +10,12 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content/memory"
-	"oras.land/oras-go/v2/registry/remote"
-	"oras.land/oras-go/v2/registry/remote/auth"
 )
 
 func Pull(ctx context.Context, ref string, token string) ([]byte, error) {
-	repo, err := remote.NewRepository(ref)
+	repo, err := newRepository(ref, token)
 	if err != nil {
-		return nil, fmt.Errorf("parsing reference %q: %w", ref, err)
-	}
-
-	repo.Client = &auth.Client{
-		Credential: auth.StaticCredential(repo.Reference.Registry, auth.Credential{
-			Username: getUsername(),
-			Password: token,
-		}),
+		return nil, err
 	}
 
 	store := memory.New()
@@ -69,16 +60,9 @@ func Pull(ctx context.Context, ref string, token string) ([]byte, error) {
 }
 
 func ListTags(ctx context.Context, ref string, token string) ([]string, error) {
-	repo, err := remote.NewRepository(ref)
+	repo, err := newRepository(ref, token)
 	if err != nil {
-		return nil, fmt.Errorf("parsing reference %q: %w", ref, err)
-	}
-
-	repo.Client = &auth.Client{
-		Credential: auth.StaticCredential(repo.Reference.Registry, auth.Credential{
-			Username: getUsername(),
-			Password: token,
-		}),
+		return nil, err
 	}
 
 	var tags []string
@@ -94,16 +78,9 @@ func ListTags(ctx context.Context, ref string, token string) ([]string, error) {
 }
 
 func GetDigest(ctx context.Context, ref string, token string) (string, error) {
-	repo, err := remote.NewRepository(ref)
+	repo, err := newRepository(ref, token)
 	if err != nil {
-		return "", fmt.Errorf("parsing reference %q: %w", ref, err)
-	}
-
-	repo.Client = &auth.Client{
-		Credential: auth.StaticCredential(repo.Reference.Registry, auth.Credential{
-			Username: getUsername(),
-			Password: token,
-		}),
+		return "", err
 	}
 
 	tag := repo.Reference.Reference

@@ -9,8 +9,6 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content/memory"
-	"oras.land/oras-go/v2/registry/remote"
-	"oras.land/oras-go/v2/registry/remote/auth"
 )
 
 const emptyConfigJSON = "{}"
@@ -20,16 +18,9 @@ type PushOptions struct {
 }
 
 func Push(ctx context.Context, ref string, mediaType string, data []byte, token string, opts *PushOptions) error {
-	repo, err := remote.NewRepository(ref)
+	repo, err := newRepository(ref, token)
 	if err != nil {
-		return fmt.Errorf("parsing reference %q: %w", ref, err)
-	}
-
-	repo.Client = &auth.Client{
-		Credential: auth.StaticCredential(repo.Reference.Registry, auth.Credential{
-			Username: getUsername(),
-			Password: token,
-		}),
+		return err
 	}
 
 	store := memory.New()
