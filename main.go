@@ -1,0 +1,66 @@
+package main
+
+import (
+	"context"
+	"log"
+	"os"
+	"os/signal"
+	"runtime/debug"
+
+	enbucli "github.com/yashikota/enbu/internal/cli"
+)
+
+var Version string
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	app := enbucli.New(getVersion())
+	if err := app.ExecuteContext(ctx); err != nil {
+		log.SetFlags(0)
+		os.Exit(1)
+	}
+}
+
+func getVersion() string {
+	if Version != "" {
+		return Version
+	}
+
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if info.Main.Version != "(devel)" {
+			return info.Main.Version
+		}
+
+		if v, ok := getVCSBuildVersion(info); ok {
+			return v
+		}
+	}
+
+	return "(unset)"
+}
+
+func getVCSBuildVersion(info *debug.BuildInfo) (string, bool) {
+	var (
+		revision string
+		dirty    string
+	)
+
+	for _, v := range info.Settings {
+		switch v.Key {
+		case "vcs.revision":
+			revision = v.Value
+		case "vcs.modified":
+			if v.Value == "true" {
+				dirty = " (dirty)"
+			}
+		}
+	}
+
+	if revision == "" {
+		return "", false
+	}
+
+	return revision + dirty, true
+}
