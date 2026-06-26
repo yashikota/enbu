@@ -198,7 +198,11 @@ func newInitCommand() *cobra.Command {
 			fmt.Println("\nInitialization complete!")
 			fmt.Println("")
 			fmt.Println("Configure the package at:")
-			fmt.Printf("  https://github.com/orgs/%s/packages/container/%s-enbu/settings\n", cfg.Owner, cfg.Repo)
+			if client.IsOrganization(ctx, cfg.Owner) {
+				fmt.Printf("  https://github.com/orgs/%s/packages/container/%s-enbu/settings\n", cfg.Owner, cfg.Repo)
+			} else {
+				fmt.Printf("  https://github.com/users/%s/packages/container/%s-enbu/settings\n", cfg.Owner, cfg.Repo)
+			}
 			fmt.Println("")
 			fmt.Println("  1. Manage Actions access: add this repository with Write role")
 			fmt.Println("  2. Inherited access: set to \"Inherit access from source repository (recommended)\"")

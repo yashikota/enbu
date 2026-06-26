@@ -44,6 +44,27 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader) (*
 
 type User struct {
 	Login string `json:"login"`
+	Type  string `json:"type"`
+}
+
+func (c *Client) IsOrganization(ctx context.Context, login string) bool {
+	resp, err := c.do(ctx, http.MethodGet, "/users/"+login, nil)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	var u struct {
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
+		return false
+	}
+	return u.Type == "Organization"
 }
 
 func (c *Client) GetUser(ctx context.Context) (*User, error) {
