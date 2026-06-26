@@ -49,7 +49,7 @@ func SaveProject(cfg *ProjectConfig) error {
 
 	encoder := toml.NewEncoder(f)
 	if err := encoder.Encode(cfg); err != nil {
-		f.Close()
+		_ = f.Close()
 		return err
 	}
 	return f.Close()

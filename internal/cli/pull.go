@@ -57,7 +57,7 @@ func newPullCommand() *cobra.Command {
 			dotenv := bundle.ToDotEnv(secrets)
 
 			if toStdout {
-				os.Stdout.Write(dotenv)
+				_, _ = os.Stdout.Write(dotenv)
 				return nil
 			}
 

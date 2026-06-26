@@ -31,7 +31,7 @@ func TestRequestDeviceCode(t *testing.T) {
 			t.Errorf("client_id = %q, want %q", got, "test-client")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(expected)
+		_ = json.NewEncoder(w).Encode(expected)
 	}))
 	defer server.Close()
 
@@ -57,10 +57,10 @@ func TestPollForToken_Success(t *testing.T) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 		if callCount < 3 {
-			json.NewEncoder(w).Encode(TokenResponse{Error: "authorization_pending"})
+			_ = json.NewEncoder(w).Encode(TokenResponse{Error: "authorization_pending"})
 			return
 		}
-		json.NewEncoder(w).Encode(TokenResponse{
+		_ = json.NewEncoder(w).Encode(TokenResponse{
 			AccessToken: "gho_test_token",
 			TokenType:   "bearer",
 			Scope:       "repo",
@@ -87,7 +87,7 @@ func TestPollForToken_Success(t *testing.T) {
 func TestPollForToken_Expired(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(TokenResponse{Error: "expired_token"})
+		_ = json.NewEncoder(w).Encode(TokenResponse{Error: "expired_token"})
 	}))
 	defer server.Close()
 
@@ -104,7 +104,7 @@ func TestPollForToken_Expired(t *testing.T) {
 func TestPollForToken_AccessDenied(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(TokenResponse{Error: "access_denied"})
+		_ = json.NewEncoder(w).Encode(TokenResponse{Error: "access_denied"})
 	}))
 	defer server.Close()
 
