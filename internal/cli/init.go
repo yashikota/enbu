@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -195,6 +196,15 @@ func newInitCommand() *cobra.Command {
 				fmt.Println("✓ Created .github/workflows/enbu-sync.yaml")
 			}
 
+			// Auto-commit generated files
+			fmt.Println("Committing generated files...")
+			if err := gitCommitInitFiles(repoRoot); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: auto-commit failed: %v\n", err)
+				fmt.Println("  Please commit enbu.toml and .github/workflows/enbu-sync.yaml manually.")
+			} else {
+				fmt.Println("✓ Committed enbu.toml and .github/workflows/enbu-sync.yaml")
+			}
+
 			fmt.Println("\nInitialization complete!")
 			fmt.Println("")
 			fmt.Println("Configure the package at:")
@@ -208,11 +218,27 @@ func newInitCommand() *cobra.Command {
 			fmt.Println("  2. Inherited access: set to \"Inherit access from source repository (recommended)\"")
 			fmt.Println("")
 			fmt.Println("Then:")
-			fmt.Println("  3. Commit enbu.toml and .github/workflows/enbu-sync.yaml")
+			fmt.Println("  3. Push the commit: git push")
 			fmt.Println("  4. Run 'enbu add KEY VALUE' to add secrets")
 			return nil
 		},
 	}
+}
+
+func gitCommitInitFiles(repoRoot string) error {
+	addCmd := exec.Command("git", "add", "enbu.toml", ".github/workflows/enbu-sync.yaml")
+	addCmd.Dir = repoRoot
+	if out, err := addCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git add: %s: %w", out, err)
+	}
+
+	commitCmd := exec.Command("git", "commit", "-m", "chore: add enbu config and sync workflow")
+	commitCmd.Dir = repoRoot
+	if out, err := commitCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git commit: %s: %w", out, err)
+	}
+
+	return nil
 }
 
 func cleanTag(s string) string {
