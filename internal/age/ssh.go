@@ -41,13 +41,24 @@ func GetLocalSSHKey() (pubKeyStr string, privKeyPath string, err error) {
 		}
 
 		sshType := localPub.Type()
-		if sshType == "ssh-ed25519" || sshType == "ssh-rsa" {
-			cleanPubKeyStr := string(bytes.TrimSpace(ssh.MarshalAuthorizedKey(localPub)))
-			return cleanPubKeyStr, privPath, nil
+		if sshType != "ssh-ed25519" && sshType != "ssh-rsa" {
+			continue
 		}
+
+		// Verify the private key can be loaded for decryption
+		pemBytes, err := os.ReadFile(privPath)
+		if err != nil {
+			continue
+		}
+		if _, err := agessh.ParseIdentity(pemBytes); err != nil {
+			continue
+		}
+
+		cleanPubKeyStr := string(bytes.TrimSpace(ssh.MarshalAuthorizedKey(localPub)))
+		return cleanPubKeyStr, privPath, nil
 	}
 
-	return "", "", fmt.Errorf("no default SSH keys (Ed25519 or RSA) found on your machine")
+	return "", "", fmt.Errorf("no usable SSH keys (Ed25519 or RSA with accessible private key) found")
 }
 
 func LoadSSHIdentities() ([]age.Identity, error) {

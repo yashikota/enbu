@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/yashikota/enbu/internal/age"
@@ -39,8 +40,8 @@ func newAddCommand() *cobra.Command {
 				return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 			}
 
-			secretsRef := fmt.Sprintf("ghcr.io/%s/%s-enbu:secrets-default", cfg.Owner, cfg.Repo)
-			recipientsRef := fmt.Sprintf("ghcr.io/%s/%s-enbu", cfg.Owner, cfg.Repo)
+			secretsRef := fmt.Sprintf("ghcr.io/%s/%s-enbu:secrets-default", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
+			recipientsRef := fmt.Sprintf("ghcr.io/%s/%s-enbu", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
 
 			publicKeys, err := pullAllRecipients(ctx, recipientsRef, token.AccessToken)
 			if err != nil {

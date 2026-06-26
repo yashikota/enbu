@@ -85,6 +85,14 @@ func detectRepo() (string, string, error) {
 	return ParseGitRemote(strings.TrimSpace(string(out)))
 }
 
+func RepoRoot() (string, error) {
+	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return "", fmt.Errorf("not in a git repository: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 func ParseGitRemote(url string) (string, string, error) {
 	url = strings.TrimSuffix(url, "/")
 	if strings.HasPrefix(url, "git@") {

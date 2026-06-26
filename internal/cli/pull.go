@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/yashikota/enbu/internal/age"
@@ -31,7 +32,7 @@ func newPullCommand() *cobra.Command {
 				return err
 			}
 
-			ref := fmt.Sprintf("ghcr.io/%s/%s-enbu:secrets-default", cfg.Owner, cfg.Repo)
+			ref := fmt.Sprintf("ghcr.io/%s/%s-enbu:secrets-default", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
 			fmt.Fprintf(os.Stderr, "Pulling secrets...\n")
 
 			ciphertext, err := oci.Pull(ctx, ref, token.AccessToken)

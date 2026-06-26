@@ -39,7 +39,12 @@ func newInitCommand() *cobra.Command {
 				return fmt.Errorf("detecting repository: %w (run inside a git repository)", err)
 			}
 
-			registryRef := fmt.Sprintf("ghcr.io/%s/%s-enbu", cfg.Owner, cfg.Repo)
+			registryRef := fmt.Sprintf("ghcr.io/%s/%s-enbu", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
+
+			repoRoot, err := config.RepoRoot()
+			if err != nil {
+				return fmt.Errorf("finding repository root: %w", err)
+			}
 
 			existingTags, err := oci.ListTags(ctx, registryRef, token.AccessToken)
 			if err != nil && !strings.Contains(err.Error(), "404") && !strings.Contains(err.Error(), "NAME_UNKNOWN") {
@@ -178,7 +183,7 @@ func newInitCommand() *cobra.Command {
 			fmt.Println("✓ Created enbu.toml")
 
 			// Create GitHub Actions workflow
-			workflowDir := filepath.Join(".github", "workflows")
+			workflowDir := filepath.Join(repoRoot, ".github", "workflows")
 			workflowPath := filepath.Join(workflowDir, "enbu-sync.yaml")
 			if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
 				if err := os.MkdirAll(workflowDir, 0o755); err != nil {
