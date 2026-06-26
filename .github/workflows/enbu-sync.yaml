@@ -18,27 +18,19 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: Set up Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version: 1.26.4
-          cache: true
-
-      - name: Cache enbu binary
-        id: cache-enbu
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        with:
-          path: ~/go/bin/enbu
-          key: enbu-${{ runner.os }}-${{ runner.arch }}
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install enbu
-        if: steps.cache-enbu.outputs.cache-hit != 'true'
-        run: go install github.com/yashikota/enbu@feat/v0.1
+        env:
+          ENBU_SHA256: bc4737e16d76f9cccaaf2fa7a23ff6651ad690fc63ec123bb431b3cad04a9ac4
+        run: |
+          curl -fsSL https://github.com/yashikota/enbu/releases/download/v0.1/enbu_linux_amd64.tar.gz -o enbu.tar.gz
+          echo "${ENBU_SHA256}  enbu.tar.gz" | sha256sum -c -
+          tar xzf enbu.tar.gz enbu
+          install enbu /usr/local/bin/enbu
 
       - name: Run Sync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ENBU_SECRET_KEY: ${{ secrets.ENBU_SECRET_KEY }}
-        run: ~/go/bin/enbu sync
+        run: enbu sync
