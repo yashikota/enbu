@@ -62,12 +62,19 @@ func TestParseGitRemoteInvalidSSH(t *testing.T) {
 
 func TestLoadProjectConfig(t *testing.T) {
 	dir := t.TempDir()
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(dir)
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
 
 	content := `version = "0.1"` + "\n"
-	os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(content), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, err := LoadProject()
 	if err != nil {
@@ -80,11 +87,16 @@ func TestLoadProjectConfig(t *testing.T) {
 
 func TestLoadProjectConfigNotFound(t *testing.T) {
 	dir := t.TempDir()
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(dir)
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
 
-	_, err := LoadProject()
+	_, err = LoadProject()
 	if err == nil {
 		t.Fatal("expected error when enbu.toml not found")
 	}
@@ -92,9 +104,14 @@ func TestLoadProjectConfigNotFound(t *testing.T) {
 
 func TestSaveProject(t *testing.T) {
 	dir := t.TempDir()
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(dir)
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := &ProjectConfig{Version: "0.1"}
 	if err := SaveProject(cfg); err != nil {

@@ -40,7 +40,7 @@ func Pull(ctx context.Context, ref string, token string) ([]byte, error) {
 		return nil, fmt.Errorf("fetching manifest: %w", err)
 	}
 	manifestBytes, err := io.ReadAll(rc)
-	rc.Close()
+	_ = rc.Close()
 	if err != nil {
 		return nil, fmt.Errorf("reading manifest: %w", err)
 	}
@@ -58,7 +58,7 @@ func Pull(ctx context.Context, ref string, token string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetching layer: %w", err)
 	}
-	defer layerRC.Close()
+	defer func() { _ = layerRC.Close() }()
 
 	data, err := io.ReadAll(layerRC)
 	if err != nil {

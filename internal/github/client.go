@@ -51,7 +51,7 @@ func (c *Client) GetUser(ctx context.Context) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -75,7 +75,7 @@ func (c *Client) GetRepoPublicKey(ctx context.Context, owner, repo string) (*Rep
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("getting repo public key failed (status: %d)", resp.StatusCode)
@@ -129,7 +129,7 @@ func (c *Client) CreateOrUpdateRepoSecret(ctx context.Context, owner, repo, secr
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
 		bodyBytes, _ := io.ReadAll(resp.Body)

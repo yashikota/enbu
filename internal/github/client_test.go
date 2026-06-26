@@ -19,7 +19,7 @@ func TestGetUser(t *testing.T) {
 		if got := r.Header.Get("X-GitHub-Api-Version"); got != "2022-11-28" {
 			t.Errorf("API version = %q, want 2022-11-28", got)
 		}
-		json.NewEncoder(w).Encode(User{Login: "testuser"})
+		_ = json.NewEncoder(w).Encode(User{Login: "testuser"})
 	}))
 	defer server.Close()
 

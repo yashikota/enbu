@@ -46,10 +46,13 @@ func SaveProject(cfg *ProjectConfig) error {
 	if err != nil {
 		return fmt.Errorf("creating enbu.toml: %w", err)
 	}
-	defer f.Close()
 
 	encoder := toml.NewEncoder(f)
-	return encoder.Encode(cfg)
+	if err := encoder.Encode(cfg); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 func findProjectConfig() (string, error) {

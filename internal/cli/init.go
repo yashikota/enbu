@@ -61,7 +61,6 @@ func newInitCommand() *cobra.Command {
 
 			dataDir := config.DataDir()
 			var publicKey string
-			var identities []agecrypto.Identity
 
 			if _, err := os.Stat(filepath.Join(dataDir, "age_key.enc")); err == nil {
 				pubBytes, err := os.ReadFile(filepath.Join(dataDir, "age_key.pub"))
@@ -70,33 +69,13 @@ func newInitCommand() *cobra.Command {
 				}
 				publicKey = string(pubBytes)
 				fmt.Printf("Using existing age public key: %s\n", publicKey)
-
-				encKey, err := os.ReadFile(filepath.Join(dataDir, "age_key.enc"))
-				if err == nil {
-					privKeyBytes, err := tokenlock.Decrypt(encKey, token.AccessToken)
-					if err == nil {
-						id, _ := agecrypto.ParseX25519Identity(string(privKeyBytes))
-						if id != nil {
-							identities = append(identities, id)
-						}
-					}
-				}
 			} else if _, err := os.Stat(filepath.Join(dataDir, "age_key.pub")); err == nil {
 				pubBytes, err := os.ReadFile(filepath.Join(dataDir, "age_key.pub"))
 				if err != nil {
 					return fmt.Errorf("reading existing public key: %w", err)
 				}
 				publicKey = string(pubBytes)
-
-				if strings.HasPrefix(publicKey, "ssh-") {
-					fmt.Printf("Using existing SSH public key: %s\n", publicKey)
-					sshIds, err := age.LoadSSHIdentities()
-					if err == nil {
-						identities = append(identities, sshIds...)
-					}
-				} else {
-					fmt.Printf("Using existing age public key: %s\n", publicKey)
-				}
+				fmt.Printf("Using existing public key: %s\n", publicKey)
 			} else {
 				fmt.Println("Checking local SSH keys...")
 				sshPub, sshPrivPath, err := age.GetLocalSSHKey()
@@ -120,11 +99,6 @@ func newInitCommand() *cobra.Command {
 					if err := os.WriteFile(filepath.Join(dataDir, "age_key.pub"), []byte(publicKey), 0o644); err != nil {
 						return fmt.Errorf("saving public key: %w", err)
 					}
-
-					sshId, err := age.LoadSSHIdentities()
-					if err == nil {
-						identities = append(identities, sshId...)
-					}
 				} else {
 					if err != nil {
 						fmt.Printf("No local SSH key found: %v\n", err)
@@ -135,7 +109,6 @@ func newInitCommand() *cobra.Command {
 						return fmt.Errorf("generating age key pair: %w", err)
 					}
 					publicKey = kp.PublicKey
-					identities = append(identities, kp.Identity)
 					fmt.Printf("Generated age public key: %s\n", publicKey)
 
 					encrypted, err := tokenlock.Encrypt([]byte(kp.Identity.String()), token.AccessToken)
