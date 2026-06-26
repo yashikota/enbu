@@ -52,7 +52,11 @@ func RequestDeviceCode(ctx context.Context, clientID string) (*DeviceCodeRespons
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("requesting device code: unexpected status %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -129,7 +133,7 @@ func requestToken(ctx context.Context, clientID, deviceCode string) (*TokenRespo
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -103,6 +103,9 @@ func (c *Client) CreateOrUpdateRepoSecret(ctx context.Context, owner, repo, secr
 	if err != nil {
 		return fmt.Errorf("decoding public key: %w", err)
 	}
+	if len(decodedKey) != 32 {
+		return fmt.Errorf("invalid public key length: %d (expected 32)", len(decodedKey))
+	}
 
 	var peerKey [32]byte
 	copy(peerKey[:], decodedKey)

@@ -86,6 +86,7 @@ func detectRepo() (string, string, error) {
 }
 
 func ParseGitRemote(url string) (string, string, error) {
+	url = strings.TrimSuffix(url, "/")
 	if strings.HasPrefix(url, "git@") {
 		parts := strings.SplitN(url, ":", 2)
 		if len(parts) != 2 {

@@ -46,6 +46,16 @@ func TestParseGitRemoteSSHNoSuffix(t *testing.T) {
 	}
 }
 
+func TestParseGitRemoteTrailingSlash(t *testing.T) {
+	owner, repo, err := ParseGitRemote("https://github.com/yashikota/enbu/")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if owner != "yashikota" || repo != "enbu" {
+		t.Fatalf("got %s/%s, want yashikota/enbu", owner, repo)
+	}
+}
+
 func TestParseGitRemoteInvalid(t *testing.T) {
 	_, _, err := ParseGitRemote("not-a-url")
 	if err == nil {

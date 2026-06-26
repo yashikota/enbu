@@ -41,7 +41,10 @@ func newInitCommand() *cobra.Command {
 
 			registryRef := fmt.Sprintf("ghcr.io/%s/%s-enbu", cfg.Owner, cfg.Repo)
 
-			existingTags, _ := oci.ListTags(ctx, registryRef, token.AccessToken)
+			existingTags, err := oci.ListTags(ctx, registryRef, token.AccessToken)
+			if err != nil && !strings.Contains(err.Error(), "404") && !strings.Contains(err.Error(), "NAME_UNKNOWN") {
+				return fmt.Errorf("checking existing setup: %w", err)
+			}
 			hasRecipients := false
 			hasSecrets := false
 			for _, tag := range existingTags {
