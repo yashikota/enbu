@@ -36,10 +36,10 @@ jobs:
       - name: Install enbu
         if: steps.cache-enbu.outputs.cache-hit != 'true'
         run: |
-          curl -fsSL https://github.com/yashikota/enbu/releases/download/${ENBU_VERSION}/enbu_linux_amd64.tar.gz -o enbu.tar.gz
+          curl -fsSL https://github.com/yashikota/enbu/releases/download/${ENBU_VERSION}/enbu_linux_amd64.tar.gz -o enbu_linux_amd64.tar.gz
           curl -fsSL https://github.com/yashikota/enbu/releases/download/${ENBU_VERSION}/checksums.txt -o checksums.txt
           grep enbu_linux_amd64.tar.gz checksums.txt | sha256sum -c -
-          tar xvf enbu.tar.gz enbu
+          tar xvf enbu_linux_amd64.tar.gz enbu
           install enbu /usr/local/bin/enbu
 
       - name: Run Sync
