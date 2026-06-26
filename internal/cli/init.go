@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"time"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -152,7 +153,17 @@ func newInitCommand() *cobra.Command {
 
 			if joinMode {
 				fmt.Println("\nYour key has been registered.")
-				fmt.Println("Ask an existing member to run 'enbu sync' so you can access the secrets.")
+				secretsRef := fmt.Sprintf("ghcr.io/%s/%s-enbu:secrets-default", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
+				if hasSecrets {
+					if err := waitForSync(ctx, secretsRef, token.AccessToken); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+						fmt.Println("You can run 'enbu pull' later once sync completes.")
+					} else {
+						fmt.Println("✓ Sync complete. You can now run 'enbu pull' to access secrets.")
+					}
+				} else {
+					fmt.Println("No secrets exist yet. You can access them after a member runs 'enbu add'.")
+				}
 				return nil
 			}
 
@@ -365,4 +376,31 @@ func pullSecretsWithDigest(ctx context.Context, ref, token string, identities ..
 	}
 
 	return secrets, digest, nil
+}
+
+func waitForSync(ctx context.Context, secretsRef, token string) error {
+	beforeDigest, _ := oci.GetDigest(ctx, secretsRef, token)
+
+	fmt.Println("Waiting for auto-sync to complete...")
+	timeout := 3 * time.Minute
+	interval := 5 * time.Second
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(interval):
+		}
+
+		currentDigest, err := oci.GetDigest(ctx, secretsRef, token)
+		if err != nil {
+			continue
+		}
+		if currentDigest != beforeDigest {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("timed out waiting for sync (waited %s)", timeout)
 }
