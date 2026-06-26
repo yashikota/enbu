@@ -72,6 +72,24 @@ func newInitCommand() *cobra.Command {
 				fmt.Println("Entering join mode — registering your key only.")
 			}
 
+			workflowDir := filepath.Join(repoRoot, ".github", "workflows")
+			workflowPath := filepath.Join(workflowDir, "enbu-sync.yaml")
+			workflowExists := true
+			if _, err := os.Stat(workflowPath); err != nil {
+				if !os.IsNotExist(err) {
+					return fmt.Errorf("checking workflow file: %w", err)
+				}
+				workflowExists = false
+			}
+
+			var workflow []byte
+			if !joinMode && !workflowExists {
+				workflow, err = downloadEnbuSyncWorkflow(ctx)
+				if err != nil {
+					return fmt.Errorf("downloading workflow template: %w", err)
+				}
+			}
+
 			dataDir := config.DataDir()
 			var publicKey string
 
@@ -203,15 +221,9 @@ func newInitCommand() *cobra.Command {
 			fmt.Println("✓ Created enbu.toml")
 
 			// Create GitHub Actions workflow
-			workflowDir := filepath.Join(repoRoot, ".github", "workflows")
-			workflowPath := filepath.Join(workflowDir, "enbu-sync.yaml")
-			if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
+			if !workflowExists {
 				if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 					return fmt.Errorf("creating workflow directory: %w", err)
-				}
-				workflow, err := downloadEnbuSyncWorkflow(ctx)
-				if err != nil {
-					return fmt.Errorf("downloading workflow template: %w", err)
 				}
 				if err := os.WriteFile(workflowPath, workflow, 0o644); err != nil {
 					return fmt.Errorf("creating workflow file: %w", err)
