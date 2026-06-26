@@ -20,7 +20,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Cache enbu binary
+        id: cache-enbu
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: /usr/local/bin/enbu
+          key: enbu-v0.1-linux-amd64
+
       - name: Install enbu
+        if: steps.cache-enbu.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://github.com/yashikota/enbu/releases/download/v0.1/enbu_linux_amd64.tar.gz -o enbu.tar.gz
           curl -fsSL https://github.com/yashikota/enbu/releases/download/v0.1/checksums.txt -o checksums.txt
