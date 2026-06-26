@@ -196,6 +196,13 @@ func newInitCommand() *cobra.Command {
 				fmt.Println("✓ Created .github/workflows/enbu-sync.yaml")
 			}
 
+			// Create or update .gitignore
+			if err := ensureGitignore(repoRoot); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to update .gitignore: %v\n", err)
+			} else {
+				fmt.Println("✓ Updated .gitignore")
+			}
+
 			// Auto-commit generated files
 			fmt.Println("Committing generated files...")
 			if err := gitCommitInitFiles(repoRoot); err != nil {
@@ -225,8 +232,56 @@ func newInitCommand() *cobra.Command {
 	}
 }
 
+var gitignoreEntries = []string{
+	".env",
+	".env.*",
+	"!.env.example",
+}
+
+func ensureGitignore(repoRoot string) error {
+	path := filepath.Join(repoRoot, ".gitignore")
+
+	existing := ""
+	if data, err := os.ReadFile(path); err == nil {
+		existing = string(data)
+	}
+
+	lines := strings.Split(existing, "\n")
+	lineSet := make(map[string]bool)
+	for _, l := range lines {
+		lineSet[strings.TrimSpace(l)] = true
+	}
+
+	var toAdd []string
+	for _, entry := range gitignoreEntries {
+		if !lineSet[entry] {
+			toAdd = append(toAdd, entry)
+		}
+	}
+
+	if len(toAdd) == 0 {
+		return nil
+	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	if existing != "" && !strings.HasSuffix(existing, "\n") {
+		if _, err := f.WriteString("\n"); err != nil {
+			return err
+		}
+	}
+
+	content := "\n# enbu - exclude .env files\n" + strings.Join(toAdd, "\n") + "\n"
+	_, err = f.WriteString(content)
+	return err
+}
+
 func gitCommitInitFiles(repoRoot string) error {
-	addCmd := exec.Command("git", "add", "enbu.toml", ".github/workflows/enbu-sync.yaml")
+	addCmd := exec.Command("git", "add", "enbu.toml", ".github/workflows/enbu-sync.yaml", ".gitignore")
 	addCmd.Dir = repoRoot
 	if out, err := addCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git add: %s: %w", out, err)
