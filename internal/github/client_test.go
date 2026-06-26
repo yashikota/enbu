@@ -40,6 +40,39 @@ func TestGetUser(t *testing.T) {
 	}
 }
 
+func TestIsOrganization(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/users/my-org" {
+			_ = json.NewEncoder(w).Encode(map[string]string{"type": "Organization", "login": "my-org"})
+			return
+		}
+		if r.URL.Path == "/users/my-user" {
+			_ = json.NewEncoder(w).Encode(map[string]string{"type": "User", "login": "my-user"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		token:      "test-token",
+		httpClient: http.DefaultClient,
+	}
+	origBase := apiBaseURL
+	defer func() { apiBaseURL = origBase }()
+	apiBaseURL = server.URL
+
+	if !client.IsOrganization(context.Background(), "my-org") {
+		t.Error("expected my-org to be detected as Organization")
+	}
+	if client.IsOrganization(context.Background(), "my-user") {
+		t.Error("expected my-user to not be detected as Organization")
+	}
+	if client.IsOrganization(context.Background(), "nonexistent") {
+		t.Error("expected nonexistent to not be detected as Organization")
+	}
+}
+
 func TestGetUserUnauthorized(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
