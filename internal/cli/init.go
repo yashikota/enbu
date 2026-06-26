@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"time"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	agecrypto "filippo.io/age"
 	"github.com/AlecAivazis/survey/v2"
@@ -20,9 +22,10 @@ import (
 	"github.com/yashikota/enbu/internal/config"
 	gh "github.com/yashikota/enbu/internal/github"
 	"github.com/yashikota/enbu/internal/oci"
-	"github.com/yashikota/enbu/internal/templates"
 	"github.com/yashikota/enbu/internal/tokenlock"
 )
+
+var enbuSyncWorkflowURL = "https://raw.githubusercontent.com/yashikota/enbu/main/.github/workflows/enbu-sync.yaml"
 
 func newInitCommand() *cobra.Command {
 	return &cobra.Command{
@@ -206,7 +209,11 @@ func newInitCommand() *cobra.Command {
 				if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 					return fmt.Errorf("creating workflow directory: %w", err)
 				}
-				if err := os.WriteFile(workflowPath, templates.EnbuSyncWorkflow, 0o644); err != nil {
+				workflow, err := downloadEnbuSyncWorkflow(ctx)
+				if err != nil {
+					return fmt.Errorf("downloading workflow template: %w", err)
+				}
+				if err := os.WriteFile(workflowPath, workflow, 0o644); err != nil {
 					return fmt.Errorf("creating workflow file: %w", err)
 				}
 				fmt.Println("✓ Created .github/workflows/enbu-sync.yaml")
@@ -246,6 +253,33 @@ func newInitCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func downloadEnbuSyncWorkflow(ctx context.Context) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, enbuSyncWorkflowURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("unexpected status %d from %s: %s", resp.StatusCode, enbuSyncWorkflowURL, strings.TrimSpace(string(body)))
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("empty workflow template from %s", enbuSyncWorkflowURL)
+	}
+	return data, nil
 }
 
 var gitignoreEntries = []string{
