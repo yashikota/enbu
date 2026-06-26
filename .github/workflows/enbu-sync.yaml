@@ -35,7 +35,7 @@ jobs:
 
       - name: Install enbu
         if: steps.cache-enbu.outputs.cache-hit != 'true'
-        run: go install github.com/yashikota/enbu@latest
+        run: go install github.com/yashikota/enbu@feat/v0.1
 
       - name: Run Sync
         env:
