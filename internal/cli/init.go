@@ -155,7 +155,12 @@ func newInitCommand() *cobra.Command {
 				fmt.Println("\nYour key has been registered.")
 				secretsRef := fmt.Sprintf("ghcr.io/%s/%s-enbu:secrets-default", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
 				if hasSecrets {
-					if err := waitForSync(ctx, secretsRef, token.AccessToken); err != nil {
+					identities, err := loadIdentities(token.AccessToken)
+					if err != nil || len(identities) == 0 {
+						fmt.Println("Could not load decryption keys; run 'enbu pull' later once sync completes.")
+						return nil
+					}
+					if err := waitForSync(ctx, secretsRef, token.AccessToken, identities); err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 						fmt.Println("You can run 'enbu pull' later once sync completes.")
 					} else {
@@ -378,29 +383,31 @@ func pullSecretsWithDigest(ctx context.Context, ref, token string, identities ..
 	return secrets, digest, nil
 }
 
-func waitForSync(ctx context.Context, secretsRef, token string) error {
-	beforeDigest, _ := oci.GetDigest(ctx, secretsRef, token)
-
+func waitForSync(ctx context.Context, secretsRef, token string, identities []agecrypto.Identity) error {
 	fmt.Println("Waiting for auto-sync to complete...")
 	timeout := 3 * time.Minute
 	interval := 5 * time.Second
-	deadline := time.Now().Add(timeout)
 
-	for time.Now().Before(deadline) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	deadline := time.Now().Add(timeout)
+	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(interval):
-		}
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timed out waiting for sync (waited %s)", timeout)
+			}
 
-		currentDigest, err := oci.GetDigest(ctx, secretsRef, token)
-		if err != nil {
-			continue
-		}
-		if currentDigest != beforeDigest {
-			return nil
+			ciphertext, err := oci.Pull(ctx, secretsRef, token)
+			if err != nil {
+				continue
+			}
+			if _, err := age.Decrypt(ciphertext, identities...); err == nil {
+				return nil
+			}
 		}
 	}
-
-	return fmt.Errorf("timed out waiting for sync (waited %s)", timeout)
 }
