@@ -6,6 +6,10 @@ inputs:
     description: enbu release version to install.
     required: false
     default: v0.1
+  github-token:
+    description: GitHub token used to access repository packages.
+    required: false
+    default: ${{ github.token }}
 
 runs:
   using: composite
@@ -43,4 +47,6 @@ runs:
 
     - name: Run enbu sync
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: "${RUNNER_TEMP}/enbu/bin/enbu" sync
