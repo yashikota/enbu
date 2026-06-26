@@ -196,9 +196,12 @@ func newInitCommand() *cobra.Command {
 			}
 
 			fmt.Println("\nInitialization complete!")
+			fmt.Println("")
 			fmt.Println("Next steps:")
-			fmt.Println("  1. Commit enbu.toml and .github/workflows/enbu-sync.yaml")
-			fmt.Println("  2. Run 'enbu add KEY VALUE' to add secrets")
+			fmt.Println("  1. Configure the package settings (visibility, linked repository):")
+			fmt.Printf("     https://github.com/orgs/%s/packages/container/%s-enbu/settings\n", cfg.Owner, cfg.Repo)
+			fmt.Println("  2. Commit enbu.toml and .github/workflows/enbu-sync.yaml")
+			fmt.Println("  3. Run 'enbu add KEY VALUE' to add secrets")
 			return nil
 		},
 	}
