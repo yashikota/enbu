@@ -20,8 +20,7 @@ jobs:
       contents: read
     
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: yashikota/enbu@82282282ae7df14b715d60e35a307b74d7bde856 # v0.2
         env:
