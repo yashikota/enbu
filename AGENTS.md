@@ -20,15 +20,16 @@ task check          # lint + test
 ## Architecture
 
 ```
-main.go              → version injection, signal handling, delegates to internal/cli
-internal/cli/        → cobra commands: auth, init, add, pull, sync
-internal/config/     → repo detection (git remote), enbu.toml, XDG data dir
-internal/auth/       → GitHub Device Flow OAuth, token persistence
-internal/age/        → key generation, encrypt/decrypt with age (X25519 only)
-internal/keystore/   → pluggable private key storage (OS keyring or plaintext file)
-internal/bundle/     → JSON marshal/unmarshal of secret map, .env serialization
-internal/oci/        → push/pull OCI artifacts to GHCR (oras-go), tag listing, digest checks
-internal/github/     → GitHub API client (org detection)
+main.go              → version injection, signal handling, delegates to pkg/cli
+pkg/cli/             → cobra commands: auth, init, add, pull, sync
+pkg/config/          → repo detection (git remote), enbu.toml, XDG data dir
+pkg/auth/            → GitHub Device Flow OAuth, token persistence
+pkg/age/             → key generation, encrypt/decrypt with age (X25519 only)
+pkg/keystore/        → pluggable private key storage (OS keyring or plaintext file)
+pkg/bundle/          → JSON marshal/unmarshal of secret map, .env serialization
+pkg/oci/             → push/pull OCI artifacts to GHCR (oras-go), tag listing, digest checks
+pkg/provider/github/ → GitHub API client (org detection)
+test/                → scenario tests (build tag: scenario)
 ```
 
 ## Key design decisions

@@ -5,8 +5,10 @@ import (
 )
 
 func New(version string) *cobra.Command {
-	svc := DefaultService()
+	return NewWithService(version, DefaultService())
+}
 
+func NewWithService(version string, svc *Service) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:          "enbu",
 		Short:        "Keyless .env management powered by GitHub",

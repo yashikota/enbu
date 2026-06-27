@@ -1,6 +1,6 @@
 //go:build scenario
 
-package cli
+package test
 
 import (
 	"fmt"

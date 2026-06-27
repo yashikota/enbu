@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yashikota/enbu/internal/auth"
-	"github.com/yashikota/enbu/internal/config"
-	gh "github.com/yashikota/enbu/internal/github"
-	"github.com/yashikota/enbu/internal/keystore"
-	"github.com/yashikota/enbu/internal/oci"
+	"github.com/yashikota/enbu/pkg/auth"
+	"github.com/yashikota/enbu/pkg/config"
+	"github.com/yashikota/enbu/pkg/keystore"
+	"github.com/yashikota/enbu/pkg/oci"
+	gh "github.com/yashikota/enbu/pkg/provider/github"
 )
 
 type Registry interface {

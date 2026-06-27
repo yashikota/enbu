@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	agecrypto "filippo.io/age"
-	"github.com/yashikota/enbu/internal/keystore"
+	"github.com/yashikota/enbu/pkg/keystore"
 )
 
 const keystoreService = "enbu"

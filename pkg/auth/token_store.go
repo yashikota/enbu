@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/yashikota/enbu/internal/config"
+	"github.com/yashikota/enbu/pkg/config"
 )
 
 type StoredToken struct {

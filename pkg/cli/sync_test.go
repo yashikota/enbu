@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yashikota/enbu/internal/oci"
+	"github.com/yashikota/enbu/pkg/oci"
 )
 
 type failingDigestRegistry struct {
