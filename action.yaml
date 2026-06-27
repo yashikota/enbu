@@ -3,9 +3,9 @@ description: Install enbu and synchronize encrypted secrets for repository recip
 
 inputs:
   version:
-    description: enbu release version to install.
+    description: enbu release version to install. Defaults to the action ref when omitted.
     required: false
-    default: v0.1
+    default: ""
   github-token:
     description: GitHub token used to access repository packages.
     required: false
@@ -14,44 +14,85 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Resolve enbu release
+      id: resolve
+      shell: bash
+      env:
+        REQUESTED_VERSION: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
+      run: |
+        set -euo pipefail
+
+        version="${REQUESTED_VERSION:-${ACTION_REF}}"
+        if [[ ! "${version}" =~ ^v[0-9A-Za-z._-]+$ ]]; then
+          echo "invalid enbu version: ${version}" >&2
+          exit 1
+        fi
+
+        case "${RUNNER_OS}" in
+          Linux) os="linux"; ext="tar.gz"; binary="enbu" ;;
+          macOS) os="darwin"; ext="tar.gz"; binary="enbu" ;;
+          Windows) os="windows"; ext="zip"; binary="enbu.exe" ;;
+          *)
+            echo "unsupported runner OS: ${RUNNER_OS}" >&2
+            exit 1
+            ;;
+        esac
+
+        case "${RUNNER_ARCH}" in
+          X64) arch="amd64" ;;
+          ARM64) arch="arm64" ;;
+          *)
+            echo "unsupported runner architecture: ${RUNNER_ARCH}" >&2
+            exit 1
+            ;;
+        esac
+
+        echo "version=${version}" >> "${GITHUB_OUTPUT}"
+        echo "asset=enbu_${os}_${arch}.${ext}" >> "${GITHUB_OUTPUT}"
+        echo "binary=${binary}" >> "${GITHUB_OUTPUT}"
+        echo "binary-path=${RUNNER_TEMP}/enbu/bin/${binary}" >> "${GITHUB_OUTPUT}"
+
     - name: Cache enbu binary
       id: cache-enbu
       uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
       with:
-        path: ${{ runner.temp }}/enbu/bin/enbu
-        key: enbu-${{ inputs.version }}-${{ runner.os }}-${{ runner.arch }}
+        path: ${{ steps.resolve.outputs.binary-path }}
+        key: enbu-${{ steps.resolve.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
 
     - name: Install enbu
       if: steps.cache-enbu.outputs.cache-hit != 'true'
       shell: bash
       env:
-        ENBU_VERSION: ${{ inputs.version }}
+        ENBU_VERSION: ${{ steps.resolve.outputs.version }}
+        ENBU_ASSET: ${{ steps.resolve.outputs.asset }}
+        ENBU_BINARY: ${{ steps.resolve.outputs.binary }}
+        ENBU_BINARY_PATH: ${{ steps.resolve.outputs.binary-path }}
       run: |
         set -euo pipefail
-
-        if [[ "${RUNNER_OS}" != "Linux" || "${RUNNER_ARCH}" != "X64" ]]; then
-          echo "enbu action currently supports Linux x64 runners only" >&2
-          exit 1
-        fi
-
-        if [[ ! "${ENBU_VERSION}" =~ ^v[0-9A-Za-z._-]+$ ]]; then
-          echo "invalid enbu version: ${ENBU_VERSION}" >&2
-          exit 1
-        fi
 
         mkdir -p "${RUNNER_TEMP}/enbu/bin"
         workdir="$(mktemp -d)"
         trap 'rm -rf "${workdir}"' EXIT
 
         cd "${workdir}"
-        curl -fsSL "https://github.com/yashikota/enbu/releases/download/${ENBU_VERSION}/enbu_linux_amd64.tar.gz" -o enbu_linux_amd64.tar.gz
+        curl -fsSL "https://github.com/yashikota/enbu/releases/download/${ENBU_VERSION}/${ENBU_ASSET}" -o "${ENBU_ASSET}"
         curl -fsSL "https://github.com/yashikota/enbu/releases/download/${ENBU_VERSION}/checksums.txt" -o checksums.txt
-        grep enbu_linux_amd64.tar.gz checksums.txt | sha256sum -c -
-        tar xzf enbu_linux_amd64.tar.gz enbu
-        install enbu "${RUNNER_TEMP}/enbu/bin/enbu"
+        if command -v sha256sum > /dev/null 2>&1; then
+          grep " ${ENBU_ASSET}$" checksums.txt | sha256sum -c -
+        else
+          grep " ${ENBU_ASSET}$" checksums.txt | shasum -a 256 -c -
+        fi
+
+        case "${ENBU_ASSET}" in
+          *.tar.gz) tar xzf "${ENBU_ASSET}" "${ENBU_BINARY}" ;;
+          *.zip) unzip -q "${ENBU_ASSET}" "${ENBU_BINARY}" ;;
+        esac
+        install "${ENBU_BINARY}" "${ENBU_BINARY_PATH}"
 
     - name: Run enbu sync
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
-      run: "${RUNNER_TEMP}/enbu/bin/enbu" sync
+        ENBU_BINARY_PATH: ${{ steps.resolve.outputs.binary-path }}
+      run: "${ENBU_BINARY_PATH}" sync
