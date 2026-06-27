@@ -4,7 +4,7 @@ builds:
   - main: .
     binary: enbu
     ldflags:
-      - -s -w -X main.Version={{.Version}}
+      - -s -X main.Version={{.Version}}
     env:
       - CGO_ENABLED=0
     goos:
@@ -18,11 +18,8 @@ builds:
 archives:
   - formats:
       - tar.gz
+      - zip:windows
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
-    format_overrides:
-      - goos: windows
-        formats:
-          - zip
 
 checksum:
   name_template: "checksums.txt"

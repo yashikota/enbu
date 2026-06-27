@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,5 +174,71 @@ func TestGitCommitInitFiles_NoGitRepo(t *testing.T) {
 	err := gitCommitInitFiles(dir)
 	if err == nil {
 		t.Fatal("expected error for non-git directory")
+	}
+}
+
+func TestDownloadEnbuSyncWorkflow(t *testing.T) {
+	want := []byte("name: Auto Sync Secrets\n")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		_, _ = w.Write(want)
+	}))
+	defer server.Close()
+
+	restore := setEnbuSyncWorkflowURL(t, server.URL)
+	defer restore()
+
+	got, err := downloadEnbuSyncWorkflow(context.Background())
+	if err != nil {
+		t.Fatalf("downloadEnbuSyncWorkflow: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("workflow = %q, want %q", got, want)
+	}
+}
+
+func TestDownloadEnbuSyncWorkflow_StatusError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	restore := setEnbuSyncWorkflowURL(t, server.URL)
+	defer restore()
+
+	_, err := downloadEnbuSyncWorkflow(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "unexpected status 404") {
+		t.Fatalf("error = %q, want status context", err)
+	}
+}
+
+func TestDownloadEnbuSyncWorkflow_EmptyTemplate(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer server.Close()
+
+	restore := setEnbuSyncWorkflowURL(t, server.URL)
+	defer restore()
+
+	_, err := downloadEnbuSyncWorkflow(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "empty workflow template") {
+		t.Fatalf("error = %q, want empty template context", err)
+	}
+}
+
+func setEnbuSyncWorkflowURL(t *testing.T, url string) func() {
+	t.Helper()
+
+	oldURL := enbuSyncWorkflowURL
+	enbuSyncWorkflowURL = url
+	return func() {
+		enbuSyncWorkflowURL = oldURL
 	}
 }
