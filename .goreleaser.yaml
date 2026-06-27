@@ -28,13 +28,13 @@ sboms:
 
 signs:
   - cmd: cosign
-    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
     args:
-      - "sign-blob"
-      - "--yes"
-      - "--output-signature=${signature}"
-      - "--output-certificate=${certificate}"
+      - sign-blob
+      - "--bundle=${signature}"
       - "${artifact}"
+      - "--yes"
+    artifacts: checksum
 
 changelog:
   sort: asc
