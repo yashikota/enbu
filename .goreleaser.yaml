@@ -26,5 +26,15 @@ checksum:
 sboms:
   - artifacts: archive
 
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+
 changelog:
   sort: asc
