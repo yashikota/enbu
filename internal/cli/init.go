@@ -3,29 +3,24 @@ package cli
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"encoding/hex"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	agecrypto "filippo.io/age"
-	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 	"github.com/yashikota/enbu/internal/age"
 	"github.com/yashikota/enbu/internal/auth"
 	"github.com/yashikota/enbu/internal/bundle"
 	"github.com/yashikota/enbu/internal/config"
 	gh "github.com/yashikota/enbu/internal/github"
+	"github.com/yashikota/enbu/internal/keystore"
 	"github.com/yashikota/enbu/internal/oci"
-	"github.com/yashikota/enbu/internal/tokenlock"
 )
-
-var enbuSyncWorkflowURL = "https://raw.githubusercontent.com/yashikota/enbu/main/.github/workflows/enbu-sync.yaml"
 
 func newInitCommand() *cobra.Command {
 	return &cobra.Command{
@@ -58,7 +53,7 @@ func newInitCommand() *cobra.Command {
 			hasRecipients := false
 			hasSecrets := false
 			for _, tag := range existingTags {
-				if strings.HasPrefix(tag, "recipient-") {
+				if isUserRecipientTag(tag) {
 					hasRecipients = true
 				}
 				if strings.HasPrefix(tag, "secrets-") {
@@ -72,90 +67,35 @@ func newInitCommand() *cobra.Command {
 				fmt.Println("Entering join mode — registering your key only.")
 			}
 
-			workflowDir := filepath.Join(repoRoot, ".github", "workflows")
-			workflowPath := filepath.Join(workflowDir, "enbu-sync.yaml")
-			workflowExists := true
-			if _, err := os.Stat(workflowPath); err != nil {
-				if !os.IsNotExist(err) {
-					return fmt.Errorf("checking workflow file: %w", err)
-				}
-				workflowExists = false
+			backend, err := keystore.New()
+			if err != nil {
+				return fmt.Errorf("initializing keystore: %w", err)
 			}
 
-			var workflow []byte
-			if !joinMode && !workflowExists {
-				workflow, err = downloadEnbuSyncWorkflow(ctx)
-				if err != nil {
-					return fmt.Errorf("downloading workflow template: %w", err)
-				}
-			}
-
-			dataDir := config.DataDir()
+			repoKey := repoKeystoreKey(cfg)
 			var publicKey string
 
-			if _, err := os.Stat(filepath.Join(dataDir, "age_key.enc")); err == nil {
-				pubBytes, err := os.ReadFile(filepath.Join(dataDir, "age_key.pub"))
+			existingPriv, err := backend.Load(keystoreService, repoKey)
+			if err == nil && len(existingPriv) > 0 {
+				id, err := agecrypto.ParseX25519Identity(string(existingPriv))
 				if err != nil {
-					return fmt.Errorf("reading existing public key: %w", err)
+					return fmt.Errorf("parsing existing private key: %w", err)
 				}
-				publicKey = string(pubBytes)
+				publicKey = id.Recipient().String()
 				fmt.Printf("Using existing age public key: %s\n", publicKey)
-			} else if _, err := os.Stat(filepath.Join(dataDir, "age_key.pub")); err == nil {
-				pubBytes, err := os.ReadFile(filepath.Join(dataDir, "age_key.pub"))
-				if err != nil {
-					return fmt.Errorf("reading existing public key: %w", err)
-				}
-				publicKey = string(pubBytes)
-				fmt.Printf("Using existing public key: %s\n", publicKey)
+			} else if err != nil && !errors.Is(err, keystore.ErrNotFound) {
+				return fmt.Errorf("loading private key from keystore: %w", err)
 			} else {
-				fmt.Println("Checking local SSH keys...")
-				sshPub, sshPrivPath, err := age.GetLocalSSHKey()
-
-				useSSH := false
-				if err == nil {
-					prompt := &survey.Confirm{
-						Message: fmt.Sprintf("Found local SSH key (%s). Use it for enbu?", sshPrivPath),
-						Default: true,
-					}
-					_ = survey.AskOne(prompt, &useSSH)
+				fmt.Println("Generating new age key pair...")
+				kp, err := age.GenerateKeyPair()
+				if err != nil {
+					return fmt.Errorf("generating age key pair: %w", err)
 				}
+				publicKey = kp.PublicKey
+				fmt.Printf("Generated age public key: %s\n", publicKey)
 
-				if useSSH {
-					publicKey = sshPub
-					fmt.Printf("Using SSH key: %s\n", sshPrivPath)
-
-					if err := os.MkdirAll(dataDir, 0o700); err != nil {
-						return fmt.Errorf("creating data directory: %w", err)
-					}
-					if err := os.WriteFile(filepath.Join(dataDir, "age_key.pub"), []byte(publicKey), 0o644); err != nil {
-						return fmt.Errorf("saving public key: %w", err)
-					}
-				} else {
-					if err != nil {
-						fmt.Printf("No local SSH key found: %v\n", err)
-					}
-					fmt.Println("Generating new age key pair...")
-					kp, err := age.GenerateKeyPair()
-					if err != nil {
-						return fmt.Errorf("generating age key pair: %w", err)
-					}
-					publicKey = kp.PublicKey
-					fmt.Printf("Generated age public key: %s\n", publicKey)
-
-					encrypted, err := tokenlock.Encrypt([]byte(kp.Identity.String()), token.AccessToken)
-					if err != nil {
-						return fmt.Errorf("encrypting private key: %w", err)
-					}
-
-					if err := os.MkdirAll(dataDir, 0o700); err != nil {
-						return fmt.Errorf("creating data directory: %w", err)
-					}
-					if err := os.WriteFile(filepath.Join(dataDir, "age_key.enc"), encrypted, 0o600); err != nil {
-						return fmt.Errorf("saving encrypted key: %w", err)
-					}
-					if err := os.WriteFile(filepath.Join(dataDir, "age_key.pub"), []byte(publicKey), 0o644); err != nil {
-						return fmt.Errorf("saving public key: %w", err)
-					}
+				if err := backend.Store(keystoreService, repoKey, []byte(kp.Identity.String())); err != nil {
+					return fmt.Errorf("storing private key: %w", err)
 				}
 			}
 
@@ -176,16 +116,20 @@ func newInitCommand() *cobra.Command {
 				fmt.Println("\nYour key has been registered.")
 				secretsRef := fmt.Sprintf("ghcr.io/%s/%s-enbu:secrets-default", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
 				if hasSecrets {
-					identities, err := loadIdentities(token.AccessToken)
+					identities, err := loadIdentitiesForRepo(cfg)
 					if err != nil || len(identities) == 0 {
-						fmt.Println("Could not load decryption keys; run 'enbu pull' later once sync completes.")
+						fmt.Println("Could not load decryption keys; run 'enbu pull' after an existing member runs 'enbu sync'.")
 						return nil
 					}
-					if err := waitForSync(ctx, secretsRef, token.AccessToken, identities); err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
-						fmt.Println("You can run 'enbu pull' later once sync completes.")
+					ok, err := verifyCurrentUserCanDecrypt(ctx, secretsRef, token.AccessToken, identities)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to verify decryption: %v\n", err)
+						fmt.Println("Your key is registered, but we couldn't verify if you can decrypt the secrets.")
+					} else if !ok {
+						fmt.Println("Your key is registered, but the existing secrets have not been re-encrypted for it yet.")
+						fmt.Println("Ask an existing member to run 'enbu sync', then run 'enbu pull'.")
 					} else {
-						fmt.Println("✓ Sync complete. You can now run 'enbu pull' to access secrets.")
+						fmt.Println("✓ You can now run 'enbu pull' to access secrets.")
 					}
 				} else {
 					fmt.Println("No secrets exist yet. You can access them after a member runs 'enbu add'.")
@@ -194,42 +138,12 @@ func newInitCommand() *cobra.Command {
 			}
 
 			// Full initialization (first user)
-			botRef := fmt.Sprintf("%s:recipient-github-actions", registryRef)
-			fmt.Println("Generating GitHub Actions bot key...")
-			botKP, err := age.GenerateKeyPair()
-			if err != nil {
-				return fmt.Errorf("generating bot key: %w", err)
-			}
-
-			if err := oci.Push(ctx, botRef, "application/vnd.enbu.recipient.age.v1", []byte(botKP.PublicKey), token.AccessToken, pushOpts); err != nil {
-				return fmt.Errorf("pushing bot public key to GHCR: %w", err)
-			}
-
-			client := gh.NewClient(token.AccessToken)
-			if err := client.CreateOrUpdateRepoSecret(ctx, cfg.Owner, cfg.Repo, "ENBU_SECRET_KEY", botKP.Identity.String()); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to register ENBU_SECRET_KEY to GitHub Secrets: %v\n", err)
-				fmt.Fprintf(os.Stderr, "  You can manually add ENBU_SECRET_KEY with value:\n  %s\n", botKP.Identity.String())
-			} else {
-				fmt.Println("✓ Registered bot key to Repository Secrets.")
-			}
-
 			// Create enbu.toml
 			projCfg := &config.ProjectConfig{Version: "0.1"}
 			if err := config.SaveProject(projCfg); err != nil {
 				return fmt.Errorf("creating enbu.toml: %w", err)
 			}
 			fmt.Println("✓ Created enbu.toml")
-
-			// Create GitHub Actions workflow
-			if !workflowExists {
-				if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-					return fmt.Errorf("creating workflow directory: %w", err)
-				}
-				if err := os.WriteFile(workflowPath, workflow, 0o644); err != nil {
-					return fmt.Errorf("creating workflow file: %w", err)
-				}
-				fmt.Println("✓ Created .github/workflows/enbu-sync.yaml")
-			}
 
 			// Create or update .gitignore
 			if err := ensureGitignore(repoRoot); err != nil {
@@ -242,59 +156,29 @@ func newInitCommand() *cobra.Command {
 			fmt.Println("Committing generated files...")
 			if err := gitCommitInitFiles(repoRoot); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: auto-commit failed: %v\n", err)
-				fmt.Println("  Please commit enbu.toml and .github/workflows/enbu-sync.yaml manually.")
+				fmt.Println("  Please commit enbu.toml and .gitignore manually.")
 			} else {
-				fmt.Println("✓ Committed enbu.toml and .github/workflows/enbu-sync.yaml")
+				fmt.Println("✓ Committed enbu.toml and .gitignore")
 			}
 
 			fmt.Println("\nInitialization complete!")
 			fmt.Println("")
 			fmt.Println("Configure the package at:")
+			client := gh.NewClient(token.AccessToken)
 			if client.IsOrganization(ctx, cfg.Owner) {
 				fmt.Printf("  https://github.com/orgs/%s/packages/container/%s-enbu/settings\n", cfg.Owner, cfg.Repo)
 			} else {
 				fmt.Printf("  https://github.com/users/%s/packages/container/%s-enbu/settings\n", cfg.Owner, cfg.Repo)
 			}
 			fmt.Println("")
-			fmt.Println("  1. Manage Actions access: add this repository with Write role")
-			fmt.Println("  2. Inherited access: set to \"Inherit access from source repository (recommended)\"")
+			fmt.Println("  1. Inherited access: set to \"Inherit access from source repository (recommended)\"")
 			fmt.Println("")
 			fmt.Println("Then:")
-			fmt.Println("  3. Push the commit: git push")
-			fmt.Println("  4. Run 'enbu add KEY VALUE' to add secrets")
+			fmt.Println("  2. Push the commit: git push")
+			fmt.Println("  3. Run 'enbu add KEY VALUE' to add secrets")
 			return nil
 		},
 	}
-}
-
-func downloadEnbuSyncWorkflow(ctx context.Context) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, enbuSyncWorkflowURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	client := &http.Client{
-		Timeout: 15 * time.Second,
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("unexpected status %d from %s: %s", resp.StatusCode, enbuSyncWorkflowURL, strings.TrimSpace(string(body)))
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if len(data) == 0 {
-		return nil, fmt.Errorf("empty workflow template from %s", enbuSyncWorkflowURL)
-	}
-	return data, nil
 }
 
 var gitignoreEntries = []string{
@@ -346,13 +230,13 @@ func ensureGitignore(repoRoot string) error {
 }
 
 func gitCommitInitFiles(repoRoot string) error {
-	addCmd := exec.Command("git", "add", "enbu.toml", ".github/workflows/enbu-sync.yaml", ".gitignore")
+	addCmd := exec.Command("git", "add", "enbu.toml", ".gitignore")
 	addCmd.Dir = repoRoot
 	if out, err := addCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git add: %s: %w", out, err)
 	}
 
-	commitCmd := exec.Command("git", "commit", "-m", "chore: add enbu config and sync workflow")
+	commitCmd := exec.Command("git", "commit", "-m", "chore: add enbu config")
 	commitCmd.Dir = repoRoot
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git commit: %s: %w", out, err)
@@ -382,6 +266,10 @@ func keyFingerprint(pubKey string) string {
 	return hex.EncodeToString(sum[:])[:8]
 }
 
+func isUserRecipientTag(tag string) bool {
+	return strings.HasPrefix(tag, "recipient-") && tag != "recipient-github-actions"
+}
+
 func pullAllRecipients(ctx context.Context, ref string, token string) ([]string, error) {
 	tags, err := oci.ListTags(ctx, ref, token)
 	if err != nil {
@@ -390,7 +278,7 @@ func pullAllRecipients(ctx context.Context, ref string, token string) ([]string,
 
 	var publicKeys []string
 	for _, tag := range tags {
-		if !strings.HasPrefix(tag, "recipient-") {
+		if !isUserRecipientTag(tag) {
 			continue
 		}
 		tagRef := fmt.Sprintf("%s:%s", ref, tag)
@@ -432,31 +320,14 @@ func pullSecretsWithDigest(ctx context.Context, ref, token string, identities ..
 	return secrets, digest, nil
 }
 
-func waitForSync(ctx context.Context, secretsRef, token string, identities []agecrypto.Identity) error {
-	fmt.Println("Waiting for auto-sync to complete...")
-	timeout := 3 * time.Minute
-	interval := 5 * time.Second
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	deadline := time.Now().Add(timeout)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			if time.Now().After(deadline) {
-				return fmt.Errorf("timed out waiting for sync (waited %s)", timeout)
-			}
-
-			ciphertext, err := oci.Pull(ctx, secretsRef, token)
-			if err != nil {
-				continue
-			}
-			if _, err := age.Decrypt(ciphertext, identities...); err == nil {
-				return nil
-			}
-		}
+func verifyCurrentUserCanDecrypt(ctx context.Context, secretsRef, token string, identities []agecrypto.Identity) (bool, error) {
+	ciphertext, err := oci.Pull(ctx, secretsRef, token)
+	if err != nil {
+		return false, err
 	}
+	_, err = age.Decrypt(ciphertext, identities...)
+	if err != nil {
+		return false, nil
+	}
+	return true, nil
 }

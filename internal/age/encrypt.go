@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"strings"
 
 	"filippo.io/age"
-	"filippo.io/age/agessh"
 )
 
 func Encrypt(plaintext []byte, recipients ...age.Recipient) ([]byte, error) {
@@ -28,15 +26,7 @@ func Encrypt(plaintext []byte, recipients ...age.Recipient) ([]byte, error) {
 func EncryptForPublicKeys(plaintext []byte, publicKeys []string) ([]byte, error) {
 	recipients := make([]age.Recipient, 0, len(publicKeys))
 	for _, pk := range publicKeys {
-		var r age.Recipient
-		var err error
-		if strings.HasPrefix(pk, "age1") {
-			r, err = age.ParseX25519Recipient(pk)
-		} else if strings.HasPrefix(pk, "ssh-") {
-			r, err = agessh.ParseRecipient(pk)
-		} else {
-			return nil, fmt.Errorf("unsupported public key format: %q", pk)
-		}
+		r, err := age.ParseX25519Recipient(pk)
 		if err != nil {
 			return nil, fmt.Errorf("parsing public key %q: %w", pk, err)
 		}
