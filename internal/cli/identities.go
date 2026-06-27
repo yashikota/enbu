@@ -6,24 +6,18 @@ import (
 	"strings"
 
 	agecrypto "filippo.io/age"
-	"github.com/yashikota/enbu/internal/config"
 	"github.com/yashikota/enbu/internal/keystore"
 )
 
 const keystoreService = "enbu"
 
-func repoKeystoreKey(cfg *config.RepoConfig) string {
-	return fmt.Sprintf("%s/%s", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
+func repoKeystoreKey(owner, repo string) string {
+	return fmt.Sprintf("%s/%s", strings.ToLower(owner), strings.ToLower(repo))
 }
 
-func loadIdentitiesForRepo(cfg *config.RepoConfig) ([]agecrypto.Identity, error) {
-	backend, err := keystore.New()
-	if err != nil {
-		return nil, err
-	}
-
-	key := repoKeystoreKey(cfg)
-	privKeyBytes, err := backend.Load(keystoreService, key)
+func loadIdentitiesForRepo(ks KeyStore, owner, repo string) ([]agecrypto.Identity, error) {
+	key := repoKeystoreKey(owner, repo)
+	privKeyBytes, err := ks.Load(keystoreService, key)
 	if err != nil {
 		if errors.Is(err, keystore.ErrNotFound) {
 			return nil, fmt.Errorf("no private key found (run 'enbu init' first)")

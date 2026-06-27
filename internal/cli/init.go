@@ -3,8 +3,8 @@ package cli
 import (
 	"context"
 	"crypto/sha256"
-	"errors"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,7 +14,6 @@ import (
 	agecrypto "filippo.io/age"
 	"github.com/spf13/cobra"
 	"github.com/yashikota/enbu/internal/age"
-	"github.com/yashikota/enbu/internal/auth"
 	"github.com/yashikota/enbu/internal/bundle"
 	"github.com/yashikota/enbu/internal/config"
 	gh "github.com/yashikota/enbu/internal/github"
@@ -22,31 +21,31 @@ import (
 	"github.com/yashikota/enbu/internal/oci"
 )
 
-func newInitCommand() *cobra.Command {
+func newInitCommand(svc *Service) *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
 		Short: "Initialize enbu for this repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			token, err := auth.LoadToken()
+			accessToken, username, err := svc.TokenProvider.LoadToken()
 			if err != nil {
 				return err
 			}
 
-			cfg, err := config.LoadRepo()
+			owner, repo, err := svc.RepoDetector.LoadRepo()
 			if err != nil {
 				return fmt.Errorf("detecting repository: %w (run inside a git repository)", err)
 			}
 
-			registryRef := fmt.Sprintf("ghcr.io/%s/%s-enbu", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
+			registryRef := svc.registryRef(owner, repo)
 
 			repoRoot, err := config.RepoRoot()
 			if err != nil {
 				return fmt.Errorf("finding repository root: %w", err)
 			}
 
-			existingTags, err := oci.ListTags(ctx, registryRef, token.AccessToken)
+			existingTags, err := svc.Registry.ListTags(ctx, registryRef, accessToken)
 			if err != nil && !strings.Contains(err.Error(), "404") && !strings.Contains(err.Error(), "NAME_UNKNOWN") {
 				return fmt.Errorf("checking existing setup: %w", err)
 			}
@@ -67,15 +66,10 @@ func newInitCommand() *cobra.Command {
 				fmt.Println("Entering join mode — registering your key only.")
 			}
 
-			backend, err := keystore.New()
-			if err != nil {
-				return fmt.Errorf("initializing keystore: %w", err)
-			}
-
-			repoKey := repoKeystoreKey(cfg)
+			repoKey := repoKeystoreKey(owner, repo)
 			var publicKey string
 
-			existingPriv, err := backend.Load(keystoreService, repoKey)
+			existingPriv, err := svc.KeyStore.Load(keystoreService, repoKey)
 			if err == nil && len(existingPriv) > 0 {
 				id, err := agecrypto.ParseX25519Identity(string(existingPriv))
 				if err != nil {
@@ -94,34 +88,33 @@ func newInitCommand() *cobra.Command {
 				publicKey = kp.PublicKey
 				fmt.Printf("Generated age public key: %s\n", publicKey)
 
-				if err := backend.Store(keystoreService, repoKey, []byte(kp.Identity.String())); err != nil {
+				if err := svc.KeyStore.Store(keystoreService, repoKey, []byte(kp.Identity.String())); err != nil {
 					return fmt.Errorf("storing private key: %w", err)
 				}
 			}
 
-			// Push user public key
 			fingerprint := keyFingerprint(publicKey)
-			tag := cleanTag(fmt.Sprintf("%s-%s", token.Username, fingerprint))
+			tag := cleanTag(fmt.Sprintf("%s-%s", username, fingerprint))
 			ref := fmt.Sprintf("%s:recipient-%s", registryRef, tag)
 			fmt.Println("Pushing public key to registry...")
 			pushOpts := &oci.PushOptions{
-				SourceRepo: fmt.Sprintf("https://github.com/%s/%s", cfg.Owner, cfg.Repo),
+				SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
 			}
-			if err := oci.Push(ctx, ref, "application/vnd.enbu.recipient.age.v1", []byte(publicKey), token.AccessToken, pushOpts); err != nil {
+			if err := svc.Registry.Push(ctx, ref, "application/vnd.enbu.recipient.age.v1", []byte(publicKey), accessToken, pushOpts); err != nil {
 				return fmt.Errorf("pushing public key to GHCR: %w", err)
 			}
 			fmt.Println("✓ Registered user public key.")
 
 			if joinMode {
 				fmt.Println("\nYour key has been registered.")
-				secretsRef := fmt.Sprintf("ghcr.io/%s/%s-enbu:secrets-default", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
+				secretsRef := svc.secretsRef(owner, repo)
 				if hasSecrets {
-					identities, err := loadIdentitiesForRepo(cfg)
+					identities, err := loadIdentitiesForRepo(svc.KeyStore, owner, repo)
 					if err != nil || len(identities) == 0 {
 						fmt.Println("Could not load decryption keys; run 'enbu pull' after an existing member runs 'enbu sync'.")
 						return nil
 					}
-					ok, err := verifyCurrentUserCanDecrypt(ctx, secretsRef, token.AccessToken, identities)
+					ok, err := verifyCurrentUserCanDecrypt(ctx, svc.Registry, secretsRef, accessToken, identities)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: failed to verify decryption: %v\n", err)
 						fmt.Println("Your key is registered, but we couldn't verify if you can decrypt the secrets.")
@@ -137,22 +130,18 @@ func newInitCommand() *cobra.Command {
 				return nil
 			}
 
-			// Full initialization (first user)
-			// Create enbu.toml
 			projCfg := &config.ProjectConfig{Version: "0.1"}
 			if err := config.SaveProject(projCfg); err != nil {
 				return fmt.Errorf("creating enbu.toml: %w", err)
 			}
 			fmt.Println("✓ Created enbu.toml")
 
-			// Create or update .gitignore
 			if err := ensureGitignore(repoRoot); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to update .gitignore: %v\n", err)
 			} else {
 				fmt.Println("✓ Updated .gitignore")
 			}
 
-			// Auto-commit generated files
 			fmt.Println("Committing generated files...")
 			if err := gitCommitInitFiles(repoRoot); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: auto-commit failed: %v\n", err)
@@ -164,11 +153,15 @@ func newInitCommand() *cobra.Command {
 			fmt.Println("\nInitialization complete!")
 			fmt.Println("")
 			fmt.Println("Configure the package at:")
-			client := gh.NewClient(token.AccessToken)
-			if client.IsOrganization(ctx, cfg.Owner) {
-				fmt.Printf("  https://github.com/orgs/%s/packages/container/%s-enbu/settings\n", cfg.Owner, cfg.Repo)
+
+			ghClient := svc.GitHub
+			if ghClient == nil {
+				ghClient = gh.NewClient(accessToken)
+			}
+			if ghClient.IsOrganization(ctx, owner) {
+				fmt.Printf("  https://github.com/orgs/%s/packages/container/%s-enbu/settings\n", owner, repo)
 			} else {
-				fmt.Printf("  https://github.com/users/%s/packages/container/%s-enbu/settings\n", cfg.Owner, cfg.Repo)
+				fmt.Printf("  https://github.com/users/%s/packages/container/%s-enbu/settings\n", owner, repo)
 			}
 			fmt.Println("")
 			fmt.Println("  1. Inherited access: set to \"Inherit access from source repository (recommended)\"")
@@ -270,8 +263,8 @@ func isUserRecipientTag(tag string) bool {
 	return strings.HasPrefix(tag, "recipient-") && tag != "recipient-github-actions"
 }
 
-func pullAllRecipients(ctx context.Context, ref string, token string) ([]string, error) {
-	tags, err := oci.ListTags(ctx, ref, token)
+func pullAllRecipients(ctx context.Context, reg Registry, ref string, token string) ([]string, error) {
+	tags, err := reg.ListTags(ctx, ref, token)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +275,7 @@ func pullAllRecipients(ctx context.Context, ref string, token string) ([]string,
 			continue
 		}
 		tagRef := fmt.Sprintf("%s:%s", ref, tag)
-		data, err := oci.Pull(ctx, tagRef, token)
+		data, err := reg.Pull(ctx, tagRef, token)
 		if err != nil {
 			return nil, fmt.Errorf("pulling recipient %s: %w", tag, err)
 		}
@@ -291,18 +284,18 @@ func pullAllRecipients(ctx context.Context, ref string, token string) ([]string,
 	return publicKeys, nil
 }
 
-func secretsExists(ctx context.Context, ref, token string) bool {
-	_, err := oci.GetDigest(ctx, ref, token)
+func secretsExists(ctx context.Context, reg Registry, ref, token string) bool {
+	_, err := reg.GetDigest(ctx, ref, token)
 	return err == nil
 }
 
-func pullSecretsWithDigest(ctx context.Context, ref, token string, identities ...agecrypto.Identity) (map[string]string, string, error) {
-	digest, err := oci.GetDigest(ctx, ref, token)
+func pullSecretsWithDigest(ctx context.Context, reg Registry, ref, token string, identities ...agecrypto.Identity) (map[string]string, string, error) {
+	digest, err := reg.GetDigest(ctx, ref, token)
 	if err != nil {
 		return nil, "", err
 	}
 
-	ciphertext, err := oci.Pull(ctx, ref, token)
+	ciphertext, err := reg.Pull(ctx, ref, token)
 	if err != nil {
 		return nil, "", err
 	}
@@ -320,8 +313,8 @@ func pullSecretsWithDigest(ctx context.Context, ref, token string, identities ..
 	return secrets, digest, nil
 }
 
-func verifyCurrentUserCanDecrypt(ctx context.Context, secretsRef, token string, identities []agecrypto.Identity) (bool, error) {
-	ciphertext, err := oci.Pull(ctx, secretsRef, token)
+func verifyCurrentUserCanDecrypt(ctx context.Context, reg Registry, secretsRef, token string, identities []agecrypto.Identity) (bool, error) {
+	ciphertext, err := reg.Pull(ctx, secretsRef, token)
 	if err != nil {
 		return false, err
 	}

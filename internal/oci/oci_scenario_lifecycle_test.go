@@ -1,4 +1,4 @@
-//go:build e2e
+//go:build scenario
 
 package oci_test
 
@@ -12,7 +12,7 @@ import (
 	"github.com/yashikota/enbu/internal/oci"
 )
 
-const e2eRegistryRef = "localhost:5000/test/enbu-e2e"
+const scenarioLifecycleRegistryRef = "localhost:5000/test/enbu-scenario-lifecycle"
 
 func TestFullSecretLifecycle(t *testing.T) {
 	ctx := context.Background()
@@ -28,8 +28,8 @@ func TestFullSecretLifecycle(t *testing.T) {
 	}
 
 	// Register recipient keys
-	recipientRef1 := e2eRegistryRef + ":recipient-user1"
-	recipientRef2 := e2eRegistryRef + ":recipient-user2"
+	recipientRef1 := scenarioLifecycleRegistryRef + ":recipient-user1"
+	recipientRef2 := scenarioLifecycleRegistryRef + ":recipient-user2"
 
 	if err := oci.Push(ctx, recipientRef1, "application/vnd.enbu.recipient.age.v1", []byte(kp1.PublicKey), "", nil); err != nil {
 		t.Fatalf("Push recipient1: %v", err)
@@ -39,7 +39,7 @@ func TestFullSecretLifecycle(t *testing.T) {
 	}
 
 	// Pull all recipient keys
-	tags, err := oci.ListTags(ctx, e2eRegistryRef, "")
+	tags, err := oci.ListTags(ctx, scenarioLifecycleRegistryRef, "")
 	if err != nil {
 		t.Fatalf("ListTags: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestFullSecretLifecycle(t *testing.T) {
 		if !strings.HasPrefix(tag, "recipient-") {
 			continue
 		}
-		data, err := oci.Pull(ctx, e2eRegistryRef+":"+tag, "")
+		data, err := oci.Pull(ctx, scenarioLifecycleRegistryRef+":"+tag, "")
 		if err != nil {
 			t.Fatalf("Pull recipient %s: %v", tag, err)
 		}
@@ -71,7 +71,7 @@ func TestFullSecretLifecycle(t *testing.T) {
 		t.Fatalf("Encrypt: %v", err)
 	}
 
-	secretsRef := e2eRegistryRef + ":secrets-default"
+	secretsRef := scenarioLifecycleRegistryRef + ":secrets-default"
 	if err := oci.Push(ctx, secretsRef, "application/vnd.enbu.secrets.age.v1", ciphertext, "", nil); err != nil {
 		t.Fatalf("Push secrets: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestAddNewSecretToExistingBundle(t *testing.T) {
 	}
 
 	// Push initial recipient
-	recipientRef := e2eRegistryRef + "-add:recipient-testuser"
+	recipientRef := scenarioLifecycleRegistryRef + "-add:recipient-testuser"
 	if err := oci.Push(ctx, recipientRef, "application/vnd.enbu.recipient.age.v1", []byte(kp.PublicKey), "", nil); err != nil {
 		t.Fatalf("Push recipient: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestAddNewSecretToExistingBundle(t *testing.T) {
 		t.Fatalf("Encrypt: %v", err)
 	}
 
-	addRegistryRef := e2eRegistryRef + "-add"
+	addRegistryRef := scenarioLifecycleRegistryRef + "-add"
 	secretsRef := addRegistryRef + ":secrets-default"
 	if err := oci.Push(ctx, secretsRef, "application/vnd.enbu.secrets.age.v1", ciphertext, "", nil); err != nil {
 		t.Fatalf("Push initial secrets: %v", err)
@@ -192,7 +192,7 @@ func TestSyncForNewRecipient(t *testing.T) {
 
 	// User1 sets up initially
 	kp1, _ := age.GenerateKeyPair()
-	syncRegistryRef := e2eRegistryRef + "-sync"
+	syncRegistryRef := scenarioLifecycleRegistryRef + "-sync"
 
 	recipientRef1 := syncRegistryRef + ":recipient-user1"
 	if err := oci.Push(ctx, recipientRef1, "application/vnd.enbu.recipient.age.v1", []byte(kp1.PublicKey), "", nil); err != nil {

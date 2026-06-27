@@ -11,8 +11,7 @@ Keyless `.env` management powered by GitHub. Encrypts secrets with age, stores c
 ```bash
 task build          # Build binary → ./enbu
 task test           # Unit tests (go test ./...)
-task test:integration  # Integration tests (build tag: integration)
-task test:e2e       # E2E tests (build tag: e2e)
+task test:scenario  # Scenario tests (build tag: scenario)
 task lint           # golangci-lint run ./...
 task fmt            # golangci-lint fmt ./...
 task check          # lint + test

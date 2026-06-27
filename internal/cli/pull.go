@@ -3,17 +3,13 @@ package cli
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/yashikota/enbu/internal/age"
-	"github.com/yashikota/enbu/internal/auth"
 	"github.com/yashikota/enbu/internal/bundle"
-	"github.com/yashikota/enbu/internal/config"
-	"github.com/yashikota/enbu/internal/oci"
 )
 
-func newPullCommand() *cobra.Command {
+func newPullCommand(svc *Service) *cobra.Command {
 	var toStdout bool
 
 	cmd := &cobra.Command{
@@ -22,25 +18,25 @@ func newPullCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			token, err := auth.LoadToken()
+			accessToken, _, err := svc.TokenProvider.LoadToken()
 			if err != nil {
 				return err
 			}
 
-			cfg, err := config.LoadRepo()
+			owner, repo, err := svc.RepoDetector.LoadRepo()
 			if err != nil {
 				return err
 			}
 
-			ref := fmt.Sprintf("ghcr.io/%s/%s-enbu:secrets-default", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
+			ref := svc.secretsRef(owner, repo)
 			fmt.Fprintf(os.Stderr, "Pulling secrets...\n")
 
-			ciphertext, err := oci.Pull(ctx, ref, token.AccessToken)
+			ciphertext, err := svc.Registry.Pull(ctx, ref, accessToken)
 			if err != nil {
 				return fmt.Errorf("pulling secrets: %w", err)
 			}
 
-			identities, err := loadIdentitiesForRepo(cfg)
+			identities, err := loadIdentitiesForRepo(svc.KeyStore, owner, repo)
 			if err != nil || len(identities) == 0 {
 				return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 			}

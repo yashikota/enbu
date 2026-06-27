@@ -7,6 +7,7 @@ on:
 
 jobs:
   check:
+    name: Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -16,27 +17,48 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install Task
-        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ~/.local/share/aquaproj-aqua
+          key: v2-aqua-installer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('aqua.yaml') }}
+          restore-keys: |
+            v2-aqua-installer-${{ runner.os }}-${{ runner.arch }}-
 
-      - name: Lint
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+      - uses: aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e # v4.0.5
         with:
-          version: latest
+          aqua_version: v2.60.1
 
-      - name: Test
+      - name: Check
+        run: task check
+
+  test:
+    name: Unit test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/share/aquaproj-aqua
+          key: v2-aqua-installer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('aqua.yaml') }}
+          restore-keys: |
+            v2-aqua-installer-${{ runner.os }}-${{ runner.arch }}-
+
+      - uses: aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e # v4.0.5
+        with:
+          aqua_version: v2.60.1
+
+      - name: Unit test
         run: task test
 
-  integration:
+  scenario:
+    name: Scenario tests
     runs-on: ubuntu-latest
-    services:
-      registry:
-        image: registry:2
-        ports:
-          - 5000:5000
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -45,59 +67,16 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install Task
-        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ~/.local/share/aquaproj-aqua
+          key: v2-aqua-installer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('aqua.yaml') }}
+          restore-keys: |
+            v2-aqua-installer-${{ runner.os }}-${{ runner.arch }}-
 
-      - name: Wait for registry
-        run: |
-          for i in $(seq 1 30); do
-            if curl -s http://localhost:5000/v2/ > /dev/null 2>&1; then
-              echo "Registry is ready"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "Registry failed to start"
-          exit 1
-
-      - name: Integration tests
-        run: task test:integration
-
-  e2e:
-    runs-on: ubuntu-latest
-    services:
-      registry:
-        image: registry:2
-        ports:
-          - 5000:5000
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - uses: aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e # v4.0.5
         with:
-          go-version-file: go.mod
-          cache: true
+          aqua_version: v2.60.1
 
-      - name: Install Task
-        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Wait for registry
-        run: |
-          for i in $(seq 1 30); do
-            if curl -s http://localhost:5000/v2/ > /dev/null 2>&1; then
-              echo "Registry is ready"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "Registry failed to start"
-          exit 1
-
-      - name: E2E tests
-        run: task test:e2e
+      - name: Scenario tests
+        run: task test:scenario

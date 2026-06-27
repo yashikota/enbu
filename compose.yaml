@@ -1,0 +1,7 @@
+services:
+  registry:
+    image: ghcr.io/project-zot/zot-linux-amd64:latest
+    ports:
+      - "5000:5000"
+    environment:
+      - ZOT_LOG_LEVEL=error
