@@ -158,7 +158,11 @@ func newInitCommand() *cobra.Command {
 						fmt.Println("Could not load decryption keys; run 'enbu pull' after an existing member runs 'enbu sync'.")
 						return nil
 					}
-					if err := verifyCurrentUserCanDecrypt(ctx, secretsRef, token.AccessToken, identities); err != nil {
+					ok, err := verifyCurrentUserCanDecrypt(ctx, secretsRef, token.AccessToken, identities)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to verify decryption: %v\n", err)
+						fmt.Println("Your key is registered, but we couldn't verify if you can decrypt the secrets.")
+					} else if !ok {
 						fmt.Println("Your key is registered, but the existing secrets have not been re-encrypted for it yet.")
 						fmt.Println("Ask an existing member to run 'enbu sync', then run 'enbu pull'.")
 					} else {
@@ -353,11 +357,14 @@ func pullSecretsWithDigest(ctx context.Context, ref, token string, identities ..
 	return secrets, digest, nil
 }
 
-func verifyCurrentUserCanDecrypt(ctx context.Context, secretsRef, token string, identities []agecrypto.Identity) error {
+func verifyCurrentUserCanDecrypt(ctx context.Context, secretsRef, token string, identities []agecrypto.Identity) (bool, error) {
 	ciphertext, err := oci.Pull(ctx, secretsRef, token)
 	if err != nil {
-		return err
+		return false, err
 	}
 	_, err = age.Decrypt(ciphertext, identities...)
-	return err
+	if err != nil {
+		return false, nil
+	}
+	return true, nil
 }
