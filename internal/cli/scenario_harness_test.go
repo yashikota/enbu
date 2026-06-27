@@ -191,18 +191,28 @@ func captureStdout(t *testing.T, fn func()) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	var buf bytes.Buffer
+	readErr := make(chan error, 1)
+	go func() {
+		_, err := buf.ReadFrom(r)
+		readErr <- err
+	}()
+
 	origStdout := os.Stdout
 	os.Stdout = w
 	defer func() {
 		os.Stdout = origStdout
-		r.Close()
+		_ = w.Close()
+		_ = r.Close()
 	}()
 
 	fn()
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("closing stdout pipe: %v", err)
+	}
 
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(r); err != nil {
+	if err := <-readErr; err != nil {
 		t.Fatalf("reading stdout: %v", err)
 	}
 	return buf.String()
@@ -228,7 +238,7 @@ func pullExpectFail(t *testing.T, ctx context.Context, user *testUser) error {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 
-	devNull, err := os.Open(os.DevNull)
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
