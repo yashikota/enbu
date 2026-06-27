@@ -26,7 +26,9 @@ type testUser struct {
 func uniqueRepo(t *testing.T) (owner, repo string) {
 	t.Helper()
 	b := make([]byte, 4)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatalf("generating random bytes: %v", err)
+	}
 	return "test", fmt.Sprintf("%s-%s", strings.ToLower(t.Name()), hex.EncodeToString(b))
 }
 

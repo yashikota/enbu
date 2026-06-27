@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"strings"
 	"time"
 
 	agecrypto "filippo.io/age"
@@ -80,7 +81,7 @@ func newSyncCommand(svc *Service) *cobra.Command {
 func doSync(ctx context.Context, reg Registry, secretsRef, recipientsRef, token string, identities []agecrypto.Identity, pushOpts *oci.PushOptions) error {
 	secrets, baseDigest, err := pullSecretsWithDigest(ctx, reg, secretsRef, token, identities...)
 	if err != nil {
-		if !secretsExists(ctx, reg, secretsRef, token) {
+		if isNotFoundError(err) {
 			fmt.Println("No secrets found, nothing to sync.")
 			return nil
 		}
@@ -114,4 +115,14 @@ func doSync(ctx context.Context, reg Registry, secretsRef, recipientsRef, token 
 
 	fmt.Printf("✓ Synchronized secrets for %d recipients (%d secrets)\n", len(publicKeys), len(secrets))
 	return nil
+}
+
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "404") ||
+		strings.Contains(errStr, "NAME_UNKNOWN") ||
+		strings.Contains(errStr, "not found")
 }
