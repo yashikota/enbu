@@ -13,13 +13,6 @@ import (
 func loadIdentities(token string) ([]agecrypto.Identity, error) {
 	var identities []agecrypto.Identity
 
-	if envKey := os.Getenv("ENBU_SECRET_KEY"); envKey != "" {
-		id, err := agecrypto.ParseX25519Identity(envKey)
-		if err == nil {
-			identities = append(identities, id)
-		}
-	}
-
 	dataDir := config.DataDir()
 	if encKey, err := os.ReadFile(filepath.Join(dataDir, "age_key.enc")); err == nil {
 		privKeyBytes, err := tokenlock.Decrypt(encKey, token)
