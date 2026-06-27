@@ -23,6 +23,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - uses: yashikota/enbu@a489926c0d4c8736666f1bbf14d7096ab41b3788 # v0.1.1
+      - uses: yashikota/enbu@5df0b2e8b90d43347e0afce42829287ba42692f5
         env:
           ENBU_SECRET_KEY: ${{ secrets.ENBU_SECRET_KEY }}
