@@ -35,7 +35,7 @@ func newAddCommand() *cobra.Command {
 				return err
 			}
 
-			identities, err := loadIdentities(token.AccessToken)
+			identities, err := loadIdentitiesForRepo(cfg)
 			if err != nil || len(identities) == 0 {
 				return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 			}

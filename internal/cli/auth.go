@@ -3,13 +3,13 @@ package cli
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
-	"github.com/AlecAivazis/survey/v2"
+	agecrypto "filippo.io/age"
 	"github.com/spf13/cobra"
 	"github.com/yashikota/enbu/internal/auth"
 	"github.com/yashikota/enbu/internal/config"
 	gh "github.com/yashikota/enbu/internal/github"
+	"github.com/yashikota/enbu/internal/keystore"
 )
 
 const defaultClientID = "Ov23li6nFmfdF4FW9ikd"
@@ -90,46 +90,19 @@ func newAuthLoginCommand() *cobra.Command {
 }
 
 func newAuthLogoutCommand() *cobra.Command {
-	var force bool
-
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "logout",
 		Short: "Remove stored authentication token",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dataDir := config.DataDir()
-			encKeyPath := filepath.Join(dataDir, "age_key.enc")
-
-			if !force {
-				if _, err := os.Stat(encKeyPath); err == nil {
-					fmt.Println("Warning: Your age private key is encrypted with your OAuth token.")
-					fmt.Println("         After logout, you won't be able to decrypt it until you log in again.")
-
-					var confirm bool
-					prompt := &survey.Confirm{
-						Message: "Continue with logout?",
-						Default: false,
-					}
-					if err := survey.AskOne(prompt, &confirm); err != nil {
-						return err
-					}
-					if !confirm {
-						fmt.Println("Logout cancelled.")
-						return nil
-					}
-				}
-			}
-
 			if err := auth.DeleteToken(); err != nil {
 				return err
 			}
 
 			fmt.Println("✓ Logged out successfully.")
+			fmt.Println("  Note: Your age private key remains in the system keystore.")
 			return nil
 		},
 	}
-
-	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompt")
-	return cmd
 }
 
 func newAuthStatusCommand() *cobra.Command {
@@ -145,23 +118,29 @@ func newAuthStatusCommand() *cobra.Command {
 			}
 			fmt.Printf("Auth: logged in as %s\n", token.Username)
 
-			dataDir := config.DataDir()
-			if _, err := os.Stat(filepath.Join(dataDir, "age_key.enc")); err == nil {
-				pubBytes, _ := os.ReadFile(filepath.Join(dataDir, "age_key.pub"))
-				fmt.Printf("Key (age): %s\n", string(pubBytes))
-			} else if _, err := os.Stat(filepath.Join(dataDir, "age_key.pub")); err == nil {
-				pubBytes, _ := os.ReadFile(filepath.Join(dataDir, "age_key.pub"))
-				fmt.Printf("Key (SSH): %s\n", string(pubBytes))
-			} else {
-				fmt.Println("Key:  not initialized")
-				fmt.Println("  Run 'enbu init' to generate a key pair")
-			}
-
 			cfg, err := config.LoadRepo()
 			if err != nil {
 				fmt.Println("Repo: not in a git repository")
+				return nil
+			}
+			fmt.Printf("Repo: %s/%s\n", cfg.Owner, cfg.Repo)
+
+			backend, err := keystore.New()
+			if err != nil {
+				fmt.Printf("Keystore: error (%v)\n", err)
+				return nil
+			}
+
+			repoKey := repoKeystoreKey(cfg)
+			privBytes, err := backend.Load(keystoreService, repoKey)
+			if err == nil && len(privBytes) > 0 {
+				id, err := agecrypto.ParseX25519Identity(string(privBytes))
+				if err == nil {
+					fmt.Printf("Key: %s\n", id.Recipient().String())
+				}
 			} else {
-				fmt.Printf("Repo: %s/%s\n", cfg.Owner, cfg.Repo)
+				fmt.Println("Key: not initialized")
+				fmt.Println("  Run 'enbu init' to generate a key pair")
 			}
 
 			if _, err := config.LoadProject(); err == nil {
