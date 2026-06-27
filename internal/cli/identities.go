@@ -1,32 +1,36 @@
 package cli
 
 import (
-	"os"
-	"path/filepath"
+	"fmt"
+	"strings"
 
 	agecrypto "filippo.io/age"
-	"github.com/yashikota/enbu/internal/age"
 	"github.com/yashikota/enbu/internal/config"
-	"github.com/yashikota/enbu/internal/tokenlock"
+	"github.com/yashikota/enbu/internal/keystore"
 )
 
-func loadIdentities(token string) ([]agecrypto.Identity, error) {
-	var identities []agecrypto.Identity
+const keystoreService = "enbu"
 
-	dataDir := config.DataDir()
-	if encKey, err := os.ReadFile(filepath.Join(dataDir, "age_key.enc")); err == nil {
-		privKeyBytes, err := tokenlock.Decrypt(encKey, token)
-		if err == nil {
-			if id, err := agecrypto.ParseX25519Identity(string(privKeyBytes)); err == nil {
-				identities = append(identities, id)
-			}
-		}
+func repoKeystoreKey(cfg *config.RepoConfig) string {
+	return fmt.Sprintf("%s/%s", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
+}
+
+func loadIdentitiesForRepo(cfg *config.RepoConfig) ([]agecrypto.Identity, error) {
+	backend, err := keystore.New()
+	if err != nil {
+		return nil, err
 	}
 
-	sshIds, err := age.LoadSSHIdentities()
-	if err == nil {
-		identities = append(identities, sshIds...)
+	key := repoKeystoreKey(cfg)
+	privKeyBytes, err := backend.Load(keystoreService, key)
+	if err != nil {
+		return nil, fmt.Errorf("loading private key: %w (run 'enbu init' first)", err)
 	}
 
-	return identities, nil
+	id, err := agecrypto.ParseX25519Identity(string(privKeyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("parsing private key: %w", err)
+	}
+
+	return []agecrypto.Identity{id}, nil
 }

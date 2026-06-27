@@ -11,15 +11,14 @@ import (
 	"strings"
 
 	agecrypto "filippo.io/age"
-	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 	"github.com/yashikota/enbu/internal/age"
 	"github.com/yashikota/enbu/internal/auth"
 	"github.com/yashikota/enbu/internal/bundle"
 	"github.com/yashikota/enbu/internal/config"
 	gh "github.com/yashikota/enbu/internal/github"
+	"github.com/yashikota/enbu/internal/keystore"
 	"github.com/yashikota/enbu/internal/oci"
-	"github.com/yashikota/enbu/internal/tokenlock"
 )
 
 func newInitCommand() *cobra.Command {
@@ -67,72 +66,33 @@ func newInitCommand() *cobra.Command {
 				fmt.Println("Entering join mode — registering your key only.")
 			}
 
-			dataDir := config.DataDir()
+			backend, err := keystore.New()
+			if err != nil {
+				return fmt.Errorf("initializing keystore: %w", err)
+			}
+
+			repoKey := repoKeystoreKey(cfg)
 			var publicKey string
 
-			if _, err := os.Stat(filepath.Join(dataDir, "age_key.enc")); err == nil {
-				pubBytes, err := os.ReadFile(filepath.Join(dataDir, "age_key.pub"))
+			existingPriv, err := backend.Load(keystoreService, repoKey)
+			if err == nil && len(existingPriv) > 0 {
+				id, err := agecrypto.ParseX25519Identity(string(existingPriv))
 				if err != nil {
-					return fmt.Errorf("reading existing public key: %w", err)
+					return fmt.Errorf("parsing existing private key: %w", err)
 				}
-				publicKey = string(pubBytes)
+				publicKey = id.Recipient().String()
 				fmt.Printf("Using existing age public key: %s\n", publicKey)
-			} else if _, err := os.Stat(filepath.Join(dataDir, "age_key.pub")); err == nil {
-				pubBytes, err := os.ReadFile(filepath.Join(dataDir, "age_key.pub"))
-				if err != nil {
-					return fmt.Errorf("reading existing public key: %w", err)
-				}
-				publicKey = string(pubBytes)
-				fmt.Printf("Using existing public key: %s\n", publicKey)
 			} else {
-				fmt.Println("Checking local SSH keys...")
-				sshPub, sshPrivPath, err := age.GetLocalSSHKey()
-
-				useSSH := false
-				if err == nil {
-					prompt := &survey.Confirm{
-						Message: fmt.Sprintf("Found local SSH key (%s). Use it for enbu?", sshPrivPath),
-						Default: true,
-					}
-					_ = survey.AskOne(prompt, &useSSH)
+				fmt.Println("Generating new age key pair...")
+				kp, err := age.GenerateKeyPair()
+				if err != nil {
+					return fmt.Errorf("generating age key pair: %w", err)
 				}
+				publicKey = kp.PublicKey
+				fmt.Printf("Generated age public key: %s\n", publicKey)
 
-				if useSSH {
-					publicKey = sshPub
-					fmt.Printf("Using SSH key: %s\n", sshPrivPath)
-
-					if err := os.MkdirAll(dataDir, 0o700); err != nil {
-						return fmt.Errorf("creating data directory: %w", err)
-					}
-					if err := os.WriteFile(filepath.Join(dataDir, "age_key.pub"), []byte(publicKey), 0o644); err != nil {
-						return fmt.Errorf("saving public key: %w", err)
-					}
-				} else {
-					if err != nil {
-						fmt.Printf("No local SSH key found: %v\n", err)
-					}
-					fmt.Println("Generating new age key pair...")
-					kp, err := age.GenerateKeyPair()
-					if err != nil {
-						return fmt.Errorf("generating age key pair: %w", err)
-					}
-					publicKey = kp.PublicKey
-					fmt.Printf("Generated age public key: %s\n", publicKey)
-
-					encrypted, err := tokenlock.Encrypt([]byte(kp.Identity.String()), token.AccessToken)
-					if err != nil {
-						return fmt.Errorf("encrypting private key: %w", err)
-					}
-
-					if err := os.MkdirAll(dataDir, 0o700); err != nil {
-						return fmt.Errorf("creating data directory: %w", err)
-					}
-					if err := os.WriteFile(filepath.Join(dataDir, "age_key.enc"), encrypted, 0o600); err != nil {
-						return fmt.Errorf("saving encrypted key: %w", err)
-					}
-					if err := os.WriteFile(filepath.Join(dataDir, "age_key.pub"), []byte(publicKey), 0o644); err != nil {
-						return fmt.Errorf("saving public key: %w", err)
-					}
+				if err := backend.Store(keystoreService, repoKey, []byte(kp.Identity.String())); err != nil {
+					return fmt.Errorf("storing private key: %w", err)
 				}
 			}
 
@@ -153,7 +113,7 @@ func newInitCommand() *cobra.Command {
 				fmt.Println("\nYour key has been registered.")
 				secretsRef := fmt.Sprintf("ghcr.io/%s/%s-enbu:secrets-default", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
 				if hasSecrets {
-					identities, err := loadIdentities(token.AccessToken)
+					identities, err := loadIdentitiesForRepo(cfg)
 					if err != nil || len(identities) == 0 {
 						fmt.Println("Could not load decryption keys; run 'enbu pull' after an existing member runs 'enbu sync'.")
 						return nil
