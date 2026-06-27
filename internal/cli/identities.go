@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -24,7 +25,10 @@ func loadIdentitiesForRepo(cfg *config.RepoConfig) ([]agecrypto.Identity, error)
 	key := repoKeystoreKey(cfg)
 	privKeyBytes, err := backend.Load(keystoreService, key)
 	if err != nil {
-		return nil, fmt.Errorf("loading private key: %w (run 'enbu init' first)", err)
+		if errors.Is(err, keystore.ErrNotFound) {
+			return nil, fmt.Errorf("no private key found (run 'enbu init' first)")
+		}
+		return nil, fmt.Errorf("loading private key: %w", err)
 	}
 
 	id, err := agecrypto.ParseX25519Identity(string(privKeyBytes))

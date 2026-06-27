@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -82,6 +83,8 @@ func newInitCommand() *cobra.Command {
 				}
 				publicKey = id.Recipient().String()
 				fmt.Printf("Using existing age public key: %s\n", publicKey)
+			} else if err != nil && !errors.Is(err, keystore.ErrNotFound) {
+				return fmt.Errorf("loading private key from keystore: %w", err)
 			} else {
 				fmt.Println("Generating new age key pair...")
 				kp, err := age.GenerateKeyPair()

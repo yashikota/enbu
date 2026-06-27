@@ -5,30 +5,41 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 type TextBackend struct{}
 
 func (t *TextBackend) Store(service, key string, secret []byte) error {
-	dir := textBackendDir()
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	path := filepath.Join(textBackendDir(), service+"_"+sanitizeKey(key))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("creating keystore directory: %w", err)
 	}
-	path := filepath.Join(dir, service+"_"+key)
 	return os.WriteFile(path, secret, 0o600)
 }
 
 func (t *TextBackend) Load(service, key string) ([]byte, error) {
-	path := filepath.Join(textBackendDir(), service+"_"+key)
-	return os.ReadFile(path)
+	path := filepath.Join(textBackendDir(), service+"_"+sanitizeKey(key))
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return b, nil
 }
 
 func (t *TextBackend) Delete(service, key string) error {
-	path := filepath.Join(textBackendDir(), service+"_"+key)
+	path := filepath.Join(textBackendDir(), service+"_"+sanitizeKey(key))
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil
+}
+
+func sanitizeKey(key string) string {
+	return strings.ReplaceAll(key, "/", "_")
 }
 
 func textBackendDir() string {
