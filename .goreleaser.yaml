@@ -26,5 +26,15 @@ checksum:
 sboms:
   - artifacts: archive
 
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    args:
+      - "sign-blob"
+      - "--yes"
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+
 changelog:
   sort: asc

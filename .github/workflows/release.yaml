@@ -6,6 +6,7 @@ on:
       - "v*"
 
 permissions:
+  id-token: write
   contents: write
 
 jobs:
@@ -20,6 +21,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - uses: sigstore/cosign-installer@3454372be43e8dd7b11b9a7174fbc399a6e06c7a # v3.9.0
 
       - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
 
