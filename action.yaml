@@ -1,16 +1,11 @@
 name: enbu
-description: Install enbu and synchronize encrypted secrets for repository recipients.
+description: Install enbu.
 
 inputs:
   version:
     description: enbu release version to install. Defaults to the matching release tag for the action ref.
     required: false
     default: ""
-  github-token:
-    description: GitHub token used to access repository packages.
-    required: false
-    default: ${{ github.token }}
-
 runs:
   using: composite
   steps:
@@ -109,9 +104,8 @@ runs:
         cp "${ENBU_BINARY}" "${ENBU_BINARY_PATH}"
         chmod +x "${ENBU_BINARY_PATH}"
 
-    - name: Run enbu sync
+    - name: Print enbu version
       shell: bash
       env:
-        GITHUB_TOKEN: ${{ inputs.github-token }}
         ENBU_BINARY_PATH: ${{ steps.resolve.outputs.binary-path }}
-      run: "${ENBU_BINARY_PATH}" sync
+      run: "${ENBU_BINARY_PATH}" --version
