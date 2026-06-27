@@ -211,6 +211,51 @@ func TestScenario_AddAfterSyncPreservesRecipients(t *testing.T) {
 	)
 }
 
+func TestScenario_NewRecipientCannotAddUntilSynced(t *testing.T) {
+	RunScenario(t,
+		Users("alice", "bob"),
+		Register("alice"),
+		Add("alice", "DATABASE_URL", "postgres://prod/app"),
+		Register("bob"),
+		AddFails("bob", "BOB_ONLY", "not-yet"),
+		Sync("alice"),
+		Add("bob", "BOB_ONLY", "after-sync"),
+		PullContainsAll("alice", "DATABASE_URL", "BOB_ONLY", "after-sync"),
+		PullContainsAll("bob", "DATABASE_URL", "BOB_ONLY", "after-sync"),
+	)
+}
+
+func TestScenario_SyncBeforeFirstSecretThenTeamCanPull(t *testing.T) {
+	RunScenario(t,
+		Users("alice", "bob"),
+		Register("alice"),
+		Register("bob"),
+		Sync("alice"),
+		Add("alice", "FIRST_SECRET", "created-after-empty-sync"),
+		PullContains("bob", "created-after-empty-sync"),
+	)
+}
+
+func TestScenario_RotateSharedSecretForWholeTeam(t *testing.T) {
+	RunScenario(t,
+		Users("alice", "bob", "charlie"),
+		Register("alice"),
+		Register("bob"),
+		Add("alice", "API_TOKEN", "old-token"),
+		Add("alice", "UNCHANGED", "still-here"),
+		Sync("alice"),
+		Register("charlie"),
+		Sync("bob"),
+		Add("charlie", "API_TOKEN", "new-token"),
+		PullDoesNotContain("alice", "old-token"),
+		PullContainsAll("alice", "API_TOKEN", "new-token", "UNCHANGED", "still-here"),
+		PullDoesNotContain("bob", "old-token"),
+		PullContainsAll("bob", "API_TOKEN", "new-token", "UNCHANGED", "still-here"),
+		PullDoesNotContain("charlie", "old-token"),
+		PullContainsAll("charlie", "API_TOKEN", "new-token", "UNCHANGED", "still-here"),
+	)
+}
+
 func TestScenario_FullLifecycleMultiStage(t *testing.T) {
 	RunScenario(t,
 		Users("founder", "early-hire", "intern", "contractor"),

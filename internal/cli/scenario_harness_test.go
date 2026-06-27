@@ -83,6 +83,14 @@ func Add(user, key, value string) Step {
 	})
 }
 
+func AddFails(user, key, value string) Step {
+	return StepFunc(fmt.Sprintf("%s add %s fails", user, key), func(t *testing.T, s *ScenarioState) {
+		if err := addSecretExpectFail(t, s.ctx, s.user(t, user), key, value); err == nil {
+			t.Fatalf("expected %s add %s to fail", user, key)
+		}
+	})
+}
+
 func Sync(user string) Step {
 	return StepFunc(fmt.Sprintf("%s syncs", user), func(t *testing.T, s *ScenarioState) {
 		syncSecrets(t, s.ctx, s.user(t, user))
@@ -243,6 +251,16 @@ func addSecret(t *testing.T, ctx context.Context, user *testUser, key, value str
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("%s add %s: %v", user.name, key, err)
 	}
+}
+
+func addSecretExpectFail(t *testing.T, ctx context.Context, user *testUser, key, value string) error {
+	t.Helper()
+	cmd := newAddCommand(user.svc)
+	cmd.SetArgs([]string{key, value})
+	cmd.SetContext(ctx)
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	return cmd.Execute()
 }
 
 func syncSecrets(t *testing.T, ctx context.Context, user *testUser) {
