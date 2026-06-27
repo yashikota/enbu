@@ -3,7 +3,7 @@ description: Install enbu and synchronize encrypted secrets for repository recip
 
 inputs:
   version:
-    description: enbu release version to install. Defaults to the action ref when omitted.
+    description: enbu release version to install. Defaults to the matching release tag for the action ref.
     required: false
     default: ""
   github-token:
@@ -20,10 +20,28 @@ runs:
       env:
         REQUESTED_VERSION: ${{ inputs.version }}
         ACTION_REF: ${{ github.action_ref }}
+        ACTION_REPOSITORY: ${{ github.action_repository }}
       run: |
         set -euo pipefail
 
-        version="${REQUESTED_VERSION:-${ACTION_REF}}"
+        version="${REQUESTED_VERSION}"
+        if [[ -z "${version}" ]]; then
+          if [[ "${ACTION_REF}" =~ ^v[0-9A-Za-z._-]+$ ]]; then
+            version="${ACTION_REF}"
+          elif [[ "${ACTION_REF}" =~ ^[0-9a-f]{40}$ ]]; then
+            version="$(
+              git ls-remote --tags "https://github.com/${ACTION_REPOSITORY}.git" |
+                awk -v sha="${ACTION_REF}" '$1 == sha && $2 ~ /^refs\/tags\/v[0-9A-Za-z._-]+$/ { sub("refs/tags/", "", $2); print $2 }' |
+                sort -V |
+                tail -n 1
+            )"
+          fi
+        fi
+
+        if [[ -z "${version}" ]]; then
+          echo "could not resolve enbu version from action ref: ${ACTION_REF}" >&2
+          exit 1
+        fi
         if [[ ! "${version}" =~ ^v[0-9A-Za-z._-]+$ ]]; then
           echo "invalid enbu version: ${version}" >&2
           exit 1
@@ -88,7 +106,8 @@ runs:
           *.tar.gz) tar xzf "${ENBU_ASSET}" "${ENBU_BINARY}" ;;
           *.zip) unzip -q "${ENBU_ASSET}" "${ENBU_BINARY}" ;;
         esac
-        install "${ENBU_BINARY}" "${ENBU_BINARY_PATH}"
+        cp "${ENBU_BINARY}" "${ENBU_BINARY_PATH}"
+        chmod +x "${ENBU_BINARY_PATH}"
 
     - name: Run enbu sync
       shell: bash
