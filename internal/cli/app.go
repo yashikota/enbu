@@ -5,6 +5,8 @@ import (
 )
 
 func New(version string) *cobra.Command {
+	svc := DefaultService()
+
 	rootCmd := &cobra.Command{
 		Use:          "enbu",
 		Short:        "Keyless .env management powered by GitHub",
@@ -14,10 +16,10 @@ func New(version string) *cobra.Command {
 
 	rootCmd.AddCommand(
 		newAuthCommand(),
-		newInitCommand(),
-		newAddCommand(),
-		newPullCommand(),
-		newSyncCommand(),
+		newInitCommand(svc),
+		newAddCommand(svc),
+		newPullCommand(svc),
+		newSyncCommand(svc),
 	)
 
 	return rootCmd

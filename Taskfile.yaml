@@ -5,18 +5,16 @@ tasks:
     cmds:
       - go test ./...
 
-  test:integration:
+  test:scenario:
     cmds:
-      - go test -tags=integration ./...
-
-  test:e2e:
-    cmds:
-      - go test -tags=e2e ./...
+      - docker compose up -d --wait
+      - defer: docker compose down
+      - go test -tags=scenario ./...
 
   test:all:
     cmds:
       - task: test
-      - task: test:integration
+      - task: test:scenario
 
   lint:
     cmds:

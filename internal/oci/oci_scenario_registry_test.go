@@ -1,4 +1,4 @@
-//go:build integration
+//go:build scenario
 
 package oci_test
 
@@ -9,12 +9,12 @@ import (
 	"github.com/yashikota/enbu/internal/oci"
 )
 
-const testRegistryRef = "localhost:5000/test/enbu-integration"
+const scenarioRegistryRef = "localhost:5000/test/enbu-scenario-registry"
 
 func TestPushPullRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	ref := testRegistryRef + ":test-layer"
-	data := []byte("hello integration test")
+	ref := scenarioRegistryRef + ":test-layer"
+	data := []byte("hello scenario test")
 
 	err := oci.Push(ctx, ref, "application/vnd.enbu.test.v1", data, "", nil)
 	if err != nil {
@@ -31,22 +31,22 @@ func TestPushPullRoundTrip(t *testing.T) {
 	}
 }
 
-func TestListTagsIntegration(t *testing.T) {
+func TestListTagsScenario(t *testing.T) {
 	ctx := context.Background()
-	ref := testRegistryRef + ":tag-a"
+	ref := scenarioRegistryRef + ":tag-a"
 
 	err := oci.Push(ctx, ref, "application/vnd.enbu.test.v1", []byte("a"), "", nil)
 	if err != nil {
 		t.Fatalf("Push tag-a: %v", err)
 	}
 
-	refB := testRegistryRef + ":tag-b"
+	refB := scenarioRegistryRef + ":tag-b"
 	err = oci.Push(ctx, refB, "application/vnd.enbu.test.v1", []byte("b"), "", nil)
 	if err != nil {
 		t.Fatalf("Push tag-b: %v", err)
 	}
 
-	tags, err := oci.ListTags(ctx, testRegistryRef, "")
+	tags, err := oci.ListTags(ctx, scenarioRegistryRef, "")
 	if err != nil {
 		t.Fatalf("ListTags: %v", err)
 	}
@@ -61,9 +61,9 @@ func TestListTagsIntegration(t *testing.T) {
 	}
 }
 
-func TestGetDigestIntegration(t *testing.T) {
+func TestGetDigestScenario(t *testing.T) {
 	ctx := context.Background()
-	ref := testRegistryRef + ":digest-test"
+	ref := scenarioRegistryRef + ":digest-test"
 
 	err := oci.Push(ctx, ref, "application/vnd.enbu.test.v1", []byte("digest data"), "", nil)
 	if err != nil {

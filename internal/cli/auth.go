@@ -131,7 +131,7 @@ func newAuthStatusCommand() *cobra.Command {
 				return nil
 			}
 
-			repoKey := repoKeystoreKey(cfg)
+			repoKey := repoKeystoreKey(cfg.Owner, cfg.Repo)
 			privBytes, err := backend.Load(keystoreService, repoKey)
 			if err == nil && len(privBytes) > 0 {
 				id, err := agecrypto.ParseX25519Identity(string(privBytes))

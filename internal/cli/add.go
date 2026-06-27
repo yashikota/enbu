@@ -3,19 +3,16 @@ package cli
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/yashikota/enbu/internal/age"
-	"github.com/yashikota/enbu/internal/auth"
 	"github.com/yashikota/enbu/internal/bundle"
-	"github.com/yashikota/enbu/internal/config"
 	"github.com/yashikota/enbu/internal/oci"
 )
 
 const maxRetries = 3
 
-func newAddCommand() *cobra.Command {
+func newAddCommand(svc *Service) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add KEY VALUE",
 		Short: "Add a secret to the repository",
@@ -25,25 +22,25 @@ func newAddCommand() *cobra.Command {
 			key := args[0]
 			value := args[1]
 
-			token, err := auth.LoadToken()
+			accessToken, _, err := svc.TokenProvider.LoadToken()
 			if err != nil {
 				return err
 			}
 
-			cfg, err := config.LoadRepo()
+			owner, repo, err := svc.RepoDetector.LoadRepo()
 			if err != nil {
 				return err
 			}
 
-			identities, err := loadIdentitiesForRepo(cfg)
+			identities, err := loadIdentitiesForRepo(svc.KeyStore, owner, repo)
 			if err != nil || len(identities) == 0 {
 				return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 			}
 
-			secretsRef := fmt.Sprintf("ghcr.io/%s/%s-enbu:secrets-default", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
-			recipientsRef := fmt.Sprintf("ghcr.io/%s/%s-enbu", strings.ToLower(cfg.Owner), strings.ToLower(cfg.Repo))
+			secretsRef := svc.secretsRef(owner, repo)
+			recipientsRef := svc.registryRef(owner, repo)
 
-			publicKeys, err := pullAllRecipients(ctx, recipientsRef, token.AccessToken)
+			publicKeys, err := pullAllRecipients(ctx, svc.Registry, recipientsRef, accessToken)
 			if err != nil {
 				return fmt.Errorf("pulling recipients: %w", err)
 			}
@@ -52,13 +49,13 @@ func newAddCommand() *cobra.Command {
 			}
 
 			pushOpts := &oci.PushOptions{
-				SourceRepo: fmt.Sprintf("https://github.com/%s/%s", cfg.Owner, cfg.Repo),
+				SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
 			}
 
 			for attempt := range maxRetries {
-				secrets, baseDigest, err := pullSecretsWithDigest(ctx, secretsRef, token.AccessToken, identities...)
+				secrets, baseDigest, err := pullSecretsWithDigest(ctx, svc.Registry, secretsRef, accessToken, identities...)
 				if err != nil {
-					if secretsExists(ctx, secretsRef, token.AccessToken) {
+					if secretsExists(ctx, svc.Registry, secretsRef, accessToken) {
 						return fmt.Errorf("cannot decrypt existing secrets: %w", err)
 					}
 					secrets = make(map[string]string)
@@ -68,7 +65,7 @@ func newAddCommand() *cobra.Command {
 				secrets[key] = value
 
 				if baseDigest != "" {
-					currentDigest, err := oci.GetDigest(ctx, secretsRef, token.AccessToken)
+					currentDigest, err := svc.Registry.GetDigest(ctx, secretsRef, accessToken)
 					if err == nil && currentDigest != baseDigest {
 						if attempt < maxRetries-1 {
 							fmt.Fprintf(os.Stderr, "Conflict detected, retrying (%d/%d)...\n", attempt+1, maxRetries)
@@ -84,7 +81,7 @@ func newAddCommand() *cobra.Command {
 					return fmt.Errorf("encrypting secrets: %w", err)
 				}
 
-				if err := oci.Push(ctx, secretsRef, "application/vnd.enbu.secrets.age.v1", ciphertext, token.AccessToken, pushOpts); err != nil {
+				if err := svc.Registry.Push(ctx, secretsRef, "application/vnd.enbu.secrets.age.v1", ciphertext, accessToken, pushOpts); err != nil {
 					return fmt.Errorf("pushing encrypted secrets: %w", err)
 				}
 
