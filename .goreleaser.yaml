@@ -4,7 +4,7 @@ builds:
   - main: .
     binary: enbu
     ldflags:
-      - -s -w -X main.Version={{.Version}}
+      - -s -X main.Version={{.Version}}
     env:
       - CGO_ENABLED=0
     goos:
