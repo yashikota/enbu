@@ -50,7 +50,7 @@ runs:
         case "${RUNNER_OS}" in
           Linux) os="linux"; ext="tar.gz"; binary="enbu" ;;
           macOS) os="darwin"; ext="tar.gz"; binary="enbu" ;;
-          Windows) os="windows"; ext="zip"; binary="enbu.exe" ;;
+          Windows) os="windows"; ext="tar.gz"; binary="enbu.exe" ;;
           *)
             echo "unsupported runner OS: ${RUNNER_OS}" >&2
             exit 1
