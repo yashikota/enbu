@@ -34,6 +34,11 @@ runs:
           exit 1
         fi
 
+        if [[ ! "${ENBU_VERSION}" =~ ^v[0-9A-Za-z._-]+$ ]]; then
+          echo "invalid enbu version: ${ENBU_VERSION}" >&2
+          exit 1
+        fi
+
         mkdir -p "${RUNNER_TEMP}/enbu/bin"
         workdir="$(mktemp -d)"
         trap 'rm -rf "${workdir}"' EXIT
