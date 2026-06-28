@@ -72,19 +72,18 @@ func isUserRecipientTagForEnv(tag, env string, knownEnvs []string) bool {
 	if tag == "recipient-github-actions" {
 		return false
 	}
+	env = normalizeEnvironmentName(env)
 	prefix := recipientTagPrefix(env)
 	if !strings.HasPrefix(tag, prefix) {
 		return false
 	}
-	if normalizeEnvironmentName(env) != defaultEnvironment {
-		return true
-	}
 	for _, known := range knownEnvs {
 		known = normalizeEnvironmentName(known)
-		if known == defaultEnvironment {
+		if known == env {
 			continue
 		}
-		if strings.HasPrefix(tag, recipientTagPrefix(known)) {
+		knownPrefix := recipientTagPrefix(known)
+		if len(knownPrefix) > len(prefix) && strings.HasPrefix(tag, knownPrefix) {
 			return false
 		}
 	}

@@ -61,11 +61,17 @@ func SaveProject(cfg *ProjectConfig) error {
 }
 
 func NewProjectWithEnvironment(name string) *ProjectConfig {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "default"
+	}
+	envs := map[string]EnvironmentConfig{
+		"default": {Output: DefaultOutput("default")},
+	}
+	envs[name] = EnvironmentConfig{Output: DefaultOutput(name)}
 	return &ProjectConfig{
-		Version: "0.1",
-		Environments: map[string]EnvironmentConfig{
-			name: {Output: DefaultOutput(name)},
-		},
+		Version:      "0.1",
+		Environments: envs,
 	}
 }
 

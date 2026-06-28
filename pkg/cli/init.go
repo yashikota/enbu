@@ -145,10 +145,12 @@ func newInitCommand(svc *Service) *cobra.Command {
 				} else {
 					fmt.Println("No secrets exist yet. You can access them after a member runs 'enbu add'.")
 				}
+				ensureProjectGitignore(repoRoot, projectCfg)
 				return nil
 			}
 
 			if !configMissing {
+				ensureProjectGitignore(repoRoot, projectCfg)
 				fmt.Printf("\nInitialized %s environment for this repository.\n", envName)
 				return nil
 			}
@@ -160,11 +162,7 @@ func newInitCommand(svc *Service) *cobra.Command {
 				fmt.Println("✓ Created enbu.toml")
 			}
 
-			if err := ensureGitignore(repoRoot); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to update .gitignore: %v\n", err)
-			} else {
-				fmt.Println("✓ Updated .gitignore")
-			}
+			ensureProjectGitignore(repoRoot, projectCfg)
 
 			fmt.Println("Committing generated files...")
 			if err := gitCommitInitFiles(repoRoot); err != nil {
@@ -207,7 +205,41 @@ var gitignoreEntries = []string{
 	"!.env.example",
 }
 
-func ensureGitignore(repoRoot string) error {
+func ensureProjectGitignore(repoRoot string, cfg *config.ProjectConfig) {
+	if err := ensureGitignore(repoRoot, projectGitignoreEntries(cfg)...); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to update .gitignore: %v\n", err)
+	} else {
+		fmt.Println("✓ Updated .gitignore")
+	}
+}
+
+func projectGitignoreEntries(cfg *config.ProjectConfig) []string {
+	var entries []string
+	for _, name := range cfg.EnvironmentNames() {
+		env, err := cfg.Environment(name)
+		if err != nil {
+			continue
+		}
+		output := gitignorePatternForOutput(env.Output)
+		if output != "" {
+			entries = append(entries, output)
+		}
+	}
+	return entries
+}
+
+func gitignorePatternForOutput(output string) string {
+	output = strings.TrimSpace(output)
+	if output == "" || filepath.IsAbs(output) {
+		return ""
+	}
+	if strings.HasPrefix(output, "#") || strings.HasPrefix(output, "!") {
+		return `\` + output
+	}
+	return output
+}
+
+func ensureGitignore(repoRoot string, extraEntries ...string) error {
 	path := filepath.Join(repoRoot, ".gitignore")
 
 	existing := ""
@@ -221,10 +253,18 @@ func ensureGitignore(repoRoot string) error {
 		lineSet[strings.TrimSpace(l)] = true
 	}
 
+	entries := append([]string{}, gitignoreEntries...)
+	entries = append(entries, extraEntries...)
+
 	var toAdd []string
-	for _, entry := range gitignoreEntries {
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
 		if !lineSet[entry] {
 			toAdd = append(toAdd, entry)
+			lineSet[entry] = true
 		}
 	}
 

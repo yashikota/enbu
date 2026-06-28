@@ -195,6 +195,31 @@ func TestSaveProject(t *testing.T) {
 	if env.Output != ".env.dev" {
 		t.Fatalf("got output %q, want .env.dev", env.Output)
 	}
+	def, err := loaded.Environment("default")
+	if err != nil {
+		t.Fatalf("Environment(default): %v", err)
+	}
+	if def.Output != ".env" {
+		t.Fatalf("got default output %q, want .env", def.Output)
+	}
+}
+
+func TestNewProjectWithEnvironmentIncludesDefault(t *testing.T) {
+	cfg := NewProjectWithEnvironment("dev")
+	dev, err := cfg.Environment("dev")
+	if err != nil {
+		t.Fatalf("Environment(dev): %v", err)
+	}
+	if dev.Output != ".env.dev" {
+		t.Fatalf("got dev output %q, want .env.dev", dev.Output)
+	}
+	def, err := cfg.Environment("default")
+	if err != nil {
+		t.Fatalf("Environment(default): %v", err)
+	}
+	if def.Output != ".env" {
+		t.Fatalf("got default output %q, want .env", def.Output)
+	}
 }
 
 func TestValidEnvironmentName(t *testing.T) {

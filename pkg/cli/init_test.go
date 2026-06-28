@@ -130,6 +130,24 @@ func TestEnsureGitignore_NoTrailingNewline(t *testing.T) {
 	}
 }
 
+func TestEnsureGitignore_CustomOutputs(t *testing.T) {
+	dir := t.TempDir()
+	if err := ensureGitignore(dir, "secrets.json", "config/dev.env", `\!literal.env`); err != nil {
+		t.Fatalf("ensureGitignore: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	for _, want := range []string{"secrets.json", "config/dev.env", `\!literal.env`} {
+		if !strings.Contains(content, want) {
+			t.Errorf("missing custom output %q in .gitignore", want)
+		}
+	}
+}
+
 func TestIsUserRecipientTag(t *testing.T) {
 	tests := []struct {
 		tag  string
@@ -164,7 +182,7 @@ func TestEnvironmentTags(t *testing.T) {
 }
 
 func TestIsUserRecipientTagForEnv(t *testing.T) {
-	known := []string{"default", "dev", "prod"}
+	known := []string{"default", "dev", "dev-feature", "prod"}
 	tests := []struct {
 		tag  string
 		env  string
@@ -173,6 +191,8 @@ func TestIsUserRecipientTagForEnv(t *testing.T) {
 		{"recipient-alice-12345678", "default", true},
 		{"recipient-dev-alice-12345678", "default", false},
 		{"recipient-dev-alice-12345678", "dev", true},
+		{"recipient-dev-feature-alice-12345678", "dev", false},
+		{"recipient-dev-feature-alice-12345678", "dev-feature", true},
 		{"recipient-prod-alice-12345678", "dev", false},
 		{"recipient-github-actions", "default", false},
 		{"secrets-dev", "dev", false},
