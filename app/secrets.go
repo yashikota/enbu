@@ -33,7 +33,10 @@ func (a *App) ListSecrets(ctx context.Context, env string) (map[string]string, e
 	}
 
 	identities, err := LoadIdentitiesForRepo(a.KeyStore, owner, repo)
-	if err != nil || len(identities) == 0 {
+	if err != nil {
+		return nil, err
+	}
+	if len(identities) == 0 {
 		return nil, fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 	}
 
@@ -67,7 +70,10 @@ func (a *App) AddSecret(ctx context.Context, env, key, value string) error {
 	}
 
 	identities, err := LoadIdentitiesForRepo(a.KeyStore, owner, repo)
-	if err != nil || len(identities) == 0 {
+	if err != nil {
+		return err
+	}
+	if len(identities) == 0 {
 		return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 	}
 
@@ -89,8 +95,8 @@ func (a *App) AddSecret(ctx context.Context, env, key, value string) error {
 	for attempt := range maxRetries {
 		secrets, baseDigest, err := PullSecretsWithDigest(ctx, a.Registry, secretsRef, accessToken, identities...)
 		if err != nil {
-			if SecretsExists(ctx, a.Registry, secretsRef, accessToken) {
-				return fmt.Errorf("cannot decrypt existing secrets: %w", err)
+			if !IsNotFoundError(err) {
+				return fmt.Errorf("pulling secrets: %w", err)
 			}
 			secrets = make(map[string]string)
 			baseDigest = ""
@@ -143,7 +149,10 @@ func (a *App) EditSecret(ctx context.Context, env, key, value string) error {
 	}
 
 	identities, err := LoadIdentitiesForRepo(a.KeyStore, owner, repo)
-	if err != nil || len(identities) == 0 {
+	if err != nil {
+		return err
+	}
+	if len(identities) == 0 {
 		return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 	}
 
@@ -215,7 +224,10 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 	}
 
 	identities, err := LoadIdentitiesForRepo(a.KeyStore, owner, repo)
-	if err != nil || len(identities) == 0 {
+	if err != nil {
+		return err
+	}
+	if len(identities) == 0 {
 		return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 	}
 
@@ -237,11 +249,14 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 	for attempt := range maxRetries {
 		secrets, baseDigest, err := PullSecretsWithDigest(ctx, a.Registry, secretsRef, accessToken, identities...)
 		if err != nil {
+			if IsNotFoundError(err) {
+				return nil
+			}
 			return fmt.Errorf("pulling secrets: %w", err)
 		}
 
 		if _, ok := secrets[key]; !ok {
-			return fmt.Errorf("secret %s does not exist", key)
+			return nil
 		}
 		delete(secrets, key)
 
@@ -294,7 +309,10 @@ func (a *App) PullSecrets(ctx context.Context, env string) ([]byte, string, int,
 	}
 
 	identities, err := LoadIdentitiesForRepo(a.KeyStore, owner, repo)
-	if err != nil || len(identities) == 0 {
+	if err != nil {
+		return nil, "", 0, err
+	}
+	if len(identities) == 0 {
 		return nil, "", 0, fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 	}
 
@@ -345,7 +363,10 @@ func (a *App) SyncSecrets(ctx context.Context, env string) error {
 	}
 
 	identities, err := LoadIdentitiesForRepo(a.KeyStore, owner, repo)
-	if err != nil || len(identities) == 0 {
+	if err != nil {
+		return err
+	}
+	if len(identities) == 0 {
 		return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 	}
 

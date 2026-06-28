@@ -115,8 +115,7 @@ func IsNotFoundError(err error) bool {
 	}
 	errStr := err.Error()
 	return strings.Contains(errStr, "404") ||
-		strings.Contains(errStr, "NAME_UNKNOWN") ||
-		strings.Contains(errStr, "not found")
+		strings.Contains(errStr, "NAME_UNKNOWN")
 }
 
 type ResolvedEnvironment struct {
