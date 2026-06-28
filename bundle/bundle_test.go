@@ -3,7 +3,7 @@ package bundle_test
 import (
 	"testing"
 
-	"github.com/yashikota/enbu/pkg/bundle"
+	"github.com/yashikota/enbu/bundle"
 )
 
 func TestMarshalUnmarshal(t *testing.T) {

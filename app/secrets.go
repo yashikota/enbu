@@ -9,9 +9,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/yashikota/enbu/pkg/age"
-	"github.com/yashikota/enbu/pkg/bundle"
-	"github.com/yashikota/enbu/pkg/oci"
+	"github.com/yashikota/enbu/age"
+	"github.com/yashikota/enbu/bundle"
+	"github.com/yashikota/enbu/oci"
 )
 
 const maxRetries = 3
@@ -89,7 +89,7 @@ func (a *App) AddSecret(ctx context.Context, env, key, value string) error {
 	}
 
 	pushOpts := &oci.PushOptions{
-		SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
+		SourceRepo: a.sourceRepoURL(owner, repo),
 	}
 
 	for attempt := range maxRetries {
@@ -119,6 +119,7 @@ func (a *App) AddSecret(ctx context.Context, env, key, value string) error {
 			if errors.Is(err, oci.ErrConflict) {
 				if attempt < maxRetries-1 {
 					a.emitRetry(attempt+1, maxRetries)
+					time.Sleep(time.Duration(100+rand.IntN(100)) * time.Millisecond)
 					continue
 				}
 				return fmt.Errorf("secrets changed by another user, failed after %d attempts", maxRetries)
@@ -168,7 +169,7 @@ func (a *App) EditSecret(ctx context.Context, env, key, value string) error {
 	}
 
 	pushOpts := &oci.PushOptions{
-		SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
+		SourceRepo: a.sourceRepoURL(owner, repo),
 	}
 
 	for attempt := range maxRetries {
@@ -243,7 +244,7 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 	}
 
 	pushOpts := &oci.PushOptions{
-		SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
+		SourceRepo: a.sourceRepoURL(owner, repo),
 	}
 
 	for attempt := range maxRetries {
@@ -373,7 +374,7 @@ func (a *App) SyncSecrets(ctx context.Context, env string) error {
 	secretsRef := a.secretsRef(owner, repo, resolved.Name)
 	recipientsRef := a.registryRef(owner, repo)
 	pushOpts := &oci.PushOptions{
-		SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
+		SourceRepo: a.sourceRepoURL(owner, repo),
 	}
 
 	const syncMaxRetries = 5

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/yashikota/enbu/provider"
 )
 
 var apiBaseURL = "https://api.github.com"
@@ -37,11 +39,6 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader) (*
 	return c.httpClient.Do(req)
 }
 
-type User struct {
-	Login string `json:"login"`
-	Type  string `json:"type"`
-}
-
 func (c *Client) IsOrganization(ctx context.Context, login string) bool {
 	resp, err := c.do(ctx, http.MethodGet, "/users/"+login, nil)
 	if err != nil {
@@ -62,7 +59,7 @@ func (c *Client) IsOrganization(ctx context.Context, login string) bool {
 	return u.Type == "Organization"
 }
 
-func (c *Client) GetUser(ctx context.Context) (*User, error) {
+func (c *Client) GetUser(ctx context.Context) (*provider.User, error) {
 	resp, err := c.do(ctx, http.MethodGet, "/user", nil)
 	if err != nil {
 		return nil, err
@@ -73,9 +70,13 @@ func (c *Client) GetUser(ctx context.Context) (*User, error) {
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
-	var user User
+	var user provider.User
 	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (c *Client) SourceRepoURL(owner, repo string) string {
+	return fmt.Sprintf("https://github.com/%s/%s", owner, repo)
 }

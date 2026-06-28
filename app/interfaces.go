@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 
-	"github.com/yashikota/enbu/pkg/oci"
-	gh "github.com/yashikota/enbu/pkg/provider/github"
+	"github.com/yashikota/enbu/oci"
+	"github.com/yashikota/enbu/provider"
 )
 
 type Registry interface {
@@ -27,9 +27,10 @@ type RepoDetector interface {
 	LoadRepo() (owner, repo string, err error)
 }
 
-type GitHubClient interface {
-	GetUser(ctx context.Context) (*gh.User, error)
+type PlatformClient interface {
+	GetUser(ctx context.Context) (*provider.User, error)
 	IsOrganization(ctx context.Context, login string) bool
+	SourceRepoURL(owner, repo string) string
 }
 
 type EventHandler interface {

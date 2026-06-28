@@ -35,9 +35,9 @@ func TestRequestDeviceCode(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origURL := githubDeviceCodeURL
-	defer func() { githubDeviceCodeURL = origURL }()
-	githubDeviceCodeURL = server.URL
+	origURL := deviceCodeURL
+	defer func() { deviceCodeURL = origURL }()
+	deviceCodeURL = server.URL
 
 	resp, err := RequestDeviceCode(context.Background(), "test-client")
 	if err != nil {
@@ -68,9 +68,9 @@ func TestPollForToken_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origURL := githubTokenURL
-	defer func() { githubTokenURL = origURL }()
-	githubTokenURL = server.URL
+	origURL := tokenURL
+	defer func() { tokenURL = origURL }()
+	tokenURL = server.URL
 
 	resp, err := PollForToken(context.Background(), "test-client", "device-code", 1)
 	if err != nil {
@@ -91,9 +91,9 @@ func TestPollForToken_Expired(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origURL := githubTokenURL
-	defer func() { githubTokenURL = origURL }()
-	githubTokenURL = server.URL
+	origURL := tokenURL
+	defer func() { tokenURL = origURL }()
+	tokenURL = server.URL
 
 	_, err := PollForToken(context.Background(), "test-client", "device-code", 1)
 	if err == nil {
@@ -108,9 +108,9 @@ func TestPollForToken_AccessDenied(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origURL := githubTokenURL
-	defer func() { githubTokenURL = origURL }()
-	githubTokenURL = server.URL
+	origURL := tokenURL
+	defer func() { tokenURL = origURL }()
+	tokenURL = server.URL
 
 	_, err := PollForToken(context.Background(), "test-client", "device-code", 1)
 	if err == nil {

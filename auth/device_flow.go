@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	githubDeviceCodeURL = "https://github.com/login/device/code"
-	githubTokenURL      = "https://github.com/login/oauth/access_token"
+	deviceCodeURL = "https://github.com/login/device/code"
+	tokenURL      = "https://github.com/login/oauth/access_token"
 )
 
 var requiredScopes = []string{"repo", "read:org", "write:packages", "read:packages"}
@@ -41,7 +41,7 @@ func RequestDeviceCode(ctx context.Context, clientID string) (*DeviceCodeRespons
 		"scope":     {strings.Join(requiredScopes, " ")},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, githubDeviceCodeURL, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, deviceCodeURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func requestToken(ctx context.Context, clientID, deviceCode string) (*TokenRespo
 		"grant_type":  {"urn:ietf:params:oauth:grant-type:device_code"},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, githubTokenURL, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, err
 	}

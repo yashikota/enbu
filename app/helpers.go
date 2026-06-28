@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	agecrypto "filippo.io/age"
-	"github.com/yashikota/enbu/pkg/age"
-	"github.com/yashikota/enbu/pkg/bundle"
-	"github.com/yashikota/enbu/pkg/config"
-	"github.com/yashikota/enbu/pkg/keystore"
-	"github.com/yashikota/enbu/pkg/oci"
+	"github.com/yashikota/enbu/age"
+	"github.com/yashikota/enbu/bundle"
+	"github.com/yashikota/enbu/config"
+	"github.com/yashikota/enbu/keystore"
+	"github.com/yashikota/enbu/oci"
 )
 
 const (
@@ -24,6 +24,9 @@ func RepoKeystoreKey(owner, repo string) string {
 }
 
 func LoadIdentitiesForRepo(ks KeyStore, owner, repo string) ([]agecrypto.Identity, error) {
+	if ks == nil {
+		return nil, fmt.Errorf("keystore is not initialized")
+	}
 	key := RepoKeystoreKey(owner, repo)
 	privKeyBytes, err := ks.Load(KeystoreService, key)
 	if err != nil {

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yashikota/enbu/age"
 	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/pkg/age"
-	"github.com/yashikota/enbu/pkg/bundle"
-	"github.com/yashikota/enbu/pkg/oci"
+	"github.com/yashikota/enbu/bundle"
+	"github.com/yashikota/enbu/oci"
 )
 
 type addEditRegistry struct {

@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/yashikota/enbu/pkg/keystore"
-	"github.com/yashikota/enbu/pkg/oci"
-	"github.com/yashikota/enbu/pkg/provider/github"
+	"github.com/yashikota/enbu/keystore"
+	"github.com/yashikota/enbu/oci"
+	"github.com/yashikota/enbu/provider"
 )
 
 type mockRegistry struct {
@@ -108,14 +108,18 @@ func (m *mockKeyStore) Load(_, key string) ([]byte, error) {
 }
 
 type mockGitHubClient struct {
-	user *github.User
+	user *provider.User
 	orgs map[string]bool
 }
 
-func (m *mockGitHubClient) GetUser(_ context.Context) (*github.User, error) {
+func (m *mockGitHubClient) GetUser(_ context.Context) (*provider.User, error) {
 	return m.user, nil
 }
 
 func (m *mockGitHubClient) IsOrganization(_ context.Context, login string) bool {
 	return m.orgs[login]
+}
+
+func (m *mockGitHubClient) SourceRepoURL(owner, repo string) string {
+	return "https://github.com/" + owner + "/" + repo
 }

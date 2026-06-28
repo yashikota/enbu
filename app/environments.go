@@ -3,7 +3,7 @@ package app
 import (
 	"fmt"
 
-	"github.com/yashikota/enbu/pkg/config"
+	"github.com/yashikota/enbu/config"
 )
 
 type EnvInfo struct {
@@ -59,9 +59,10 @@ func (a *App) SwitchEnvironment(name string) error {
 		return err
 	}
 
-	local, _ := config.LoadLocal()
-	local.Previous = previous
-	_ = config.SaveLocal(local)
+	if local, err := config.LoadLocal(); err == nil && local != nil {
+		local.Previous = previous
+		_ = config.SaveLocal(local)
+	}
 
 	return nil
 }
@@ -103,9 +104,10 @@ func (a *App) CreateEnvironment(name string) error {
 		return err
 	}
 
-	local, _ := config.LoadLocal()
-	local.Previous = previous
-	_ = config.SaveLocal(local)
+	if local, err := config.LoadLocal(); err == nil && local != nil {
+		local.Previous = previous
+		_ = config.SaveLocal(local)
+	}
 
 	return nil
 }
