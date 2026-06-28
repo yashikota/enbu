@@ -24,6 +24,9 @@ func RepoKeystoreKey(owner, repo string) string {
 }
 
 func LoadIdentitiesForRepo(ks KeyStore, owner, repo string) ([]agecrypto.Identity, error) {
+	if ks == nil {
+		return nil, fmt.Errorf("keystore is not initialized")
+	}
 	key := RepoKeystoreKey(owner, repo)
 	privKeyBytes, err := ks.Load(KeystoreService, key)
 	if err != nil {

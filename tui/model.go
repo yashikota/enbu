@@ -70,6 +70,7 @@ func newModel(a *app.App) model {
 		keyInput:   ki,
 		valueInput: vi,
 		focusKey:   true,
+		loading:    true,
 	}
 }
 
@@ -108,7 +109,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case operationDoneMsg:
-		m.loading = false
+		m.loading = true
 		m.status = msg.message
 		m.view = viewSecrets
 		return m, m.loadSecrets()

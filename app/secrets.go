@@ -119,6 +119,7 @@ func (a *App) AddSecret(ctx context.Context, env, key, value string) error {
 			if errors.Is(err, oci.ErrConflict) {
 				if attempt < maxRetries-1 {
 					a.emitRetry(attempt+1, maxRetries)
+					time.Sleep(time.Duration(100+rand.IntN(100)) * time.Millisecond)
 					continue
 				}
 				return fmt.Errorf("secrets changed by another user, failed after %d attempts", maxRetries)
