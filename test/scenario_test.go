@@ -260,10 +260,11 @@ func TestScenario_SyncBeforeFirstSecretThenTeamCanPull(t *testing.T) {
 	)
 }
 
-func TestScenario_EnvironmentSecretsAndRecipientsAreIsolated(t *testing.T) {
+func TestScenario_EnvironmentSecretsAreIsolated(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
 			content := `version = "0.1"
+default = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -276,18 +277,16 @@ output = ".env.prod"
 			}
 		}),
 		Users("alice", "bob"),
-		RegisterEnv("alice", "dev"),
-		RegisterEnv("alice", "prod"),
+		Register("alice"),
+		Register("bob"),
 		AddEnv("alice", "dev", "API_KEY", "dev-secret"),
 		AddEnv("alice", "prod", "API_KEY", "prod-secret"),
 		PullEnvContainsAll("alice", "dev", "API_KEY", "dev-secret"),
 		PullEnvDoesNotContain("alice", "dev", "prod-secret"),
 		PullEnvContainsAll("alice", "prod", "API_KEY", "prod-secret"),
 		PullEnvDoesNotContain("alice", "prod", "dev-secret"),
-		RegisterEnv("bob", "dev"),
-		SyncEnv("alice", "dev"),
 		PullEnvContainsAll("bob", "dev", "dev-secret"),
-		PullFailsEnv("bob", "prod"),
+		PullEnvContainsAll("bob", "prod", "prod-secret"),
 	)
 }
 

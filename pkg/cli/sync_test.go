@@ -38,8 +38,6 @@ func TestDoSyncReturnsNonNotFoundSecretPullErrors(t *testing.T) {
 		"token",
 		nil,
 		nil,
-		defaultEnvironment,
-		[]string{defaultEnvironment},
 	)
 
 	if err == nil {

@@ -47,7 +47,7 @@ func newAddCommand(svc *Service) *cobra.Command {
 			secretsRef := svc.secretsRef(owner, repo, env.Name)
 			recipientsRef := svc.registryRef(owner, repo)
 
-			publicKeys, err := pullAllRecipients(ctx, svc.Registry, recipientsRef, accessToken, env.Name, env.KnownEnvs)
+			publicKeys, err := pullAllRecipients(ctx, svc.Registry, recipientsRef, accessToken)
 			if err != nil {
 				return fmt.Errorf("pulling recipients: %w", err)
 			}

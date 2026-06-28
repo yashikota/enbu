@@ -188,6 +188,9 @@ func TestSaveProject(t *testing.T) {
 	if loaded.Version != "0.1" {
 		t.Fatalf("got version %q, want %q", loaded.Version, "0.1")
 	}
+	if loaded.Default != "dev" {
+		t.Fatalf("got default %q, want dev", loaded.Default)
+	}
 	env, err := loaded.Environment("dev")
 	if err != nil {
 		t.Fatalf("Environment(dev): %v", err)
@@ -195,17 +198,13 @@ func TestSaveProject(t *testing.T) {
 	if env.Output != ".env.dev" {
 		t.Fatalf("got output %q, want .env.dev", env.Output)
 	}
-	def, err := loaded.Environment("default")
-	if err != nil {
-		t.Fatalf("Environment(default): %v", err)
-	}
-	if def.Output != ".env" {
-		t.Fatalf("got default output %q, want .env", def.Output)
-	}
 }
 
-func TestNewProjectWithEnvironmentIncludesDefault(t *testing.T) {
+func TestNewProjectWithEnvironment(t *testing.T) {
 	cfg := NewProjectWithEnvironment("dev")
+	if cfg.Default != "dev" {
+		t.Fatalf("got default %q, want dev", cfg.Default)
+	}
 	dev, err := cfg.Environment("dev")
 	if err != nil {
 		t.Fatalf("Environment(dev): %v", err)
@@ -213,12 +212,59 @@ func TestNewProjectWithEnvironmentIncludesDefault(t *testing.T) {
 	if dev.Output != ".env.dev" {
 		t.Fatalf("got dev output %q, want .env.dev", dev.Output)
 	}
-	def, err := cfg.Environment("default")
+}
+
+func TestNewProjectWithEnvironmentDefault(t *testing.T) {
+	cfg := NewProjectWithEnvironment("")
+	if cfg.Default != "default" {
+		t.Fatalf("got default %q, want default", cfg.Default)
+	}
+	env, err := cfg.Environment("default")
 	if err != nil {
 		t.Fatalf("Environment(default): %v", err)
 	}
-	if def.Output != ".env" {
-		t.Fatalf("got default output %q, want .env", def.Output)
+	if env.Output != ".env" {
+		t.Fatalf("got output %q, want .env", env.Output)
+	}
+}
+
+func TestAddEnvironment(t *testing.T) {
+	cfg := NewProjectWithEnvironment("dev")
+	if err := cfg.AddEnvironment("staging"); err != nil {
+		t.Fatalf("AddEnvironment: %v", err)
+	}
+	if !cfg.HasEnvironment("staging") {
+		t.Fatal("staging should exist")
+	}
+	if err := cfg.AddEnvironment("staging"); err == nil {
+		t.Fatal("expected error for duplicate environment")
+	}
+}
+
+func TestRemoveEnvironment(t *testing.T) {
+	cfg := NewProjectWithEnvironment("dev")
+	_ = cfg.AddEnvironment("staging")
+	if err := cfg.RemoveEnvironment("staging"); err != nil {
+		t.Fatalf("RemoveEnvironment: %v", err)
+	}
+	if cfg.HasEnvironment("staging") {
+		t.Fatal("staging should not exist")
+	}
+}
+
+func TestRenameEnvironment(t *testing.T) {
+	cfg := NewProjectWithEnvironment("dev")
+	if err := cfg.RenameEnvironment("dev", "development"); err != nil {
+		t.Fatalf("RenameEnvironment: %v", err)
+	}
+	if cfg.HasEnvironment("dev") {
+		t.Fatal("dev should not exist")
+	}
+	if !cfg.HasEnvironment("development") {
+		t.Fatal("development should exist")
+	}
+	if cfg.Default != "development" {
+		t.Fatalf("default should be updated, got %q", cfg.Default)
 	}
 }
 

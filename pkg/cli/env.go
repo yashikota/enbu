@@ -12,31 +12,35 @@ import (
 const defaultEnvironment = "default"
 
 type commandEnvironment struct {
-	Name      string
-	Output    string
-	KnownEnvs []string
+	Name   string
+	Output string
 }
 
 func addEnvironmentFlag(cmd *cobra.Command, target *string) {
-	cmd.Flags().StringVar(target, "env", defaultEnvironment, "Environment to use")
+	cmd.Flags().StringVarP(target, "env", "e", "", "Environment to use (overrides current)")
 }
 
 func resolveCommandEnvironment(name string) (*commandEnvironment, error) {
-	name = normalizeEnvironmentName(name)
-	if !config.ValidEnvironmentName(name) {
-		return nil, fmt.Errorf("invalid environment %q", name)
-	}
-
 	cfg, err := config.LoadProject()
 	if err != nil {
-		if name == defaultEnvironment && strings.Contains(err.Error(), "enbu.toml not found") {
+		if strings.Contains(err.Error(), "enbu.toml not found") {
+			if name == "" {
+				name = defaultEnvironment
+			}
 			return &commandEnvironment{
-				Name:      name,
-				Output:    config.DefaultOutput(name),
-				KnownEnvs: []string{name},
+				Name:   name,
+				Output: config.DefaultOutput(name),
 			}, nil
 		}
 		return nil, err
+	}
+
+	if name == "" {
+		name = cfg.CurrentEnvironment()
+	}
+
+	if !config.ValidEnvironmentName(name) {
+		return nil, fmt.Errorf("invalid environment %q", name)
 	}
 
 	env, err := cfg.Environment(name)
@@ -44,48 +48,25 @@ func resolveCommandEnvironment(name string) (*commandEnvironment, error) {
 		return nil, err
 	}
 	return &commandEnvironment{
-		Name:      name,
-		Output:    env.Output,
-		KnownEnvs: cfg.EnvironmentNames(),
+		Name:   name,
+		Output: env.Output,
 	}, nil
 }
 
-func normalizeEnvironmentName(name string) string {
-	if name == "" {
-		return defaultEnvironment
-	}
-	return name
-}
-
 func secretsTag(env string) string {
-	return "secrets-" + oci.CleanTag(normalizeEnvironmentName(env))
-}
-
-func recipientTagPrefix(env string) string {
-	if normalizeEnvironmentName(env) == defaultEnvironment {
-		return "recipient-"
+	if env == "" {
+		env = defaultEnvironment
 	}
-	return "recipient-" + oci.CleanTag(env) + "-"
+	return "secrets-" + oci.CleanTag(env)
 }
 
-func isUserRecipientTagForEnv(tag, env string, knownEnvs []string) bool {
+func recipientTagPrefix() string {
+	return "recipient-"
+}
+
+func isUserRecipientTag(tag string) bool {
 	if tag == "recipient-github-actions" {
 		return false
 	}
-	env = normalizeEnvironmentName(env)
-	prefix := recipientTagPrefix(env)
-	if !strings.HasPrefix(tag, prefix) {
-		return false
-	}
-	for _, known := range knownEnvs {
-		known = normalizeEnvironmentName(known)
-		if known == env {
-			continue
-		}
-		knownPrefix := recipientTagPrefix(known)
-		if len(knownPrefix) > len(prefix) && strings.HasPrefix(tag, knownPrefix) {
-			return false
-		}
-	}
-	return true
+	return strings.HasPrefix(tag, "recipient-")
 }

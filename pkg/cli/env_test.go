@@ -102,11 +102,9 @@ output = ".env.prod"
 	}
 
 	registryRef := svc.registryRef("owner", "repo")
-	for _, env := range []string{"dev", "prod"} {
-		ref := fmt.Sprintf("%s:%salice", registryRef, recipientTagPrefix(env))
-		if err := reg.Push(context.Background(), ref, "application/vnd.enbu.recipient.age.v1", []byte(kp.PublicKey), "token", nil); err != nil {
-			t.Fatalf("push recipient %s: %v", env, err)
-		}
+	ref := fmt.Sprintf("%s:%salice", registryRef, recipientTagPrefix())
+	if err := reg.Push(context.Background(), ref, "application/vnd.enbu.recipient.age.v1", []byte(kp.PublicKey), "token", nil); err != nil {
+		t.Fatalf("push recipient: %v", err)
 	}
 
 	devCmd := NewWithService("test", svc)

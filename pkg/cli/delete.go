@@ -66,7 +66,7 @@ func newDeleteCommand(svc *Service) *cobra.Command {
 				}
 				delete(secrets, key)
 
-				publicKeys, err := pullAllRecipients(ctx, svc.Registry, recipientsRef, accessToken, env.Name, env.KnownEnvs)
+				publicKeys, err := pullAllRecipients(ctx, svc.Registry, recipientsRef, accessToken)
 				if err != nil {
 					return fmt.Errorf("pulling recipients: %w", err)
 				}

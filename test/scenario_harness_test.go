@@ -328,14 +328,11 @@ func repoKeystoreKey(owner, repo string) string {
 	return fmt.Sprintf("%s/%s", strings.ToLower(owner), strings.ToLower(repo))
 }
 
-func registerRecipient(t *testing.T, ctx context.Context, registryRef string, user *testUser, env string) {
+func registerRecipient(t *testing.T, ctx context.Context, registryRef string, user *testUser, _ string) {
 	t.Helper()
 	fingerprint := age.Fingerprint(user.keyPair.PublicKey)
 	tag := oci.CleanTag(fmt.Sprintf("%s-%s", user.name, fingerprint))
 	prefix := "recipient-"
-	if env != "" && env != "default" {
-		prefix = fmt.Sprintf("recipient-%s-", oci.CleanTag(env))
-	}
 	ref := fmt.Sprintf("%s:%s%s", registryRef, prefix, tag)
 	if err := oci.Push(ctx, ref, "application/vnd.enbu.recipient.age.v1", []byte(user.keyPair.PublicKey), "", nil); err != nil {
 		t.Fatalf("registering recipient %s: %v", user.name, err)

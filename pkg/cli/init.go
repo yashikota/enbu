@@ -20,17 +20,11 @@ import (
 )
 
 func newInitCommand(svc *Service) *cobra.Command {
-	var envName string
-
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize enbu for this repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			envName = normalizeEnvironmentName(envName)
-			if !config.ValidEnvironmentName(envName) {
-				return fmt.Errorf("invalid environment %q", envName)
-			}
 
 			accessToken, username, err := svc.TokenProvider.LoadToken()
 			if err != nil {
@@ -43,21 +37,17 @@ func newInitCommand(svc *Service) *cobra.Command {
 			}
 
 			registryRef := svc.registryRef(owner, repo)
-			secretsRef := svc.secretsRef(owner, repo, envName)
 
 			projectCfg, err := config.LoadProject()
 			configMissing := false
 			if err != nil {
 				if strings.Contains(err.Error(), "enbu.toml not found") {
 					configMissing = true
-					projectCfg = config.NewProjectWithEnvironment(envName)
+					projectCfg = config.NewProjectWithEnvironment(defaultEnvironment)
 				} else {
 					return err
 				}
-			} else if _, err := projectCfg.Environment(envName); err != nil {
-				return err
 			}
-			knownEnvs := projectCfg.EnvironmentNames()
 
 			repoRoot, err := config.RepoRoot()
 			if err != nil {
@@ -71,10 +61,10 @@ func newInitCommand(svc *Service) *cobra.Command {
 			hasRecipients := false
 			hasSecrets := false
 			for _, tag := range existingTags {
-				if isUserRecipientTagForEnv(tag, envName, knownEnvs) {
+				if isUserRecipientTag(tag) {
 					hasRecipients = true
 				}
-				if tag == secretsTag(envName) {
+				if strings.HasPrefix(tag, "secrets-") {
 					hasSecrets = true
 				}
 			}
@@ -82,7 +72,7 @@ func newInitCommand(svc *Service) *cobra.Command {
 			joinMode := hasRecipients || hasSecrets
 			if joinMode {
 				fmt.Println("Existing enbu setup detected for this repository.")
-				fmt.Printf("Entering join mode for %s — registering your key only.\n", envName)
+				fmt.Println("Entering join mode — registering your key only.")
 			}
 
 			repoKey := repoKeystoreKey(owner, repo)
@@ -114,7 +104,7 @@ func newInitCommand(svc *Service) *cobra.Command {
 
 			fingerprint := age.Fingerprint(publicKey)
 			tag := oci.CleanTag(fmt.Sprintf("%s-%s", username, fingerprint))
-			ref := fmt.Sprintf("%s:%s%s", registryRef, recipientTagPrefix(envName), tag)
+			ref := fmt.Sprintf("%s:%s%s", registryRef, recipientTagPrefix(), tag)
 			fmt.Println("Pushing public key to registry...")
 			pushOpts := &oci.PushOptions{
 				SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
@@ -132,6 +122,8 @@ func newInitCommand(svc *Service) *cobra.Command {
 						fmt.Println("Could not load decryption keys; run 'enbu pull' after an existing member runs 'enbu sync'.")
 						return nil
 					}
+					env := projectCfg.CurrentEnvironment()
+					secretsRef := svc.secretsRef(owner, repo, env)
 					ok, err := verifyCurrentUserCanDecrypt(ctx, svc.Registry, secretsRef, accessToken, identities)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: failed to verify decryption: %v\n", err)
@@ -146,12 +138,6 @@ func newInitCommand(svc *Service) *cobra.Command {
 					fmt.Println("No secrets exist yet. You can access them after a member runs 'enbu add'.")
 				}
 				ensureProjectGitignore(repoRoot, projectCfg)
-				return nil
-			}
-
-			if !configMissing {
-				ensureProjectGitignore(repoRoot, projectCfg)
-				fmt.Printf("\nInitialized %s environment for this repository.\n", envName)
 				return nil
 			}
 
@@ -190,12 +176,12 @@ func newInitCommand(svc *Service) *cobra.Command {
 			fmt.Println("")
 			fmt.Println("Then:")
 			fmt.Println("  2. Push the commit: git push")
-			fmt.Println("  3. Run 'enbu add KEY VALUE' to add secrets")
+			fmt.Println("  3. Run 'enbu switch -c dev' to create an environment")
+			fmt.Println("  4. Run 'enbu add KEY VALUE' to add secrets")
 			return nil
 		},
 	}
 
-	addEnvironmentFlag(cmd, &envName)
 	return cmd
 }
 
@@ -203,6 +189,7 @@ var gitignoreEntries = []string{
 	".env",
 	".env.*",
 	"!.env.example",
+	".enbu.local",
 }
 
 func ensureProjectGitignore(repoRoot string, cfg *config.ProjectConfig) {
@@ -305,11 +292,7 @@ func gitCommitInitFiles(repoRoot string) error {
 	return nil
 }
 
-func isUserRecipientTag(tag string) bool {
-	return isUserRecipientTagForEnv(tag, defaultEnvironment, []string{defaultEnvironment})
-}
-
-func pullAllRecipients(ctx context.Context, reg Registry, ref string, token string, env string, knownEnvs []string) ([]string, error) {
+func pullAllRecipients(ctx context.Context, reg Registry, ref string, token string) ([]string, error) {
 	tags, err := reg.ListTags(ctx, ref, token)
 	if err != nil {
 		return nil, err
@@ -317,7 +300,7 @@ func pullAllRecipients(ctx context.Context, reg Registry, ref string, token stri
 
 	var publicKeys []string
 	for _, tag := range tags {
-		if !isUserRecipientTagForEnv(tag, env, knownEnvs) {
+		if !isUserRecipientTag(tag) {
 			continue
 		}
 		tagRef := fmt.Sprintf("%s:%s", ref, tag)

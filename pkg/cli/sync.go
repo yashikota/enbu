@@ -55,7 +55,7 @@ func newSyncCommand(svc *Service) *cobra.Command {
 			backoff := 1 * time.Second
 
 			for attempt := range syncMaxRetries {
-				err := doSync(ctx, svc.Registry, secretsRef, recipientsRef, accessToken, identities, pushOpts, env.Name, env.KnownEnvs)
+				err := doSync(ctx, svc.Registry, secretsRef, recipientsRef, accessToken, identities, pushOpts)
 				if err == nil {
 					return nil
 				}
@@ -85,7 +85,7 @@ func newSyncCommand(svc *Service) *cobra.Command {
 	return cmd
 }
 
-func doSync(ctx context.Context, reg Registry, secretsRef, recipientsRef, token string, identities []agecrypto.Identity, pushOpts *oci.PushOptions, env string, knownEnvs []string) error {
+func doSync(ctx context.Context, reg Registry, secretsRef, recipientsRef, token string, identities []agecrypto.Identity, pushOpts *oci.PushOptions) error {
 	secrets, baseDigest, err := pullSecretsWithDigest(ctx, reg, secretsRef, token, identities...)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -95,13 +95,15 @@ func doSync(ctx context.Context, reg Registry, secretsRef, recipientsRef, token 
 		return fmt.Errorf("pulling secrets: %w", err)
 	}
 
-	publicKeys, err := pullAllRecipients(ctx, reg, recipientsRef, token, env, knownEnvs)
+	publicKeys, err := pullAllRecipients(ctx, reg, recipientsRef, token)
 	if err != nil {
 		return fmt.Errorf("pulling recipients: %w", err)
 	}
 	if len(publicKeys) == 0 {
 		return fmt.Errorf("no recipients found")
 	}
+
+	// TODO: Rego policy evaluation will filter publicKeys here
 
 	if baseDigest != "" {
 		currentDigest, err := reg.GetDigest(ctx, secretsRef, token)
