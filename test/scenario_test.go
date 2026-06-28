@@ -60,6 +60,37 @@ func TestScenario_OverwriteSecret(t *testing.T) {
 	)
 }
 
+func TestScenario_DeleteSecret(t *testing.T) {
+	RunScenario(t,
+		Users("alice"),
+		Register("alice"),
+		Add("alice", "API_KEY", "sk-secret"),
+		Add("alice", "DATABASE_URL", "postgres://prod/app"),
+		Delete("alice", "API_KEY"),
+		PullDoesNotContain("alice", "API_KEY=", "sk-secret"),
+		PullContainsAll("alice", "DATABASE_URL=", "postgres://prod/app"),
+	)
+}
+
+func TestScenario_DeleteMissingSecretIsNoop(t *testing.T) {
+	RunScenario(t,
+		Users("alice"),
+		Register("alice"),
+		Add("alice", "DATABASE_URL", "postgres://prod/app"),
+		Delete("alice", "MISSING_KEY"),
+		PullContainsAll("alice", "DATABASE_URL=", "postgres://prod/app"),
+	)
+}
+
+func TestScenario_DeleteBeforeFirstSecretIsNoop(t *testing.T) {
+	RunScenario(t,
+		Users("alice"),
+		Register("alice"),
+		Delete("alice", "MISSING_KEY"),
+		PullFails("alice"),
+	)
+}
+
 func TestScenario_SpecialCharacterValues(t *testing.T) {
 	testCases := []struct{ key, value string }{
 		{"JAPANESE", "日本語のシークレット"},

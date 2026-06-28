@@ -68,13 +68,19 @@ enbu add DATABASE_URL "postgres://..."
 enbu add API_KEY "sk-..."
 ```
 
-### 4. Pull secrets
+### 4. Delete secrets
+
+```bash
+enbu delete API_KEY
+```
+
+### 5. Pull secrets
 
 ```bash
 enbu pull  # Writes to .env file
 ```
 
-### 5. Add a team member
+### 6. Add a team member
 
 A new member runs `enbu init` inside the repository to enter join mode and register their public key.  
 An existing member then runs `enbu sync` locally to re-encrypt secrets for the new recipient.
@@ -104,8 +110,9 @@ GHCR (ghcr.io/{owner}/{repo}-enbu)
 ```
 
 1. `enbu add` — Encrypts secrets for all recipients' public keys and pushes as an OCI image artifact
-2. `enbu pull` — Pulls ciphertext, decrypts with your private key, writes to `.env`
-3. `enbu sync` — Re-encrypts with the current recipient list when members are added or removed
+2. `enbu delete` — Removes a secret from the encrypted bundle and pushes the updated artifact
+3. `enbu pull` — Pulls ciphertext, decrypts with your private key, writes to `.env`
+4. `enbu sync` — Re-encrypts with the current recipient list when members are added or removed
 
 ### Authentication & Initialization Flow
 

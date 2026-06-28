@@ -3,6 +3,7 @@ package oci
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/opencontainers/image-spec/specs-go"
@@ -13,8 +14,11 @@ import (
 
 const emptyConfigJSON = "{}"
 
+var ErrConflict = errors.New("remote reference changed")
+
 type PushOptions struct {
-	SourceRepo string
+	SourceRepo     string
+	ExpectedDigest string
 }
 
 func Push(ctx context.Context, ref string, mediaType string, data []byte, token string, opts *PushOptions) error {
@@ -61,6 +65,16 @@ func Push(ctx context.Context, ref string, mediaType string, data []byte, token 
 	tag := repo.Reference.Reference
 	if err := store.Tag(ctx, manifestDesc, tag); err != nil {
 		return fmt.Errorf("tagging manifest: %w", err)
+	}
+
+	if opts != nil && opts.ExpectedDigest != "" {
+		currentDigest, err := GetDigest(ctx, ref, token)
+		if err != nil {
+			return fmt.Errorf("getting current digest: %w", err)
+		}
+		if currentDigest != opts.ExpectedDigest {
+			return fmt.Errorf("%w: expected %s, got %s", ErrConflict, opts.ExpectedDigest, currentDigest)
+		}
 	}
 
 	_, err = oras.Copy(ctx, store, tag, repo, tag, oras.DefaultCopyOptions)

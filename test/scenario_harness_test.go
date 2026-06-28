@@ -95,6 +95,12 @@ func AddFails(user, key, value string) Step {
 	})
 }
 
+func Delete(user, key string) Step {
+	return StepFunc(fmt.Sprintf("%s deletes %s", user, key), func(t *testing.T, s *ScenarioState) {
+		deleteSecret(t, s.ctx, s.user(t, user), key)
+	})
+}
+
 func Sync(user string) Step {
 	return StepFunc(fmt.Sprintf("%s syncs", user), func(t *testing.T, s *ScenarioState) {
 		syncSecrets(t, s.ctx, s.user(t, user))
@@ -337,6 +343,13 @@ func addSecret(t *testing.T, ctx context.Context, user *testUser, key, value str
 func addSecretExpectFail(t *testing.T, ctx context.Context, user *testUser, key, value string) error {
 	t.Helper()
 	return executeCommand(ctx, user.svc, "add", key, value)
+}
+
+func deleteSecret(t *testing.T, ctx context.Context, user *testUser, key string) {
+	t.Helper()
+	if err := executeCommand(ctx, user.svc, "delete", key); err != nil {
+		t.Fatalf("%s delete %s: %v", user.name, key, err)
+	}
 }
 
 func syncSecrets(t *testing.T, ctx context.Context, user *testUser) {
