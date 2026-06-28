@@ -11,12 +11,12 @@ import (
 
 	agecrypto "filippo.io/age"
 	"github.com/spf13/cobra"
+	"github.com/yashikota/enbu/age"
 	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/pkg/age"
-	"github.com/yashikota/enbu/pkg/config"
-	"github.com/yashikota/enbu/pkg/keystore"
-	"github.com/yashikota/enbu/pkg/oci"
-	gh "github.com/yashikota/enbu/pkg/provider/github"
+	"github.com/yashikota/enbu/config"
+	"github.com/yashikota/enbu/keystore"
+	"github.com/yashikota/enbu/oci"
+	gh "github.com/yashikota/enbu/provider/github"
 )
 
 func newInitCommand(a *app.App) *cobra.Command {
@@ -102,12 +102,17 @@ func newInitCommand(a *app.App) *cobra.Command {
 				}
 			}
 
+			ghClient := a.Platform
+			if ghClient == nil {
+				ghClient = gh.NewClient(accessToken)
+			}
+
 			fingerprint := age.Fingerprint(publicKey)
 			tag := oci.CleanTag(fmt.Sprintf("%s-%s", username, fingerprint))
 			ref := fmt.Sprintf("%s:%s%s", registryRef, app.RecipientTagPrefix(), tag)
 			fmt.Println("Pushing public key to registry...")
 			pushOpts := &oci.PushOptions{
-				SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
+				SourceRepo: ghClient.SourceRepoURL(owner, repo),
 			}
 			if err := a.Registry.Push(ctx, ref, "application/vnd.enbu.recipient.age.v1", []byte(publicKey), accessToken, pushOpts); err != nil {
 				return fmt.Errorf("pushing public key to GHCR: %w", err)
@@ -163,10 +168,6 @@ func newInitCommand(a *app.App) *cobra.Command {
 			fmt.Println("")
 			fmt.Println("Before sharing secrets, make the package at:")
 
-			ghClient := a.GitHub
-			if ghClient == nil {
-				ghClient = gh.NewClient(accessToken)
-			}
 			if ghClient.IsOrganization(ctx, owner) {
 				fmt.Printf("  https://github.com/orgs/%s/packages/container/%s-enbu/settings\n", owner, repo)
 			} else {

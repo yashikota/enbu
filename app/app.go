@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yashikota/enbu/pkg/auth"
-	"github.com/yashikota/enbu/pkg/config"
-	"github.com/yashikota/enbu/pkg/keystore"
-	"github.com/yashikota/enbu/pkg/oci"
+	"github.com/yashikota/enbu/auth"
+	"github.com/yashikota/enbu/config"
+	"github.com/yashikota/enbu/keystore"
+	"github.com/yashikota/enbu/oci"
 )
 
 type App struct {
@@ -16,7 +16,7 @@ type App struct {
 	TokenProvider TokenProvider
 	KeyStore      KeyStore
 	RepoDetector  RepoDetector
-	GitHub        GitHubClient
+	Platform      PlatformClient
 	Events        EventHandler
 	RegistryHost  string
 }
@@ -124,4 +124,11 @@ func (u *unavailableKeyStore) Store(_, _ string, _ []byte) error {
 
 func (u *unavailableKeyStore) Load(_, _ string) ([]byte, error) {
 	return nil, u.err
+}
+
+func (a *App) sourceRepoURL(owner, repo string) string {
+	if a.Platform != nil {
+		return a.Platform.SourceRepoURL(owner, repo)
+	}
+	return fmt.Sprintf("https://github.com/%s/%s", owner, repo)
 }

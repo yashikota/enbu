@@ -3,7 +3,7 @@ package app
 import (
 	"fmt"
 
-	"github.com/yashikota/enbu/pkg/config"
+	"github.com/yashikota/enbu/config"
 )
 
 type EnvInfo struct {

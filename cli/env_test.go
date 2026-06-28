@@ -11,9 +11,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yashikota/enbu/age"
 	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/pkg/age"
-	"github.com/yashikota/enbu/pkg/oci"
+	"github.com/yashikota/enbu/oci"
 )
 
 type envRegistry struct {
