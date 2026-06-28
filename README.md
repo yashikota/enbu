@@ -95,13 +95,23 @@ An existing member then runs `enbu sync` locally to re-encrypt secrets for the n
 
 ## Environments
 
-Define environments and their output files in `enbu.toml`:
+Manage environments with `enbu switch`:
+
+```bash
+enbu switch -c dev          # Create and switch to dev
+enbu switch -c prod         # Create and switch to prod
+enbu switch dev             # Switch to dev
+enbu switch -               # Switch back to previous
+enbu switch -l              # List environments
+enbu switch -d staging      # Delete an environment
+enbu switch -m old new      # Rename an environment
+```
+
+Define environments in `enbu.toml`:
 
 ```toml
 version = "0.1"
-
-[env.default]
-output = ".env"
+default = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -110,7 +120,7 @@ output = ".env.dev"
 output = ".env.prod"
 ```
 
-Use `--env` with `init`, `add`, `edit`, `delete`, `pull`, and `sync`. Each environment has its own encrypted secret bundle and recipient list. Without `--env`, enbu uses `default`.
+Use `-e`/`--env` with `add`, `edit`, `delete`, `pull`, and `sync` to override the current environment. Recipients are shared across all environments — access control is handled by OPA/Rego policy at sync time. Without `-e`, enbu uses the environment set by `switch`.
 
 ## Key Storage
 
@@ -132,10 +142,9 @@ export ENBU_BACKEND=text  # Plaintext file (0600 permissions)
 
 ```
 GHCR (ghcr.io/{owner}/{repo}-enbu)
-├── recipient-{user}-{fingerprint}      ← Public keys for default
-├── recipient-dev-{user}-{fingerprint}  ← Public keys for dev
-├── secrets-default                     ← Encrypted default secrets
-└── secrets-dev                         ← Encrypted dev secrets
+├── recipient-{user}-{fingerprint}      ← Public keys (shared across all environments)
+├── secrets-default                     ← Encrypted secrets for default environment
+└── secrets-dev                         ← Encrypted secrets for dev environment
 ```
 
 1. `enbu add` — Creates a new secret, encrypts for all recipients' public keys, and pushes as an OCI image artifact
@@ -166,6 +175,7 @@ sequenceDiagram
     CLI->>CLI: Generate age X25519 key pair
     CLI->>CLI: Store private key in OS keychain
     CLI->>GHCR: Register public key as recipient-{user}-{fingerprint}
+    Note over GHCR: Recipients are environment-independent
     GHCR-->>CLI: Done
     CLI-->>User: ✓ Initialized
 ```
@@ -198,7 +208,7 @@ sequenceDiagram
 
     New->>CLI: enbu init (join mode)
     CLI->>CLI: Generate age key pair
-    CLI->>GHCR: Register public key as recipient-{user}
+    CLI->>GHCR: Register public key as recipient-{user}-{fingerprint}
     CLI-->>New: ✓ Key registered
 
     Member->>CLI: enbu sync

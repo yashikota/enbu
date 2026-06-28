@@ -32,7 +32,7 @@ sequenceDiagram
 
     Note over C: Charlie wants production access
     C->>GHCR: enbu init --env production<br/>(pushes public key)
-    Note over GHCR: recipient-production-charlie-zzz registered
+    Note over GHCR: recipient-charlie-zzz registered
 
     Note over A: Alice runs sync
     A->>GHCR: pull secrets-production
