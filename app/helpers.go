@@ -1,0 +1,158 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	agecrypto "filippo.io/age"
+	"github.com/yashikota/enbu/pkg/age"
+	"github.com/yashikota/enbu/pkg/bundle"
+	"github.com/yashikota/enbu/pkg/config"
+	"github.com/yashikota/enbu/pkg/keystore"
+	"github.com/yashikota/enbu/pkg/oci"
+)
+
+const (
+	KeystoreService    = "enbu"
+	DefaultEnvironment = "default"
+)
+
+func RepoKeystoreKey(owner, repo string) string {
+	return fmt.Sprintf("%s/%s", strings.ToLower(owner), strings.ToLower(repo))
+}
+
+func LoadIdentitiesForRepo(ks KeyStore, owner, repo string) ([]agecrypto.Identity, error) {
+	key := RepoKeystoreKey(owner, repo)
+	privKeyBytes, err := ks.Load(KeystoreService, key)
+	if err != nil {
+		if errors.Is(err, keystore.ErrNotFound) {
+			return nil, fmt.Errorf("no private key found (run 'enbu init' first)")
+		}
+		return nil, fmt.Errorf("loading private key: %w", err)
+	}
+
+	id, err := agecrypto.ParseX25519Identity(string(privKeyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("parsing private key: %w", err)
+	}
+
+	return []agecrypto.Identity{id}, nil
+}
+
+func PullAllRecipients(ctx context.Context, reg Registry, ref string, token string) ([]string, error) {
+	tags, err := reg.ListTags(ctx, ref, token)
+	if err != nil {
+		return nil, err
+	}
+
+	var publicKeys []string
+	for _, tag := range tags {
+		if !IsUserRecipientTag(tag) {
+			continue
+		}
+		tagRef := fmt.Sprintf("%s:%s", ref, tag)
+		data, err := reg.Pull(ctx, tagRef, token)
+		if err != nil {
+			return nil, fmt.Errorf("pulling recipient %s: %w", tag, err)
+		}
+		publicKeys = append(publicKeys, string(data))
+	}
+	return publicKeys, nil
+}
+
+func PullSecretsWithDigest(ctx context.Context, reg Registry, ref, token string, identities ...agecrypto.Identity) (map[string]string, string, error) {
+	digest, err := reg.GetDigest(ctx, ref, token)
+	if err != nil {
+		return nil, "", err
+	}
+
+	ciphertext, err := reg.Pull(ctx, ref, token)
+	if err != nil {
+		return nil, "", err
+	}
+
+	plaintext, err := age.Decrypt(ciphertext, identities...)
+	if err != nil {
+		return nil, "", err
+	}
+
+	secrets, err := bundle.Unmarshal(plaintext)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return secrets, digest, nil
+}
+
+func SecretsExists(ctx context.Context, reg Registry, ref, token string) bool {
+	_, err := reg.GetDigest(ctx, ref, token)
+	return err == nil
+}
+
+func secretsTag(env string) string {
+	if env == "" {
+		env = DefaultEnvironment
+	}
+	return "secrets-" + oci.CleanTag(env)
+}
+
+func RecipientTagPrefix() string {
+	return "recipient-"
+}
+
+func IsUserRecipientTag(tag string) bool {
+	if tag == "recipient-github-actions" {
+		return false
+	}
+	return strings.HasPrefix(tag, "recipient-")
+}
+
+func IsNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "404") ||
+		strings.Contains(errStr, "NAME_UNKNOWN") ||
+		strings.Contains(errStr, "not found")
+}
+
+type ResolvedEnvironment struct {
+	Name   string
+	Output string
+}
+
+func ResolveEnvironment(name string) (*ResolvedEnvironment, error) {
+	cfg, err := config.LoadProject()
+	if err != nil {
+		if strings.Contains(err.Error(), "enbu.toml not found") {
+			if name == "" {
+				name = DefaultEnvironment
+			}
+			return &ResolvedEnvironment{
+				Name:   name,
+				Output: config.DefaultOutput(name),
+			}, nil
+		}
+		return nil, err
+	}
+
+	if name == "" {
+		name = cfg.CurrentEnvironment()
+	}
+
+	if !config.ValidEnvironmentName(name) {
+		return nil, fmt.Errorf("invalid environment %q", name)
+	}
+
+	env, err := cfg.Environment(name)
+	if err != nil {
+		return nil, err
+	}
+	return &ResolvedEnvironment{
+		Name:   name,
+		Output: env.Output,
+	}, nil
+}

@@ -3,13 +3,15 @@ package cli
 import (
 	"strings"
 	"testing"
+
+	"github.com/yashikota/enbu/app"
 )
 
-func TestDefaultServiceWithInvalidBackendReturnsKeystoreError(t *testing.T) {
+func TestDefaultAppWithInvalidBackendReturnsKeystoreError(t *testing.T) {
 	t.Setenv("ENBU_BACKEND", "invalid")
 
-	svc := DefaultService()
-	_, err := loadIdentitiesForRepo(svc.KeyStore, "owner", "repo")
+	a := app.New()
+	_, err := app.LoadIdentitiesForRepo(a.KeyStore, "owner", "repo")
 	if err == nil {
 		t.Fatal("expected keystore initialization error")
 	}

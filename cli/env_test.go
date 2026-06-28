@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yashikota/enbu/app"
 	"github.com/yashikota/enbu/pkg/age"
 	"github.com/yashikota/enbu/pkg/oci"
 )
@@ -92,7 +93,7 @@ output = ".env.prod"
 		t.Fatalf("GenerateKeyPair: %v", err)
 	}
 	reg := newEnvRegistry()
-	svc := &Service{
+	a := &app.App{
 		Registry:      reg,
 		TokenProvider: &deleteTestTokenProvider{},
 		RepoDetector:  &deleteTestRepoDetector{},
@@ -101,26 +102,26 @@ output = ".env.prod"
 		},
 	}
 
-	registryRef := svc.registryRef("owner", "repo")
-	ref := fmt.Sprintf("%s:%salice", registryRef, recipientTagPrefix())
+	registryRef := "ghcr.io/owner/repo-enbu"
+	ref := fmt.Sprintf("%s:%salice", registryRef, app.RecipientTagPrefix())
 	if err := reg.Push(context.Background(), ref, "application/vnd.enbu.recipient.age.v1", []byte(kp.PublicKey), "token", nil); err != nil {
 		t.Fatalf("push recipient: %v", err)
 	}
 
-	devCmd := NewWithService("test", svc)
+	devCmd := NewWithApp("test", a)
 	devCmd.SetArgs([]string{"add", "--env", "dev", "API_KEY", "dev-secret"})
 	if err := devCmd.Execute(); err != nil {
 		t.Fatalf("add dev: %v", err)
 	}
 
-	prodCmd := NewWithService("test", svc)
+	prodCmd := NewWithApp("test", a)
 	prodCmd.SetArgs([]string{"add", "--env", "prod", "API_KEY", "prod-secret"})
 	if err := prodCmd.Execute(); err != nil {
 		t.Fatalf("add prod: %v", err)
 	}
 
 	devOut := captureCommandStdout(t, func() {
-		cmd := NewWithService("test", svc)
+		cmd := NewWithApp("test", a)
 		cmd.SetArgs([]string{"pull", "--env", "dev", "--stdout"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("pull dev: %v", err)
@@ -131,7 +132,7 @@ output = ".env.prod"
 	}
 
 	prodOut := captureCommandStdout(t, func() {
-		cmd := NewWithService("test", svc)
+		cmd := NewWithApp("test", a)
 		cmd.SetArgs([]string{"pull", "--env", "prod", "--stdout"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("pull prod: %v", err)
@@ -141,7 +142,7 @@ output = ".env.prod"
 		t.Fatalf("unexpected prod output: %s", prodOut)
 	}
 
-	fileCmd := NewWithService("test", svc)
+	fileCmd := NewWithApp("test", a)
 	fileCmd.SetArgs([]string{"pull", "--env", "dev"})
 	if err := fileCmd.Execute(); err != nil {
 		t.Fatalf("pull dev file: %v", err)

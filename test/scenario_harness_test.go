@@ -13,15 +13,16 @@ import (
 	"sync"
 	"testing"
 
+	enbuapp "github.com/yashikota/enbu/app"
+	enbucli "github.com/yashikota/enbu/cli"
 	"github.com/yashikota/enbu/pkg/age"
-	enbucli "github.com/yashikota/enbu/pkg/cli"
 	"github.com/yashikota/enbu/pkg/keystore"
 	"github.com/yashikota/enbu/pkg/oci"
 	"github.com/yashikota/enbu/pkg/provider/github"
 )
 
 type testUser struct {
-	svc     *enbucli.Service
+	svc     *enbuapp.App
 	keyPair *age.KeyPair
 	name    string
 }
@@ -237,7 +238,7 @@ func setupTestUser(t *testing.T, owner, repo, username string) *testUser {
 		t.Fatalf("storing key for %s: %v", username, err)
 	}
 
-	svc := &enbucli.Service{
+	svc := &enbuapp.App{
 		RegistryHost:  "localhost:5000",
 		Registry:      &defaultRegistry{},
 		TokenProvider: &mockTokenProvider{accessToken: "", username: username},
@@ -471,8 +472,8 @@ func syncSecretsEnv(t *testing.T, ctx context.Context, user *testUser, env strin
 	}
 }
 
-func executeCommand(ctx context.Context, svc *enbucli.Service, args ...string) error {
-	cmd := enbucli.NewWithService("test", svc)
+func executeCommand(ctx context.Context, svc *enbuapp.App, args ...string) error {
+	cmd := enbucli.NewWithApp("test", svc)
 	cmd.SetArgs(args)
 	cmd.SetContext(ctx)
 	cmd.SilenceErrors = true
