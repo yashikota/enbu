@@ -36,10 +36,11 @@ type model struct {
 	valueInput textinput.Model
 	focusKey   bool
 
-	spinner spinner.Model
-	loading bool
-	err     error
-	status  string
+	spinner   spinner.Model
+	loading   bool
+	notInited bool
+	err       error
+	status    string
 
 	width  int
 	height int
@@ -114,7 +115,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case errMsg:
 		m.loading = false
-		m.err = msg.err
+		if app.IsNotInitializedError(msg.err) {
+			m.notInited = true
+			m.err = nil
+		} else {
+			m.notInited = false
+			m.err = msg.err
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -328,7 +335,10 @@ func (m model) viewSecrets() string {
 		b.WriteString(successStyle.Render("  ✓ "+m.status) + "\n\n")
 	}
 
-	if len(m.secrets) == 0 && m.err == nil {
+	if m.notInited {
+		b.WriteString(dimStyle.Render("  Not initialized. Run 'enbu init' to get started."))
+		b.WriteString("\n")
+	} else if len(m.secrets) == 0 && m.err == nil {
 		b.WriteString(dimStyle.Render("  No secrets yet. Press 'a' to add one."))
 		b.WriteString("\n")
 	} else {

@@ -156,3 +156,12 @@ func ResolveEnvironment(name string) (*ResolvedEnvironment, error) {
 		Output: env.Output,
 	}, nil
 }
+
+func IsNotInitializedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "enbu.toml not found") ||
+		strings.Contains(s, "no private key found")
+}
