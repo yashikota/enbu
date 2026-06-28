@@ -328,7 +328,7 @@ func (m model) viewSecrets() string {
 		b.WriteString(successStyle.Render("  ✓ "+m.status) + "\n\n")
 	}
 
-	if len(m.secrets) == 0 {
+	if len(m.secrets) == 0 && m.err == nil {
 		b.WriteString(dimStyle.Render("  No secrets yet. Press 'a' to add one."))
 		b.WriteString("\n")
 	} else {
