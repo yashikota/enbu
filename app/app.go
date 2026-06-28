@@ -7,8 +7,8 @@ import (
 
 	"github.com/yashikota/enbu/auth"
 	"github.com/yashikota/enbu/config"
-	"github.com/yashikota/enbu/keystore"
-	"github.com/yashikota/enbu/oci"
+	"github.com/yashikota/enbu/utils/keystore"
+	"github.com/yashikota/enbu/utils/oci"
 )
 
 type App struct {

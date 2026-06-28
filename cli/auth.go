@@ -9,8 +9,8 @@ import (
 	"github.com/yashikota/enbu/app"
 	"github.com/yashikota/enbu/auth"
 	"github.com/yashikota/enbu/config"
-	"github.com/yashikota/enbu/keystore"
 	gh "github.com/yashikota/enbu/provider/github"
+	"github.com/yashikota/enbu/utils/keystore"
 )
 
 const defaultClientID = "Ov23li6nFmfdF4FW9ikd"

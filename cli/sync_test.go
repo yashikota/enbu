@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yashikota/enbu/age"
 	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/oci"
+	"github.com/yashikota/enbu/utils/age"
+	"github.com/yashikota/enbu/utils/oci"
 )
 
 type failingDigestRegistry struct {

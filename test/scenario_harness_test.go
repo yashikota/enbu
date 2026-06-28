@@ -13,12 +13,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/yashikota/enbu/age"
 	enbuapp "github.com/yashikota/enbu/app"
 	enbucli "github.com/yashikota/enbu/cli"
-	"github.com/yashikota/enbu/keystore"
-	"github.com/yashikota/enbu/oci"
 	"github.com/yashikota/enbu/provider"
+	"github.com/yashikota/enbu/utils/age"
+	"github.com/yashikota/enbu/utils/keystore"
+	"github.com/yashikota/enbu/utils/oci"
 )
 
 type testUser struct {

@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	agecrypto "filippo.io/age"
-	"github.com/yashikota/enbu/age"
-	"github.com/yashikota/enbu/bundle"
 	"github.com/yashikota/enbu/config"
-	"github.com/yashikota/enbu/keystore"
-	"github.com/yashikota/enbu/oci"
+	"github.com/yashikota/enbu/utils/age"
+	"github.com/yashikota/enbu/utils/bundle"
+	"github.com/yashikota/enbu/utils/keystore"
+	"github.com/yashikota/enbu/utils/oci"
 )
 
 const (
