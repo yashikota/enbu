@@ -17,7 +17,12 @@ type RepoConfig struct {
 }
 
 type ProjectConfig struct {
-	Version string `toml:"version"`
+	Version      string                       `toml:"version"`
+	Environments map[string]EnvironmentConfig `toml:"env,omitempty"`
+}
+
+type EnvironmentConfig struct {
+	Output string `toml:"output"`
 }
 
 func LoadRepo() (*RepoConfig, error) {
@@ -53,6 +58,69 @@ func SaveProject(cfg *ProjectConfig) error {
 		return err
 	}
 	return f.Close()
+}
+
+func NewProjectWithEnvironment(name string) *ProjectConfig {
+	return &ProjectConfig{
+		Version: "0.1",
+		Environments: map[string]EnvironmentConfig{
+			name: {Output: DefaultOutput(name)},
+		},
+	}
+}
+
+func (cfg *ProjectConfig) Environment(name string) (EnvironmentConfig, error) {
+	if name == "" {
+		name = "default"
+	}
+	if !ValidEnvironmentName(name) {
+		return EnvironmentConfig{}, fmt.Errorf("invalid environment %q", name)
+	}
+	if len(cfg.Environments) == 0 {
+		if name != "default" {
+			return EnvironmentConfig{}, fmt.Errorf("environment %q is not defined in enbu.toml", name)
+		}
+		return EnvironmentConfig{Output: DefaultOutput(name)}, nil
+	}
+	env, ok := cfg.Environments[name]
+	if !ok {
+		return EnvironmentConfig{}, fmt.Errorf("environment %q is not defined in enbu.toml", name)
+	}
+	if env.Output == "" {
+		env.Output = DefaultOutput(name)
+	}
+	return env, nil
+}
+
+func (cfg *ProjectConfig) EnvironmentNames() []string {
+	if len(cfg.Environments) == 0 {
+		return []string{"default"}
+	}
+	names := make([]string, 0, len(cfg.Environments))
+	for name := range cfg.Environments {
+		names = append(names, name)
+	}
+	return names
+}
+
+func DefaultOutput(name string) string {
+	if name == "" || name == "default" {
+		return ".env"
+	}
+	return ".env." + name
+}
+
+func ValidEnvironmentName(name string) bool {
+	if name == "" || len(name) > 100 {
+		return false
+	}
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func findProjectConfig() (string, error) {

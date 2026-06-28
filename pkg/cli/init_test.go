@@ -148,6 +148,43 @@ func TestIsUserRecipientTag(t *testing.T) {
 	}
 }
 
+func TestEnvironmentTags(t *testing.T) {
+	if got := secretsTag("default"); got != "secrets-default" {
+		t.Fatalf("default secrets tag = %q, want secrets-default", got)
+	}
+	if got := secretsTag("dev"); got != "secrets-dev" {
+		t.Fatalf("dev secrets tag = %q, want secrets-dev", got)
+	}
+	if got := recipientTagPrefix("default"); got != "recipient-" {
+		t.Fatalf("default recipient prefix = %q, want recipient-", got)
+	}
+	if got := recipientTagPrefix("prod"); got != "recipient-prod-" {
+		t.Fatalf("prod recipient prefix = %q, want recipient-prod-", got)
+	}
+}
+
+func TestIsUserRecipientTagForEnv(t *testing.T) {
+	known := []string{"default", "dev", "prod"}
+	tests := []struct {
+		tag  string
+		env  string
+		want bool
+	}{
+		{"recipient-alice-12345678", "default", true},
+		{"recipient-dev-alice-12345678", "default", false},
+		{"recipient-dev-alice-12345678", "dev", true},
+		{"recipient-prod-alice-12345678", "dev", false},
+		{"recipient-github-actions", "default", false},
+		{"secrets-dev", "dev", false},
+	}
+
+	for _, tt := range tests {
+		if got := isUserRecipientTagForEnv(tt.tag, tt.env, known); got != tt.want {
+			t.Errorf("isUserRecipientTagForEnv(%q, %q) = %v, want %v", tt.tag, tt.env, got, tt.want)
+		}
+	}
+}
+
 func TestGitCommitInitFiles_NoGitRepo(t *testing.T) {
 	dir := t.TempDir()
 	err := gitCommitInitFiles(dir)

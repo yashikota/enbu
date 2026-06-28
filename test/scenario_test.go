@@ -4,6 +4,7 @@ package test
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -256,6 +257,37 @@ func TestScenario_SyncBeforeFirstSecretThenTeamCanPull(t *testing.T) {
 		Sync("alice"),
 		Add("alice", "FIRST_SECRET", "created-after-empty-sync"),
 		PullContains("bob", "created-after-empty-sync"),
+	)
+}
+
+func TestScenario_EnvironmentSecretsAndRecipientsAreIsolated(t *testing.T) {
+	RunScenario(t,
+		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
+			content := `version = "0.1"
+
+[env.dev]
+output = ".env.dev"
+
+[env.prod]
+output = ".env.prod"
+`
+			if err := os.WriteFile("enbu.toml", []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		Users("alice", "bob"),
+		RegisterEnv("alice", "dev"),
+		RegisterEnv("alice", "prod"),
+		AddEnv("alice", "dev", "API_KEY", "dev-secret"),
+		AddEnv("alice", "prod", "API_KEY", "prod-secret"),
+		PullEnvContainsAll("alice", "dev", "API_KEY", "dev-secret"),
+		PullEnvDoesNotContain("alice", "dev", "prod-secret"),
+		PullEnvContainsAll("alice", "prod", "API_KEY", "prod-secret"),
+		PullEnvDoesNotContain("alice", "prod", "dev-secret"),
+		RegisterEnv("bob", "dev"),
+		SyncEnv("alice", "dev"),
+		PullEnvContainsAll("bob", "dev", "dev-secret"),
+		PullFailsEnv("bob", "prod"),
 	)
 }
 

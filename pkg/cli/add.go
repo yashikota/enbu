@@ -14,6 +14,8 @@ import (
 const maxRetries = 3
 
 func newAddCommand(svc *Service) *cobra.Command {
+	var envName string
+
 	cmd := &cobra.Command{
 		Use:   "add KEY VALUE",
 		Short: "Add a secret to the repository",
@@ -22,6 +24,10 @@ func newAddCommand(svc *Service) *cobra.Command {
 			ctx := cmd.Context()
 			key := args[0]
 			value := args[1]
+			env, err := resolveCommandEnvironment(envName)
+			if err != nil {
+				return err
+			}
 
 			accessToken, _, err := svc.TokenProvider.LoadToken()
 			if err != nil {
@@ -38,10 +44,10 @@ func newAddCommand(svc *Service) *cobra.Command {
 				return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 			}
 
-			secretsRef := svc.secretsRef(owner, repo)
+			secretsRef := svc.secretsRef(owner, repo, env.Name)
 			recipientsRef := svc.registryRef(owner, repo)
 
-			publicKeys, err := pullAllRecipients(ctx, svc.Registry, recipientsRef, accessToken)
+			publicKeys, err := pullAllRecipients(ctx, svc.Registry, recipientsRef, accessToken, env.Name, env.KnownEnvs)
 			if err != nil {
 				return fmt.Errorf("pulling recipients: %w", err)
 			}
@@ -94,5 +100,6 @@ func newAddCommand(svc *Service) *cobra.Command {
 		},
 	}
 
+	addEnvironmentFlag(cmd, &envName)
 	return cmd
 }

@@ -20,11 +20,17 @@ import (
 )
 
 func newInitCommand(svc *Service) *cobra.Command {
-	return &cobra.Command{
+	var envName string
+
+	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize enbu for this repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			envName = normalizeEnvironmentName(envName)
+			if !config.ValidEnvironmentName(envName) {
+				return fmt.Errorf("invalid environment %q", envName)
+			}
 
 			accessToken, username, err := svc.TokenProvider.LoadToken()
 			if err != nil {
@@ -37,6 +43,21 @@ func newInitCommand(svc *Service) *cobra.Command {
 			}
 
 			registryRef := svc.registryRef(owner, repo)
+			secretsRef := svc.secretsRef(owner, repo, envName)
+
+			projectCfg, err := config.LoadProject()
+			configMissing := false
+			if err != nil {
+				if strings.Contains(err.Error(), "enbu.toml not found") {
+					configMissing = true
+					projectCfg = config.NewProjectWithEnvironment(envName)
+				} else {
+					return err
+				}
+			} else if _, err := projectCfg.Environment(envName); err != nil {
+				return err
+			}
+			knownEnvs := projectCfg.EnvironmentNames()
 
 			repoRoot, err := config.RepoRoot()
 			if err != nil {
@@ -50,10 +71,10 @@ func newInitCommand(svc *Service) *cobra.Command {
 			hasRecipients := false
 			hasSecrets := false
 			for _, tag := range existingTags {
-				if isUserRecipientTag(tag) {
+				if isUserRecipientTagForEnv(tag, envName, knownEnvs) {
 					hasRecipients = true
 				}
-				if strings.HasPrefix(tag, "secrets-") {
+				if tag == secretsTag(envName) {
 					hasSecrets = true
 				}
 			}
@@ -61,7 +82,7 @@ func newInitCommand(svc *Service) *cobra.Command {
 			joinMode := hasRecipients || hasSecrets
 			if joinMode {
 				fmt.Println("Existing enbu setup detected for this repository.")
-				fmt.Println("Entering join mode — registering your key only.")
+				fmt.Printf("Entering join mode for %s — registering your key only.\n", envName)
 			}
 
 			repoKey := repoKeystoreKey(owner, repo)
@@ -93,7 +114,7 @@ func newInitCommand(svc *Service) *cobra.Command {
 
 			fingerprint := age.Fingerprint(publicKey)
 			tag := oci.CleanTag(fmt.Sprintf("%s-%s", username, fingerprint))
-			ref := fmt.Sprintf("%s:recipient-%s", registryRef, tag)
+			ref := fmt.Sprintf("%s:%s%s", registryRef, recipientTagPrefix(envName), tag)
 			fmt.Println("Pushing public key to registry...")
 			pushOpts := &oci.PushOptions{
 				SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
@@ -105,7 +126,6 @@ func newInitCommand(svc *Service) *cobra.Command {
 
 			if joinMode {
 				fmt.Println("\nYour key has been registered.")
-				secretsRef := svc.secretsRef(owner, repo)
 				if hasSecrets {
 					identities, err := loadIdentitiesForRepo(svc.KeyStore, owner, repo)
 					if err != nil || len(identities) == 0 {
@@ -128,11 +148,17 @@ func newInitCommand(svc *Service) *cobra.Command {
 				return nil
 			}
 
-			projCfg := &config.ProjectConfig{Version: "0.1"}
-			if err := config.SaveProject(projCfg); err != nil {
-				return fmt.Errorf("creating enbu.toml: %w", err)
+			if !configMissing {
+				fmt.Printf("\nInitialized %s environment for this repository.\n", envName)
+				return nil
 			}
-			fmt.Println("✓ Created enbu.toml")
+
+			if configMissing {
+				if err := config.SaveProject(projectCfg); err != nil {
+					return fmt.Errorf("creating enbu.toml: %w", err)
+				}
+				fmt.Println("✓ Created enbu.toml")
+			}
 
 			if err := ensureGitignore(repoRoot); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to update .gitignore: %v\n", err)
@@ -170,6 +196,9 @@ func newInitCommand(svc *Service) *cobra.Command {
 			return nil
 		},
 	}
+
+	addEnvironmentFlag(cmd, &envName)
+	return cmd
 }
 
 var gitignoreEntries = []string{
@@ -237,10 +266,10 @@ func gitCommitInitFiles(repoRoot string) error {
 }
 
 func isUserRecipientTag(tag string) bool {
-	return strings.HasPrefix(tag, "recipient-") && tag != "recipient-github-actions"
+	return isUserRecipientTagForEnv(tag, defaultEnvironment, []string{defaultEnvironment})
 }
 
-func pullAllRecipients(ctx context.Context, reg Registry, ref string, token string) ([]string, error) {
+func pullAllRecipients(ctx context.Context, reg Registry, ref string, token string, env string, knownEnvs []string) ([]string, error) {
 	tags, err := reg.ListTags(ctx, ref, token)
 	if err != nil {
 		return nil, err
@@ -248,7 +277,7 @@ func pullAllRecipients(ctx context.Context, reg Registry, ref string, token stri
 
 	var publicKeys []string
 	for _, tag := range tags {
-		if !isUserRecipientTag(tag) {
+		if !isUserRecipientTagForEnv(tag, env, knownEnvs) {
 			continue
 		}
 		tagRef := fmt.Sprintf("%s:%s", ref, tag)

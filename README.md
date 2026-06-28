@@ -67,6 +67,10 @@ Run once per user per repository. This automatically:
 enbu add DATABASE_URL "postgres://..."
 enbu add API_KEY "sk-..."
 enbu edit API_KEY "sk-new..."
+
+# Environment-specific secrets
+enbu add --env dev DATABASE_URL "postgres://dev/..."
+enbu add --env prod DATABASE_URL "postgres://prod/..."
 ```
 
 `add` creates a new secret and fails if the key already exists. Use `edit` to update an existing secret.
@@ -81,12 +85,32 @@ enbu delete API_KEY
 
 ```bash
 enbu pull  # Writes to .env file
+enbu pull --env dev  # Writes to the configured output for dev
 ```
 
 ### 6. Add a team member
 
 A new member runs `enbu init` inside the repository to enter join mode and register their public key.  
 An existing member then runs `enbu sync` locally to re-encrypt secrets for the new recipient.
+
+## Environments
+
+Define environments and their output files in `enbu.toml`:
+
+```toml
+version = "0.1"
+
+[env.default]
+output = ".env"
+
+[env.dev]
+output = ".env.dev"
+
+[env.prod]
+output = ".env.prod"
+```
+
+Use `--env` with `init`, `add`, `edit`, `delete`, `pull`, and `sync`. Each environment has its own encrypted secret bundle and recipient list. Without `--env`, enbu uses `default`.
 
 ## Key Storage
 
@@ -108,8 +132,10 @@ export ENBU_BACKEND=text  # Plaintext file (0600 permissions)
 
 ```
 GHCR (ghcr.io/{owner}/{repo}-enbu)
-├── recipient-{user}-{fingerprint}  ← Public keys of all members
-└── secrets-default                 ← Encrypted secrets
+├── recipient-{user}-{fingerprint}      ← Public keys for default
+├── recipient-dev-{user}-{fingerprint}  ← Public keys for dev
+├── secrets-default                     ← Encrypted default secrets
+└── secrets-dev                         ← Encrypted dev secrets
 ```
 
 1. `enbu add` — Creates a new secret, encrypts for all recipients' public keys, and pushes as an OCI image artifact

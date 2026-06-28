@@ -69,6 +69,10 @@ enbu init
 enbu add DATABASE_URL "postgres://..."
 enbu add API_KEY "sk-..."
 enbu edit API_KEY "sk-new..."
+
+# 環境別シークレット
+enbu add --env dev DATABASE_URL "postgres://dev/..."
+enbu add --env prod DATABASE_URL "postgres://prod/..."
 ```
 
 `add` は新規シークレット専用で、同じキーが既にある場合は失敗します。既存シークレットの更新には `edit` を使います。
@@ -83,12 +87,32 @@ enbu delete API_KEY
 
 ```bash
 enbu pull # .env ファイルに書き出し
+enbu pull --env dev # dev の設定済み出力先に書き出し
 ```
 
 ### 6. メンバーの追加
 
 新しいメンバーがリポジトリ内で `enbu init` を実行すると、joinモードで公開鍵が登録されます。  
 既存メンバーがローカルで `enbu sync` を実行すると、そのメンバーも復号可能になります。  
+
+## 環境
+
+`enbu.toml` で環境と出力ファイルを定義できます。
+
+```toml
+version = "0.1"
+
+[env.default]
+output = ".env"
+
+[env.dev]
+output = ".env.dev"
+
+[env.prod]
+output = ".env.prod"
+```
+
+`init`、`add`、`edit`、`delete`、`pull`、`sync` で `--env` を指定できます。環境ごとに暗号化されたシークレット bundle と recipient リストが分かれます。`--env` を省略すると `default` を使います。
 
 ## 鍵の保管
 
@@ -110,8 +134,10 @@ export ENBU_BACKEND=text  # 平文ファイル (0600) で保存
 
 ```
 GHCR (ghcr.io/{owner}/{repo}-enbu)
-├── recipient-{user}-{fingerprint}  ← 全メンバーの公開鍵
-└── secrets-default                 ← 暗号化されたシークレット
+├── recipient-{user}-{fingerprint}      ← default の公開鍵
+├── recipient-dev-{user}-{fingerprint}  ← dev の公開鍵
+├── secrets-default                     ← default の暗号化シークレット
+└── secrets-dev                         ← dev の暗号化シークレット
 ```
 
 1. `enbu add`  - 新規シークレットを全受信者の公開鍵で暗号化し、OCI Imageアーティファクトとしてプッシュ  

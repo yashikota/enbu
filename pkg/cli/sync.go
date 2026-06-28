@@ -18,11 +18,17 @@ import (
 var errConflict = errors.New("secrets changed by another user")
 
 func newSyncCommand(svc *Service) *cobra.Command {
+	var envName string
+
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Re-encrypt secrets for all current recipients",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			env, err := resolveCommandEnvironment(envName)
+			if err != nil {
+				return err
+			}
 
 			accessToken, _, err := svc.TokenProvider.LoadToken()
 			if err != nil {
@@ -39,7 +45,7 @@ func newSyncCommand(svc *Service) *cobra.Command {
 				return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 			}
 
-			secretsRef := svc.secretsRef(owner, repo)
+			secretsRef := svc.secretsRef(owner, repo, env.Name)
 			recipientsRef := svc.registryRef(owner, repo)
 			pushOpts := &oci.PushOptions{
 				SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
@@ -49,7 +55,7 @@ func newSyncCommand(svc *Service) *cobra.Command {
 			backoff := 1 * time.Second
 
 			for attempt := range syncMaxRetries {
-				err := doSync(ctx, svc.Registry, secretsRef, recipientsRef, accessToken, identities, pushOpts)
+				err := doSync(ctx, svc.Registry, secretsRef, recipientsRef, accessToken, identities, pushOpts, env.Name, env.KnownEnvs)
 				if err == nil {
 					return nil
 				}
@@ -75,10 +81,11 @@ func newSyncCommand(svc *Service) *cobra.Command {
 		},
 	}
 
+	addEnvironmentFlag(cmd, &envName)
 	return cmd
 }
 
-func doSync(ctx context.Context, reg Registry, secretsRef, recipientsRef, token string, identities []agecrypto.Identity, pushOpts *oci.PushOptions) error {
+func doSync(ctx context.Context, reg Registry, secretsRef, recipientsRef, token string, identities []agecrypto.Identity, pushOpts *oci.PushOptions, env string, knownEnvs []string) error {
 	secrets, baseDigest, err := pullSecretsWithDigest(ctx, reg, secretsRef, token, identities...)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -88,7 +95,7 @@ func doSync(ctx context.Context, reg Registry, secretsRef, recipientsRef, token 
 		return fmt.Errorf("pulling secrets: %w", err)
 	}
 
-	publicKeys, err := pullAllRecipients(ctx, reg, recipientsRef, token)
+	publicKeys, err := pullAllRecipients(ctx, reg, recipientsRef, token, env, knownEnvs)
 	if err != nil {
 		return fmt.Errorf("pulling recipients: %w", err)
 	}

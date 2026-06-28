@@ -12,6 +12,8 @@ import (
 )
 
 func newDeleteCommand(svc *Service) *cobra.Command {
+	var envName string
+
 	cmd := &cobra.Command{
 		Use:   "delete KEY",
 		Short: "Delete a secret from the repository",
@@ -19,6 +21,10 @@ func newDeleteCommand(svc *Service) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			key := args[0]
+			env, err := resolveCommandEnvironment(envName)
+			if err != nil {
+				return err
+			}
 
 			accessToken, _, err := svc.TokenProvider.LoadToken()
 			if err != nil {
@@ -38,7 +44,7 @@ func newDeleteCommand(svc *Service) *cobra.Command {
 				return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 			}
 
-			secretsRef := svc.secretsRef(owner, repo)
+			secretsRef := svc.secretsRef(owner, repo, env.Name)
 			recipientsRef := svc.registryRef(owner, repo)
 			pushOpts := &oci.PushOptions{
 				SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
@@ -60,7 +66,7 @@ func newDeleteCommand(svc *Service) *cobra.Command {
 				}
 				delete(secrets, key)
 
-				publicKeys, err := pullAllRecipients(ctx, svc.Registry, recipientsRef, accessToken)
+				publicKeys, err := pullAllRecipients(ctx, svc.Registry, recipientsRef, accessToken, env.Name, env.KnownEnvs)
 				if err != nil {
 					return fmt.Errorf("pulling recipients: %w", err)
 				}
@@ -94,5 +100,6 @@ func newDeleteCommand(svc *Service) *cobra.Command {
 		},
 	}
 
+	addEnvironmentFlag(cmd, &envName)
 	return cmd
 }
