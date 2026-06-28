@@ -63,12 +63,15 @@ enbu init
 - `enbu.toml` の作成
 - `.gitignore` の更新
 
-### 3. シークレットの追加
+### 3. シークレットの追加・編集
 
 ```bash
 enbu add DATABASE_URL "postgres://..."
 enbu add API_KEY "sk-..."
+enbu edit API_KEY "sk-new..."
 ```
+
+`add` は新規シークレット専用で、同じキーが既にある場合は失敗します。既存シークレットの更新には `edit` を使います。
 
 ### 4. シークレットの削除
 
@@ -111,10 +114,11 @@ GHCR (ghcr.io/{owner}/{repo}-enbu)
 └── secrets-default                 ← 暗号化されたシークレット
 ```
 
-1. `enbu add`  - シークレットを全受信者の公開鍵で暗号化し、OCI Imageアーティファクトとしてプッシュ  
-2. `enbu delete` - 暗号化された bundle からシークレットを削除し、更新したアーティファクトをプッシュ  
-3. `enbu pull` - 暗号文をプルし、自分の秘密鍵で復号して `.env` に書き出し  
-4. `enbu sync` - メンバー追加・削除時に最新の受信者リストで再暗号化  
+1. `enbu add`  - 新規シークレットを全受信者の公開鍵で暗号化し、OCI Imageアーティファクトとしてプッシュ  
+2. `enbu edit` - 暗号化された bundle 内の既存シークレットを更新し、更新したアーティファクトをプッシュ  
+3. `enbu delete` - 暗号化された bundle からシークレットを削除し、更新したアーティファクトをプッシュ  
+4. `enbu pull` - 暗号文をプルし、自分の秘密鍵で復号して `.env` に書き出し  
+5. `enbu sync` - メンバー追加・削除時に最新の受信者リストで再暗号化  
 
 ### 認証・初期化フロー
 

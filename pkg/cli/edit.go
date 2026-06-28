@@ -11,12 +11,10 @@ import (
 	"github.com/yashikota/enbu/pkg/oci"
 )
 
-const maxRetries = 3
-
-func newAddCommand(svc *Service) *cobra.Command {
+func newEditCommand(svc *Service) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "add KEY VALUE",
-		Short: "Add a secret to the repository",
+		Use:   "edit KEY VALUE",
+		Short: "Edit an existing secret in the repository",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -56,15 +54,14 @@ func newAddCommand(svc *Service) *cobra.Command {
 			for attempt := range maxRetries {
 				secrets, baseDigest, err := pullSecretsWithDigest(ctx, svc.Registry, secretsRef, accessToken, identities...)
 				if err != nil {
-					if secretsExists(ctx, svc.Registry, secretsRef, accessToken) {
-						return fmt.Errorf("cannot decrypt existing secrets: %w", err)
+					if isNotFoundError(err) {
+						return fmt.Errorf("secret %s does not exist (use 'enbu add %s VALUE' to create it)", key, key)
 					}
-					secrets = make(map[string]string)
-					baseDigest = ""
+					return fmt.Errorf("pulling secrets: %w", err)
 				}
 
-				if _, ok := secrets[key]; ok {
-					return fmt.Errorf("secret %s already exists (use 'enbu edit %s VALUE' to update it)", key, key)
+				if _, ok := secrets[key]; !ok {
+					return fmt.Errorf("secret %s does not exist (use 'enbu add %s VALUE' to create it)", key, key)
 				}
 				secrets[key] = value
 
@@ -87,7 +84,7 @@ func newAddCommand(svc *Service) *cobra.Command {
 					return fmt.Errorf("pushing encrypted secrets: %w", err)
 				}
 
-				fmt.Printf("✓ Added %s (%d secrets total)\n", key, len(secrets))
+				fmt.Printf("✓ Edited %s (%d secrets total)\n", key, len(secrets))
 				return nil
 			}
 			return nil
