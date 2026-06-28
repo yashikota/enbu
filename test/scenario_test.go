@@ -335,3 +335,383 @@ func TestScenario_FullLifecycleMultiStage(t *testing.T) {
 		PullContainsAll("contractor", "DB_URL", "STRIPE_KEY", "REDIS_URL", "SENTRY_DSN", "INTERN_TEST"),
 	)
 }
+
+func TestScenario_MultiEnvironmentSameRecipient(t *testing.T) {
+	RunScenario(t,
+		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
+			content := `version = "0.1"
+default = "dev"
+
+[env.dev]
+output = ".env.dev"
+
+[env.staging]
+output = ".env.staging"
+
+[env.prod]
+output = ".env.prod"
+`
+			if err := os.WriteFile("enbu.toml", []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		Users("alice", "bob"),
+		Register("alice"),
+		Register("bob"),
+		AddEnv("alice", "dev", "DB_URL", "postgres://dev/app"),
+		AddEnv("alice", "staging", "DB_URL", "postgres://staging/app"),
+		AddEnv("alice", "prod", "DB_URL", "postgres://prod/app"),
+		PullEnvContainsAll("bob", "dev", "postgres://dev/app"),
+		PullEnvContainsAll("bob", "staging", "postgres://staging/app"),
+		PullEnvContainsAll("bob", "prod", "postgres://prod/app"),
+		PullEnvDoesNotContain("bob", "dev", "postgres://prod/app"),
+		PullEnvDoesNotContain("bob", "prod", "postgres://dev/app"),
+	)
+}
+
+func TestScenario_EnvironmentIndependentEditsAndDeletes(t *testing.T) {
+	RunScenario(t,
+		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
+			content := `version = "0.1"
+default = "dev"
+
+[env.dev]
+output = ".env.dev"
+
+[env.prod]
+output = ".env.prod"
+`
+			if err := os.WriteFile("enbu.toml", []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		Users("alice"),
+		Register("alice"),
+		AddEnv("alice", "dev", "API_KEY", "dev-key"),
+		AddEnv("alice", "prod", "API_KEY", "prod-key"),
+		AddEnv("alice", "dev", "EXTRA", "dev-extra"),
+		StepFunc("edit dev does not affect prod", func(t *testing.T, s *ScenarioState) {
+			if err := executeCommand(s.ctx, s.user(t, "alice").svc, "edit", "--env", "dev", "API_KEY", "dev-key-v2"); err != nil {
+				t.Fatalf("edit dev: %v", err)
+			}
+			devOut := pullStdoutEnv(t, s.ctx, s.user(t, "alice"), "dev")
+			if !strings.Contains(devOut, "dev-key-v2") {
+				t.Fatalf("dev should have updated key: %s", devOut)
+			}
+			prodOut := pullStdoutEnv(t, s.ctx, s.user(t, "alice"), "prod")
+			if !strings.Contains(prodOut, "prod-key") {
+				t.Fatalf("prod should still have original key: %s", prodOut)
+			}
+			if strings.Contains(prodOut, "dev-key-v2") {
+				t.Fatal("prod should not contain dev value")
+			}
+		}),
+		StepFunc("delete from dev does not affect prod", func(t *testing.T, s *ScenarioState) {
+			if err := executeCommand(s.ctx, s.user(t, "alice").svc, "delete", "--env", "dev", "EXTRA"); err != nil {
+				t.Fatalf("delete dev EXTRA: %v", err)
+			}
+			devOut := pullStdoutEnv(t, s.ctx, s.user(t, "alice"), "dev")
+			if strings.Contains(devOut, "EXTRA") {
+				t.Fatal("dev should not have EXTRA after delete")
+			}
+			prodOut := pullStdoutEnv(t, s.ctx, s.user(t, "alice"), "prod")
+			if !strings.Contains(prodOut, "prod-key") {
+				t.Fatal("prod should be unaffected")
+			}
+		}),
+	)
+}
+
+func TestScenario_SyncReEncryptsForAllRecipients(t *testing.T) {
+	RunScenario(t,
+		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
+			content := `version = "0.1"
+default = "dev"
+
+[env.dev]
+output = ".env.dev"
+
+[env.prod]
+output = ".env.prod"
+`
+			if err := os.WriteFile("enbu.toml", []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		Users("alice", "bob", "charlie"),
+		Register("alice"),
+		AddEnv("alice", "dev", "SECRET", "dev-value"),
+		AddEnv("alice", "prod", "SECRET", "prod-value"),
+		Register("bob"),
+		Register("charlie"),
+		PullFailsEnv("bob", "dev"),
+		PullFailsEnv("charlie", "prod"),
+		SyncEnv("alice", "dev"),
+		SyncEnv("alice", "prod"),
+		PullEnvContainsAll("bob", "dev", "dev-value"),
+		PullEnvContainsAll("bob", "prod", "prod-value"),
+		PullEnvContainsAll("charlie", "dev", "dev-value"),
+		PullEnvContainsAll("charlie", "prod", "prod-value"),
+	)
+}
+
+func TestScenario_LateJoinerGetsAllEnvironments(t *testing.T) {
+	RunScenario(t,
+		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
+			content := `version = "0.1"
+default = "dev"
+
+[env.dev]
+output = ".env.dev"
+
+[env.staging]
+output = ".env.staging"
+`
+			if err := os.WriteFile("enbu.toml", []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		Users("alice", "bob", "charlie"),
+		Register("alice"),
+		Register("bob"),
+		AddEnv("alice", "dev", "KEY", "dev-val"),
+		AddEnv("alice", "staging", "KEY", "staging-val"),
+		Sync("alice"),
+		PullEnvContainsAll("bob", "dev", "dev-val"),
+		PullEnvContainsAll("bob", "staging", "staging-val"),
+		Register("charlie"),
+		PullFailsEnv("charlie", "dev"),
+		SyncEnv("bob", "dev"),
+		SyncEnv("bob", "staging"),
+		PullEnvContainsAll("charlie", "dev", "dev-val"),
+		PullEnvContainsAll("charlie", "staging", "staging-val"),
+	)
+}
+
+func TestScenario_ConcurrentSyncsOnDifferentEnvironments(t *testing.T) {
+	RunScenario(t,
+		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
+			content := `version = "0.1"
+default = "dev"
+
+[env.dev]
+output = ".env.dev"
+
+[env.prod]
+output = ".env.prod"
+`
+			if err := os.WriteFile("enbu.toml", []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		Users("alice", "bob", "charlie"),
+		Register("alice"),
+		Register("bob"),
+		AddEnv("alice", "dev", "DEV_KEY", "dev-123"),
+		AddEnv("alice", "prod", "PROD_KEY", "prod-456"),
+		Register("charlie"),
+		StepFunc("alice syncs dev and prod concurrently", func(t *testing.T, s *ScenarioState) {
+			alice := s.user(t, "alice")
+			var wg sync.WaitGroup
+			var err1, err2 error
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				err1 = executeCommand(s.ctx, alice.svc, "sync", "--env", "dev")
+			}()
+			go func() {
+				defer wg.Done()
+				err2 = executeCommand(s.ctx, alice.svc, "sync", "--env", "prod")
+			}()
+			wg.Wait()
+			if err1 != nil {
+				t.Fatalf("sync dev failed: %v", err1)
+			}
+			if err2 != nil {
+				t.Fatalf("sync prod failed: %v", err2)
+			}
+		}),
+		PullEnvContainsAll("charlie", "dev", "DEV_KEY", "dev-123"),
+		PullEnvContainsAll("charlie", "prod", "PROD_KEY", "prod-456"),
+	)
+}
+
+func TestScenario_DefaultEnvironmentUsedWhenNoEnvFlag(t *testing.T) {
+	RunScenario(t,
+		StepFunc("environment config with dev as default", func(t *testing.T, s *ScenarioState) {
+			content := `version = "0.1"
+default = "dev"
+
+[env.dev]
+output = ".env.dev"
+
+[env.prod]
+output = ".env.prod"
+`
+			if err := os.WriteFile("enbu.toml", []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		Users("alice"),
+		Register("alice"),
+		Add("alice", "DEFAULT_KEY", "goes-to-dev"),
+		PullEnvContainsAll("alice", "dev", "DEFAULT_KEY", "goes-to-dev"),
+		PullFailsEnv("alice", "prod"),
+	)
+}
+
+func TestScenario_EnvFlagOverridesDefault(t *testing.T) {
+	RunScenario(t,
+		StepFunc("environment config with dev as default", func(t *testing.T, s *ScenarioState) {
+			content := `version = "0.1"
+default = "dev"
+
+[env.dev]
+output = ".env.dev"
+
+[env.prod]
+output = ".env.prod"
+`
+			if err := os.WriteFile("enbu.toml", []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		Users("alice"),
+		Register("alice"),
+		Add("alice", "DEV_ONLY", "dev-val"),
+		AddEnv("alice", "prod", "PROD_ONLY", "prod-val"),
+		PullEnvContainsAll("alice", "dev", "DEV_ONLY"),
+		PullEnvDoesNotContain("alice", "dev", "PROD_ONLY"),
+		PullEnvContainsAll("alice", "prod", "PROD_ONLY"),
+		PullEnvDoesNotContain("alice", "prod", "DEV_ONLY"),
+	)
+}
+
+func TestScenario_EditInOneEnvDoesNotAffectOther(t *testing.T) {
+	RunScenario(t,
+		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
+			content := `version = "0.1"
+default = "dev"
+
+[env.dev]
+output = ".env.dev"
+
+[env.prod]
+output = ".env.prod"
+`
+			if err := os.WriteFile("enbu.toml", []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		Users("alice", "bob"),
+		Register("alice"),
+		Register("bob"),
+		AddEnv("alice", "dev", "SHARED_KEY", "original"),
+		AddEnv("alice", "prod", "SHARED_KEY", "original"),
+		StepFunc("bob edits dev only", func(t *testing.T, s *ScenarioState) {
+			if err := executeCommand(s.ctx, s.user(t, "bob").svc, "edit", "--env", "dev", "SHARED_KEY", "updated-by-bob"); err != nil {
+				t.Fatalf("bob edit dev: %v", err)
+			}
+		}),
+		PullEnvContainsAll("alice", "dev", "updated-by-bob"),
+		PullEnvDoesNotContain("alice", "prod", "updated-by-bob"),
+		PullEnvContainsAll("alice", "prod", "original"),
+	)
+}
+
+func TestScenario_SyncOnEmptyEnvironmentIsNoop(t *testing.T) {
+	RunScenario(t,
+		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
+			content := `version = "0.1"
+default = "dev"
+
+[env.dev]
+output = ".env.dev"
+
+[env.empty]
+output = ".env.empty"
+`
+			if err := os.WriteFile("enbu.toml", []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		Users("alice", "bob"),
+		Register("alice"),
+		Register("bob"),
+		AddEnv("alice", "dev", "KEY", "value"),
+		SyncEnv("alice", "empty"),
+		PullEnvContainsAll("alice", "dev", "KEY", "value"),
+		PullFailsEnv("alice", "empty"),
+	)
+}
+
+func TestScenario_ManyUsersAllEnvironments(t *testing.T) {
+	RunScenario(t,
+		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
+			content := `version = "0.1"
+default = "dev"
+
+[env.dev]
+output = ".env.dev"
+
+[env.staging]
+output = ".env.staging"
+
+[env.prod]
+output = ".env.prod"
+`
+			if err := os.WriteFile("enbu.toml", []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		Users("alice", "bob", "charlie", "dave", "eve"),
+		Register("alice"),
+		Register("bob"),
+		Register("charlie"),
+		Register("dave"),
+		Register("eve"),
+		AddEnv("alice", "dev", "TOKEN", "dev-token"),
+		AddEnv("alice", "staging", "TOKEN", "staging-token"),
+		AddEnv("alice", "prod", "TOKEN", "prod-token"),
+		PullEnvContainsAll("bob", "dev", "dev-token"),
+		PullEnvContainsAll("charlie", "staging", "staging-token"),
+		PullEnvContainsAll("dave", "prod", "prod-token"),
+		PullEnvContainsAll("eve", "dev", "dev-token"),
+		PullEnvContainsAll("eve", "staging", "staging-token"),
+		PullEnvContainsAll("eve", "prod", "prod-token"),
+	)
+}
+
+func TestScenario_DeleteAllSecretsInEnvironment(t *testing.T) {
+	RunScenario(t,
+		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
+			content := `version = "0.1"
+default = "dev"
+
+[env.dev]
+output = ".env.dev"
+
+[env.prod]
+output = ".env.prod"
+`
+			if err := os.WriteFile("enbu.toml", []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		Users("alice"),
+		Register("alice"),
+		AddEnv("alice", "dev", "KEY1", "val1"),
+		AddEnv("alice", "dev", "KEY2", "val2"),
+		AddEnv("alice", "prod", "PROD_KEY", "prod-val"),
+		StepFunc("delete all dev secrets", func(t *testing.T, s *ScenarioState) {
+			alice := s.user(t, "alice")
+			if err := executeCommand(s.ctx, alice.svc, "delete", "--env", "dev", "KEY1"); err != nil {
+				t.Fatal(err)
+			}
+			if err := executeCommand(s.ctx, alice.svc, "delete", "--env", "dev", "KEY2"); err != nil {
+				t.Fatal(err)
+			}
+		}),
+		PullEnvContainsAll("alice", "prod", "PROD_KEY", "prod-val"),
+	)
+}

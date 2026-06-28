@@ -52,7 +52,12 @@ func LoadProject() (*ProjectConfig, error) {
 }
 
 func SaveProject(cfg *ProjectConfig) error {
-	f, err := os.Create("enbu.toml")
+	path, err := findProjectConfig()
+	if err != nil {
+		path = "enbu.toml"
+	}
+
+	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("creating enbu.toml: %w", err)
 	}
@@ -79,7 +84,12 @@ func LoadLocal() (*LocalConfig, error) {
 }
 
 func SaveLocal(cfg *LocalConfig) error {
-	f, err := os.Create(".enbu.local")
+	path, err := findLocalConfig()
+	if err != nil {
+		path = ".enbu.local"
+	}
+
+	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("creating .enbu.local: %w", err)
 	}
@@ -146,6 +156,10 @@ func (cfg *ProjectConfig) AddEnvironment(name string) error {
 	}
 	if cfg.Environments == nil {
 		cfg.Environments = make(map[string]EnvironmentConfig)
+	}
+	if len(cfg.Environments) == 0 && cfg.Default == "" {
+		cfg.Environments["default"] = EnvironmentConfig{Output: DefaultOutput("default")}
+		cfg.Default = "default"
 	}
 	if _, exists := cfg.Environments[name]; exists {
 		return fmt.Errorf("environment %q already exists", name)
