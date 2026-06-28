@@ -3,7 +3,6 @@ package policy
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -28,18 +27,28 @@ allow_recipient if {
 }
 `
 
-func writePolicy(t *testing.T, content string) string {
+// inDir changes cwd to a temp dir, writes enbu.rego, and returns cleanup func.
+func inDir(t *testing.T, content string) {
 	t.Helper()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "enbu.rego")
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	origDir, err := os.Getwd()
+	if err != nil {
 		t.Fatal(err)
 	}
-	return path
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if content != "" {
+		if err := os.WriteFile("enbu.rego", []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestLoad_FileNotExist(t *testing.T) {
-	eval, err := Load("/nonexistent/enbu.rego")
+	inDir(t, "")
+	eval, err := Load(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -49,16 +58,45 @@ func TestLoad_FileNotExist(t *testing.T) {
 }
 
 func TestLoad_InvalidRego(t *testing.T) {
-	path := writePolicy(t, "this is not valid rego {{{")
-	_, err := Load(path)
+	inDir(t, "this is not valid rego {{{")
+	_, err := Load(context.Background())
 	if err == nil {
 		t.Fatal("expected error for invalid rego")
 	}
 }
 
+func TestLoad_FindsFileInParentDir(t *testing.T) {
+	dir := t.TempDir()
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	// write policy in parent, cd into subdir
+	if err := os.WriteFile(dir+"/enbu.rego", []byte(testPolicy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sub := dir + "/sub"
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(sub); err != nil {
+		t.Fatal(err)
+	}
+
+	eval, err := Load(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if eval == nil {
+		t.Fatal("expected evaluator to be found in parent dir")
+	}
+}
+
 func TestEvaluate_DevAllowsAll(t *testing.T) {
-	path := writePolicy(t, testPolicy)
-	eval, err := Load(path)
+	inDir(t, testPolicy)
+	eval, err := Load(context.Background())
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -78,8 +116,8 @@ func TestEvaluate_DevAllowsAll(t *testing.T) {
 }
 
 func TestEvaluate_StagingAllowsBackendTeam(t *testing.T) {
-	path := writePolicy(t, testPolicy)
-	eval, err := Load(path)
+	inDir(t, testPolicy)
+	eval, err := Load(context.Background())
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -99,8 +137,8 @@ func TestEvaluate_StagingAllowsBackendTeam(t *testing.T) {
 }
 
 func TestEvaluate_StagingDeniesNonBackend(t *testing.T) {
-	path := writePolicy(t, testPolicy)
-	eval, err := Load(path)
+	inDir(t, testPolicy)
+	eval, err := Load(context.Background())
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -120,8 +158,8 @@ func TestEvaluate_StagingDeniesNonBackend(t *testing.T) {
 }
 
 func TestEvaluate_ProductionAllowsInfra(t *testing.T) {
-	path := writePolicy(t, testPolicy)
-	eval, err := Load(path)
+	inDir(t, testPolicy)
+	eval, err := Load(context.Background())
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -141,8 +179,8 @@ func TestEvaluate_ProductionAllowsInfra(t *testing.T) {
 }
 
 func TestEvaluate_ProductionDeniesBackendOnly(t *testing.T) {
-	path := writePolicy(t, testPolicy)
-	eval, err := Load(path)
+	inDir(t, testPolicy)
+	eval, err := Load(context.Background())
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -173,8 +211,8 @@ allow_recipient if {
 	input.recipient.permission == "admin"
 }
 `
-	path := writePolicy(t, policyContent)
-	eval, err := Load(path)
+	inDir(t, policyContent)
+	eval, err := Load(context.Background())
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}

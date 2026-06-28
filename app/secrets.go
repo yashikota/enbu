@@ -457,7 +457,7 @@ func (a *App) doSync(ctx context.Context, secretsRef, recipientsRef, token strin
 }
 
 func (a *App) filterRecipientsByPolicy(ctx context.Context, recipients []Recipient, owner, repo, env string) ([]string, error) {
-	evaluator, err := policy.Load("enbu.rego")
+	evaluator, err := policy.Load(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("loading policy: %w", err)
 	}
@@ -475,29 +475,22 @@ func (a *App) filterRecipientsByPolicy(ctx context.Context, recipients []Recipie
 		isOrg = a.Platform.IsOrganization(ctx, owner)
 	}
 
+	recipientData, err := a.fetchRecipientData(ctx, recipients, owner, repo, isOrg)
+	if err != nil {
+		return nil, err
+	}
+
 	var allowedKeys []string
 	for _, r := range recipients {
+		rd := recipientData[r.Username]
 		input := &policy.Input{
 			TargetEnv: env,
-			Recipient: policy.RecipientInput{Username: r.Username},
-			Repo:      policy.RepoInput{Owner: owner, Name: repo, IsOrg: isOrg},
-		}
-
-		if a.Platform != nil {
-			if isOrg {
-				teams, err := a.Platform.GetUserTeams(ctx, owner, r.Username)
-				if err != nil {
-					a.emit(fmt.Sprintf("Warning: failed to get teams for %s: %v (denying)", r.Username, err))
-					continue
-				}
-				input.Recipient.Teams = teams
-			}
-			perm, err := a.Platform.GetCollaboratorPermission(ctx, owner, repo, r.Username)
-			if err != nil {
-				a.emit(fmt.Sprintf("Warning: failed to get permission for %s: %v (denying)", r.Username, err))
-				continue
-			}
-			input.Recipient.Permission = perm
+			Recipient: policy.RecipientInput{
+				Username:   r.Username,
+				Teams:      rd.teams,
+				Permission: rd.permission,
+			},
+			Repo: policy.RepoInput{Owner: owner, Name: repo, IsOrg: isOrg},
 		}
 
 		allowed, err := evaluator.Evaluate(ctx, input)
@@ -511,4 +504,61 @@ func (a *App) filterRecipientsByPolicy(ctx context.Context, recipients []Recipie
 		}
 	}
 	return allowedKeys, nil
+}
+
+type recipientGitHubData struct {
+	teams      []string
+	permission string
+}
+
+func (a *App) fetchRecipientData(ctx context.Context, recipients []Recipient, owner, repo string, isOrg bool) (map[string]recipientGitHubData, error) {
+	if a.Platform == nil {
+		result := make(map[string]recipientGitHubData, len(recipients))
+		for _, r := range recipients {
+			result[r.Username] = recipientGitHubData{}
+		}
+		return result, nil
+	}
+
+	type fetchResult struct {
+		username string
+		data     recipientGitHubData
+		err      error
+	}
+
+	ch := make(chan fetchResult, len(recipients))
+	for _, r := range recipients {
+		r := r
+		go func() {
+			var rd recipientGitHubData
+			if isOrg {
+				teams, err := a.Platform.GetUserTeams(ctx, owner, r.Username)
+				if err != nil {
+					ch <- fetchResult{username: r.Username, err: fmt.Errorf("getting teams for %s: %w", r.Username, err)}
+					return
+				}
+				rd.teams = teams
+			}
+
+			perm, err := a.Platform.GetCollaboratorPermission(ctx, owner, repo, r.Username)
+			if err != nil {
+				ch <- fetchResult{username: r.Username, err: fmt.Errorf("getting permission for %s: %w", r.Username, err)}
+				return
+			}
+			rd.permission = perm
+			ch <- fetchResult{username: r.Username, data: rd}
+		}()
+	}
+
+	out := make(map[string]recipientGitHubData, len(recipients))
+	for range recipients {
+		r := <-ch
+		if r.err != nil {
+			a.emit(fmt.Sprintf("Warning: %v (denying)", r.err))
+			out[r.username] = recipientGitHubData{}
+			continue
+		}
+		out[r.username] = r.data
+	}
+	return out, nil
 }
