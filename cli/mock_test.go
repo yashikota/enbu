@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/yashikota/enbu/keystore"
-	"github.com/yashikota/enbu/oci"
 	"github.com/yashikota/enbu/provider"
+	"github.com/yashikota/enbu/utils/keystore"
+	"github.com/yashikota/enbu/utils/oci"
 )
 
 type mockRegistry struct {

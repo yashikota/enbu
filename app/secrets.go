@@ -9,9 +9,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/yashikota/enbu/age"
-	"github.com/yashikota/enbu/bundle"
-	"github.com/yashikota/enbu/oci"
+	"github.com/yashikota/enbu/utils/age"
+	"github.com/yashikota/enbu/utils/bundle"
+	"github.com/yashikota/enbu/utils/oci"
 )
 
 const maxRetries = 3

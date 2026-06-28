@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 
-	"github.com/yashikota/enbu/oci"
 	"github.com/yashikota/enbu/provider"
+	"github.com/yashikota/enbu/utils/oci"
 )
 
 type Registry interface {
