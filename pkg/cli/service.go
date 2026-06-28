@@ -57,8 +57,8 @@ func (s *Service) registryRef(owner, repo string) string {
 	return fmt.Sprintf("%s/%s/%s-enbu", s.registryHost(), strings.ToLower(owner), strings.ToLower(repo))
 }
 
-func (s *Service) secretsRef(owner, repo string) string {
-	return s.registryRef(owner, repo) + ":secrets-default"
+func (s *Service) secretsRef(owner, repo, env string) string {
+	return s.registryRef(owner, repo) + ":" + secretsTag(env)
 }
 
 type defaultRegistry struct{}

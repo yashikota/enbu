@@ -46,6 +46,16 @@ func StepFunc(name string, fn func(t *testing.T, s *ScenarioState)) Step {
 func RunScenario(t *testing.T, steps ...Step) {
 	t.Helper()
 
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	workDir := t.TempDir()
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatal(err)
+	}
+
 	owner, repo := uniqueRepo(t)
 	state := &ScenarioState{
 		ctx:         context.Background(),
@@ -77,13 +87,25 @@ func Users(names ...string) Step {
 
 func Register(user string) Step {
 	return StepFunc(fmt.Sprintf("%s registers recipient", user), func(t *testing.T, s *ScenarioState) {
-		registerRecipient(t, s.ctx, s.registryRef, s.user(t, user))
+		registerRecipient(t, s.ctx, s.registryRef, s.user(t, user), "default")
+	})
+}
+
+func RegisterEnv(user, env string) Step {
+	return StepFunc(fmt.Sprintf("%s registers recipient for %s", user, env), func(t *testing.T, s *ScenarioState) {
+		registerRecipient(t, s.ctx, s.registryRef, s.user(t, user), env)
 	})
 }
 
 func Add(user, key, value string) Step {
 	return StepFunc(fmt.Sprintf("%s adds %s", user, key), func(t *testing.T, s *ScenarioState) {
 		addSecret(t, s.ctx, s.user(t, user), key, value)
+	})
+}
+
+func AddEnv(user, env, key, value string) Step {
+	return StepFunc(fmt.Sprintf("%s adds %s to %s", user, key, env), func(t *testing.T, s *ScenarioState) {
+		addSecretEnv(t, s.ctx, s.user(t, user), env, key, value)
 	})
 }
 
@@ -113,10 +135,24 @@ func Sync(user string) Step {
 	})
 }
 
+func SyncEnv(user, env string) Step {
+	return StepFunc(fmt.Sprintf("%s syncs %s", user, env), func(t *testing.T, s *ScenarioState) {
+		syncSecretsEnv(t, s.ctx, s.user(t, user), env)
+	})
+}
+
 func PullFails(user string) Step {
 	return StepFunc(fmt.Sprintf("%s pull fails", user), func(t *testing.T, s *ScenarioState) {
 		if err := pullExpectFail(t, s.ctx, s.user(t, user)); err == nil {
 			t.Fatalf("expected %s pull to fail", user)
+		}
+	})
+}
+
+func PullFailsEnv(user, env string) Step {
+	return StepFunc(fmt.Sprintf("%s pull %s fails", user, env), func(t *testing.T, s *ScenarioState) {
+		if err := pullExpectFailEnv(t, s.ctx, s.user(t, user), env); err == nil {
+			t.Fatalf("expected %s pull %s to fail", user, env)
 		}
 	})
 }
@@ -136,12 +172,34 @@ func PullContainsAll(user string, expected ...string) Step {
 	})
 }
 
+func PullEnvContainsAll(user, env string, expected ...string) Step {
+	return StepFunc(fmt.Sprintf("%s pull %s contains %s", user, env, strings.Join(expected, ", ")), func(t *testing.T, s *ScenarioState) {
+		output := pullStdoutEnv(t, s.ctx, s.user(t, user), env)
+		for _, want := range expected {
+			if !strings.Contains(output, want) {
+				t.Fatalf("%s pull %s missing %q: %s", user, env, want, output)
+			}
+		}
+	})
+}
+
 func PullDoesNotContain(user string, unexpected ...string) Step {
 	return StepFunc(fmt.Sprintf("%s pull excludes %s", user, strings.Join(unexpected, ", ")), func(t *testing.T, s *ScenarioState) {
 		output := pullStdout(t, s.ctx, s.user(t, user))
 		for _, notWant := range unexpected {
 			if strings.Contains(output, notWant) {
 				t.Fatalf("%s pull unexpectedly contained %q: %s", user, notWant, output)
+			}
+		}
+	})
+}
+
+func PullEnvDoesNotContain(user, env string, unexpected ...string) Step {
+	return StepFunc(fmt.Sprintf("%s pull %s excludes %s", user, env, strings.Join(unexpected, ", ")), func(t *testing.T, s *ScenarioState) {
+		output := pullStdoutEnv(t, s.ctx, s.user(t, user), env)
+		for _, notWant := range unexpected {
+			if strings.Contains(output, notWant) {
+				t.Fatalf("%s pull %s unexpectedly contained %q: %s", user, env, notWant, output)
 			}
 		}
 	})
@@ -270,11 +328,12 @@ func repoKeystoreKey(owner, repo string) string {
 	return fmt.Sprintf("%s/%s", strings.ToLower(owner), strings.ToLower(repo))
 }
 
-func registerRecipient(t *testing.T, ctx context.Context, registryRef string, user *testUser) {
+func registerRecipient(t *testing.T, ctx context.Context, registryRef string, user *testUser, _ string) {
 	t.Helper()
 	fingerprint := age.Fingerprint(user.keyPair.PublicKey)
 	tag := oci.CleanTag(fmt.Sprintf("%s-%s", user.name, fingerprint))
-	ref := fmt.Sprintf("%s:recipient-%s", registryRef, tag)
+	prefix := "recipient-"
+	ref := fmt.Sprintf("%s:%s%s", registryRef, prefix, tag)
 	if err := oci.Push(ctx, ref, "application/vnd.enbu.recipient.age.v1", []byte(user.keyPair.PublicKey), "", nil); err != nil {
 		t.Fatalf("registering recipient %s: %v", user.name, err)
 	}
@@ -322,6 +381,15 @@ func pullStdout(t *testing.T, ctx context.Context, user *testUser) string {
 	})
 }
 
+func pullStdoutEnv(t *testing.T, ctx context.Context, user *testUser, env string) string {
+	t.Helper()
+	return captureStdout(t, func() {
+		if err := executeCommand(ctx, user.svc, "pull", "--env", env, "--stdout"); err != nil {
+			t.Fatalf("%s pull %s: %v", user.name, env, err)
+		}
+	})
+}
+
 func pullExpectFail(t *testing.T, ctx context.Context, user *testUser) error {
 	t.Helper()
 	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
@@ -339,10 +407,34 @@ func pullExpectFail(t *testing.T, ctx context.Context, user *testUser) error {
 	return executeCommand(ctx, user.svc, "pull", "--stdout")
 }
 
+func pullExpectFailEnv(t *testing.T, ctx context.Context, user *testUser, env string) error {
+	t.Helper()
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devNull.Close()
+
+	origStdout := os.Stdout
+	os.Stdout = devNull
+	defer func() {
+		os.Stdout = origStdout
+	}()
+
+	return executeCommand(ctx, user.svc, "pull", "--env", env, "--stdout")
+}
+
 func addSecret(t *testing.T, ctx context.Context, user *testUser, key, value string) {
 	t.Helper()
 	if err := executeCommand(ctx, user.svc, "add", key, value); err != nil {
 		t.Fatalf("%s add %s: %v", user.name, key, err)
+	}
+}
+
+func addSecretEnv(t *testing.T, ctx context.Context, user *testUser, env, key, value string) {
+	t.Helper()
+	if err := executeCommand(ctx, user.svc, "add", "--env", env, key, value); err != nil {
+		t.Fatalf("%s add %s %s: %v", user.name, env, key, err)
 	}
 }
 
@@ -369,6 +461,13 @@ func syncSecrets(t *testing.T, ctx context.Context, user *testUser) {
 	t.Helper()
 	if err := executeCommand(ctx, user.svc, "sync"); err != nil {
 		t.Fatalf("%s sync: %v", user.name, err)
+	}
+}
+
+func syncSecretsEnv(t *testing.T, ctx context.Context, user *testUser, env string) {
+	t.Helper()
+	if err := executeCommand(ctx, user.svc, "sync", "--env", env); err != nil {
+		t.Fatalf("%s sync %s: %v", user.name, env, err)
 	}
 }
 

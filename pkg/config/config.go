@@ -17,7 +17,17 @@ type RepoConfig struct {
 }
 
 type ProjectConfig struct {
-	Version string `toml:"version"`
+	Version      string                       `toml:"version"`
+	Default      string                       `toml:"default,omitempty"`
+	Environments map[string]EnvironmentConfig `toml:"env,omitempty"`
+}
+
+type EnvironmentConfig struct {
+	Output string `toml:"output"`
+}
+
+type LocalConfig struct {
+	Previous string `toml:"previous,omitempty"`
 }
 
 func LoadRepo() (*RepoConfig, error) {
@@ -42,7 +52,12 @@ func LoadProject() (*ProjectConfig, error) {
 }
 
 func SaveProject(cfg *ProjectConfig) error {
-	f, err := os.Create("enbu.toml")
+	path, err := findProjectConfig()
+	if err != nil {
+		path = "enbu.toml"
+	}
+
+	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("creating enbu.toml: %w", err)
 	}
@@ -53,6 +68,194 @@ func SaveProject(cfg *ProjectConfig) error {
 		return err
 	}
 	return f.Close()
+}
+
+func LoadLocal() (*LocalConfig, error) {
+	path, err := findLocalConfig()
+	if err != nil {
+		return &LocalConfig{}, nil
+	}
+
+	var cfg LocalConfig
+	if _, err := toml.DecodeFile(path, &cfg); err != nil {
+		return &LocalConfig{}, nil
+	}
+	return &cfg, nil
+}
+
+func SaveLocal(cfg *LocalConfig) error {
+	path, err := findLocalConfig()
+	if err != nil {
+		path = ".enbu.local"
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("creating .enbu.local: %w", err)
+	}
+
+	encoder := toml.NewEncoder(f)
+	if err := encoder.Encode(cfg); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+func findLocalConfig() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	for {
+		path := filepath.Join(dir, ".enbu.local")
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	return "", fmt.Errorf(".enbu.local not found")
+}
+
+func NewProjectWithEnvironment(name string) *ProjectConfig {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "default"
+	}
+	envs := map[string]EnvironmentConfig{
+		name: {Output: DefaultOutput(name)},
+	}
+	return &ProjectConfig{
+		Version:      "0.1",
+		Default:      name,
+		Environments: envs,
+	}
+}
+
+func (cfg *ProjectConfig) CurrentEnvironment() string {
+	if cfg.Default != "" {
+		return cfg.Default
+	}
+	return "default"
+}
+
+func (cfg *ProjectConfig) SetDefault(name string) {
+	cfg.Default = name
+}
+
+func (cfg *ProjectConfig) AddEnvironment(name string) error {
+	if !ValidEnvironmentName(name) {
+		return fmt.Errorf("invalid environment name %q", name)
+	}
+	if cfg.Environments == nil {
+		cfg.Environments = make(map[string]EnvironmentConfig)
+	}
+	if len(cfg.Environments) == 0 && cfg.Default == "" {
+		cfg.Environments["default"] = EnvironmentConfig{Output: DefaultOutput("default")}
+		cfg.Default = "default"
+	}
+	if _, exists := cfg.Environments[name]; exists {
+		return fmt.Errorf("environment %q already exists", name)
+	}
+	cfg.Environments[name] = EnvironmentConfig{Output: DefaultOutput(name)}
+	return nil
+}
+
+func (cfg *ProjectConfig) RemoveEnvironment(name string) error {
+	if _, exists := cfg.Environments[name]; !exists {
+		return fmt.Errorf("environment %q does not exist", name)
+	}
+	delete(cfg.Environments, name)
+	if cfg.Default == name {
+		cfg.Default = ""
+	}
+	return nil
+}
+
+func (cfg *ProjectConfig) RenameEnvironment(oldName, newName string) error {
+	if !ValidEnvironmentName(newName) {
+		return fmt.Errorf("invalid environment name %q", newName)
+	}
+	env, exists := cfg.Environments[oldName]
+	if !exists {
+		return fmt.Errorf("environment %q does not exist", oldName)
+	}
+	if _, exists := cfg.Environments[newName]; exists {
+		return fmt.Errorf("environment %q already exists", newName)
+	}
+	delete(cfg.Environments, oldName)
+	env.Output = DefaultOutput(newName)
+	cfg.Environments[newName] = env
+	if cfg.Default == oldName {
+		cfg.Default = newName
+	}
+	return nil
+}
+
+func (cfg *ProjectConfig) HasEnvironment(name string) bool {
+	_, exists := cfg.Environments[name]
+	return exists
+}
+
+func (cfg *ProjectConfig) Environment(name string) (EnvironmentConfig, error) {
+	if name == "" {
+		name = cfg.CurrentEnvironment()
+	}
+	if !ValidEnvironmentName(name) {
+		return EnvironmentConfig{}, fmt.Errorf("invalid environment %q", name)
+	}
+	if len(cfg.Environments) == 0 {
+		if name != "default" {
+			return EnvironmentConfig{}, fmt.Errorf("environment %q is not defined in enbu.toml", name)
+		}
+		return EnvironmentConfig{Output: DefaultOutput(name)}, nil
+	}
+	env, ok := cfg.Environments[name]
+	if !ok {
+		return EnvironmentConfig{}, fmt.Errorf("environment %q is not defined in enbu.toml", name)
+	}
+	if env.Output == "" {
+		env.Output = DefaultOutput(name)
+	}
+	return env, nil
+}
+
+func (cfg *ProjectConfig) EnvironmentNames() []string {
+	if len(cfg.Environments) == 0 {
+		return []string{"default"}
+	}
+	names := make([]string, 0, len(cfg.Environments))
+	for name := range cfg.Environments {
+		names = append(names, name)
+	}
+	return names
+}
+
+func DefaultOutput(name string) string {
+	if name == "" || name == "default" {
+		return ".env"
+	}
+	return ".env." + name
+}
+
+func ValidEnvironmentName(name string) bool {
+	if name == "" || len(name) > 100 {
+		return false
+	}
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func findProjectConfig() (string, error) {

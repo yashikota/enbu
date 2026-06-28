@@ -12,6 +12,8 @@ import (
 )
 
 func newEditCommand(svc *Service) *cobra.Command {
+	var envName string
+
 	cmd := &cobra.Command{
 		Use:   "edit KEY VALUE",
 		Short: "Edit an existing secret in the repository",
@@ -20,6 +22,10 @@ func newEditCommand(svc *Service) *cobra.Command {
 			ctx := cmd.Context()
 			key := args[0]
 			value := args[1]
+			env, err := resolveCommandEnvironment(envName)
+			if err != nil {
+				return err
+			}
 
 			accessToken, _, err := svc.TokenProvider.LoadToken()
 			if err != nil {
@@ -39,7 +45,7 @@ func newEditCommand(svc *Service) *cobra.Command {
 				return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 			}
 
-			secretsRef := svc.secretsRef(owner, repo)
+			secretsRef := svc.secretsRef(owner, repo, env.Name)
 			recipientsRef := svc.registryRef(owner, repo)
 
 			publicKeys, err := pullAllRecipients(ctx, svc.Registry, recipientsRef, accessToken)
@@ -98,5 +104,6 @@ func newEditCommand(svc *Service) *cobra.Command {
 		},
 	}
 
+	addEnvironmentFlag(cmd, &envName)
 	return cmd
 }

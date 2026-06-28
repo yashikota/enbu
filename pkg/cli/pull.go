@@ -11,12 +11,17 @@ import (
 
 func newPullCommand(svc *Service) *cobra.Command {
 	var toStdout bool
+	var envName string
 
 	cmd := &cobra.Command{
 		Use:   "pull",
 		Short: "Pull and decrypt secrets into .env",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			env, err := resolveCommandEnvironment(envName)
+			if err != nil {
+				return err
+			}
 
 			accessToken, _, err := svc.TokenProvider.LoadToken()
 			if err != nil {
@@ -28,8 +33,8 @@ func newPullCommand(svc *Service) *cobra.Command {
 				return err
 			}
 
-			ref := svc.secretsRef(owner, repo)
-			fmt.Fprintf(os.Stderr, "Pulling secrets...\n")
+			ref := svc.secretsRef(owner, repo, env.Name)
+			fmt.Fprintf(os.Stderr, "Pulling %s secrets...\n", env.Name)
 
 			ciphertext, err := svc.Registry.Pull(ctx, ref, accessToken)
 			if err != nil {
@@ -58,15 +63,16 @@ func newPullCommand(svc *Service) *cobra.Command {
 				return nil
 			}
 
-			if err := os.WriteFile(".env", dotenv, 0o600); err != nil {
-				return fmt.Errorf("writing .env: %w", err)
+			if err := os.WriteFile(env.Output, dotenv, 0o600); err != nil {
+				return fmt.Errorf("writing %s: %w", env.Output, err)
 			}
 
-			fmt.Fprintf(os.Stderr, "✓ Written .env (%d secrets)\n", len(secrets))
+			fmt.Fprintf(os.Stderr, "✓ Written %s (%d secrets)\n", env.Output, len(secrets))
 			return nil
 		},
 	}
 
 	cmd.Flags().BoolVar(&toStdout, "stdout", false, "Output to stdout instead of .env file")
+	addEnvironmentFlag(cmd, &envName)
 	return cmd
 }

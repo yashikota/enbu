@@ -19,6 +19,7 @@ func NewWithService(version string, svc *Service) *cobra.Command {
 	rootCmd.AddCommand(
 		newAuthCommand(),
 		newInitCommand(svc),
+		newSwitchCommand(svc),
 		newAddCommand(svc),
 		newEditCommand(svc),
 		newDeleteCommand(svc),

@@ -56,7 +56,7 @@ func TestEnsureGitignore_AppendsToExisting(t *testing.T) {
 
 func TestEnsureGitignore_NoDuplicates(t *testing.T) {
 	dir := t.TempDir()
-	existing := ".env\n.env.*\n!.env.example\n"
+	existing := ".env\n.env.*\n!.env.example\n.enbu.local\n"
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(existing), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -130,6 +130,24 @@ func TestEnsureGitignore_NoTrailingNewline(t *testing.T) {
 	}
 }
 
+func TestEnsureGitignore_CustomOutputs(t *testing.T) {
+	dir := t.TempDir()
+	if err := ensureGitignore(dir, "secrets.json", "config/dev.env", `\!literal.env`); err != nil {
+		t.Fatalf("ensureGitignore: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	for _, want := range []string{"secrets.json", "config/dev.env", `\!literal.env`} {
+		if !strings.Contains(content, want) {
+			t.Errorf("missing custom output %q in .gitignore", want)
+		}
+	}
+}
+
 func TestIsUserRecipientTag(t *testing.T) {
 	tests := []struct {
 		tag  string
@@ -145,6 +163,18 @@ func TestIsUserRecipientTag(t *testing.T) {
 		if got := isUserRecipientTag(tt.tag); got != tt.want {
 			t.Errorf("isUserRecipientTag(%q) = %v, want %v", tt.tag, got, tt.want)
 		}
+	}
+}
+
+func TestEnvironmentTags(t *testing.T) {
+	if got := secretsTag("default"); got != "secrets-default" {
+		t.Fatalf("default secrets tag = %q, want secrets-default", got)
+	}
+	if got := secretsTag("dev"); got != "secrets-dev" {
+		t.Fatalf("dev secrets tag = %q, want secrets-dev", got)
+	}
+	if got := recipientTagPrefix(); got != "recipient-" {
+		t.Fatalf("recipient prefix = %q, want recipient-", got)
 	}
 }
 

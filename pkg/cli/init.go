@@ -20,7 +20,7 @@ import (
 )
 
 func newInitCommand(svc *Service) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize enbu for this repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -37,6 +37,17 @@ func newInitCommand(svc *Service) *cobra.Command {
 			}
 
 			registryRef := svc.registryRef(owner, repo)
+
+			projectCfg, err := config.LoadProject()
+			configMissing := false
+			if err != nil {
+				if strings.Contains(err.Error(), "enbu.toml not found") {
+					configMissing = true
+					projectCfg = config.NewProjectWithEnvironment(defaultEnvironment)
+				} else {
+					return err
+				}
+			}
 
 			repoRoot, err := config.RepoRoot()
 			if err != nil {
@@ -93,7 +104,7 @@ func newInitCommand(svc *Service) *cobra.Command {
 
 			fingerprint := age.Fingerprint(publicKey)
 			tag := oci.CleanTag(fmt.Sprintf("%s-%s", username, fingerprint))
-			ref := fmt.Sprintf("%s:recipient-%s", registryRef, tag)
+			ref := fmt.Sprintf("%s:%s%s", registryRef, recipientTagPrefix(), tag)
 			fmt.Println("Pushing public key to registry...")
 			pushOpts := &oci.PushOptions{
 				SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
@@ -105,13 +116,14 @@ func newInitCommand(svc *Service) *cobra.Command {
 
 			if joinMode {
 				fmt.Println("\nYour key has been registered.")
-				secretsRef := svc.secretsRef(owner, repo)
 				if hasSecrets {
 					identities, err := loadIdentitiesForRepo(svc.KeyStore, owner, repo)
 					if err != nil || len(identities) == 0 {
 						fmt.Println("Could not load decryption keys; run 'enbu pull' after an existing member runs 'enbu sync'.")
 						return nil
 					}
+					env := projectCfg.CurrentEnvironment()
+					secretsRef := svc.secretsRef(owner, repo, env)
 					ok, err := verifyCurrentUserCanDecrypt(ctx, svc.Registry, secretsRef, accessToken, identities)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: failed to verify decryption: %v\n", err)
@@ -125,20 +137,18 @@ func newInitCommand(svc *Service) *cobra.Command {
 				} else {
 					fmt.Println("No secrets exist yet. You can access them after a member runs 'enbu add'.")
 				}
+				ensureProjectGitignore(repoRoot, projectCfg)
 				return nil
 			}
 
-			projCfg := &config.ProjectConfig{Version: "0.1"}
-			if err := config.SaveProject(projCfg); err != nil {
-				return fmt.Errorf("creating enbu.toml: %w", err)
+			if configMissing {
+				if err := config.SaveProject(projectCfg); err != nil {
+					return fmt.Errorf("creating enbu.toml: %w", err)
+				}
+				fmt.Println("✓ Created enbu.toml")
 			}
-			fmt.Println("✓ Created enbu.toml")
 
-			if err := ensureGitignore(repoRoot); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to update .gitignore: %v\n", err)
-			} else {
-				fmt.Println("✓ Updated .gitignore")
-			}
+			ensureProjectGitignore(repoRoot, projectCfg)
 
 			fmt.Println("Committing generated files...")
 			if err := gitCommitInitFiles(repoRoot); err != nil {
@@ -166,19 +176,57 @@ func newInitCommand(svc *Service) *cobra.Command {
 			fmt.Println("")
 			fmt.Println("Then:")
 			fmt.Println("  2. Push the commit: git push")
-			fmt.Println("  3. Run 'enbu add KEY VALUE' to add secrets")
+			fmt.Println("  3. Run 'enbu switch -c dev' to create an environment")
+			fmt.Println("  4. Run 'enbu add KEY VALUE' to add secrets")
 			return nil
 		},
 	}
+
+	return cmd
 }
 
 var gitignoreEntries = []string{
 	".env",
 	".env.*",
 	"!.env.example",
+	".enbu.local",
 }
 
-func ensureGitignore(repoRoot string) error {
+func ensureProjectGitignore(repoRoot string, cfg *config.ProjectConfig) {
+	if err := ensureGitignore(repoRoot, projectGitignoreEntries(cfg)...); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to update .gitignore: %v\n", err)
+	} else {
+		fmt.Println("✓ Updated .gitignore")
+	}
+}
+
+func projectGitignoreEntries(cfg *config.ProjectConfig) []string {
+	var entries []string
+	for _, name := range cfg.EnvironmentNames() {
+		env, err := cfg.Environment(name)
+		if err != nil {
+			continue
+		}
+		output := gitignorePatternForOutput(env.Output)
+		if output != "" {
+			entries = append(entries, output)
+		}
+	}
+	return entries
+}
+
+func gitignorePatternForOutput(output string) string {
+	output = strings.TrimSpace(output)
+	if output == "" || filepath.IsAbs(output) {
+		return ""
+	}
+	if strings.HasPrefix(output, "#") || strings.HasPrefix(output, "!") {
+		return `\` + output
+	}
+	return output
+}
+
+func ensureGitignore(repoRoot string, extraEntries ...string) error {
 	path := filepath.Join(repoRoot, ".gitignore")
 
 	existing := ""
@@ -192,10 +240,18 @@ func ensureGitignore(repoRoot string) error {
 		lineSet[strings.TrimSpace(l)] = true
 	}
 
+	entries := append([]string{}, gitignoreEntries...)
+	entries = append(entries, extraEntries...)
+
 	var toAdd []string
-	for _, entry := range gitignoreEntries {
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
 		if !lineSet[entry] {
 			toAdd = append(toAdd, entry)
+			lineSet[entry] = true
 		}
 	}
 
@@ -234,10 +290,6 @@ func gitCommitInitFiles(repoRoot string) error {
 	}
 
 	return nil
-}
-
-func isUserRecipientTag(tag string) bool {
-	return strings.HasPrefix(tag, "recipient-") && tag != "recipient-github-actions"
 }
 
 func pullAllRecipients(ctx context.Context, reg Registry, ref string, token string) ([]string, error) {

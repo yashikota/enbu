@@ -69,6 +69,10 @@ enbu init
 enbu add DATABASE_URL "postgres://..."
 enbu add API_KEY "sk-..."
 enbu edit API_KEY "sk-new..."
+
+# 環境別シークレット
+enbu add --env dev DATABASE_URL "postgres://dev/..."
+enbu add --env prod DATABASE_URL "postgres://prod/..."
 ```
 
 `add` は新規シークレット専用で、同じキーが既にある場合は失敗します。既存シークレットの更新には `edit` を使います。
@@ -83,12 +87,42 @@ enbu delete API_KEY
 
 ```bash
 enbu pull # .env ファイルに書き出し
+enbu pull --env dev # dev の設定済み出力先に書き出し
 ```
 
 ### 6. メンバーの追加
 
 新しいメンバーがリポジトリ内で `enbu init` を実行すると、joinモードで公開鍵が登録されます。  
 既存メンバーがローカルで `enbu sync` を実行すると、そのメンバーも復号可能になります。  
+
+## 環境
+
+`enbu switch` で環境を管理します:
+
+```bash
+enbu switch -c dev          # dev を作成して切り替え
+enbu switch -c prod         # prod を作成して切り替え
+enbu switch dev             # dev に切り替え
+enbu switch -               # 前の環境に戻る
+enbu switch -l              # 環境一覧
+enbu switch -d staging      # 環境を削除
+enbu switch -m old new      # 環境をリネーム
+```
+
+`enbu.toml` で環境と出力ファイルを定義:
+
+```toml
+version = "0.1"
+default = "dev"
+
+[env.dev]
+output = ".env.dev"
+
+[env.prod]
+output = ".env.prod"
+```
+
+`add`、`edit`、`delete`、`pull`、`sync` で `-e`/`--env` を指定すると現在の環境を一時的に上書きします。recipient は全環境で共有され、アクセス制御は sync 時の OPA/Rego ポリシーで行います。`-e` を省略すると `switch` で設定した環境が使われます。
 
 ## 鍵の保管
 
@@ -110,8 +144,9 @@ export ENBU_BACKEND=text  # 平文ファイル (0600) で保存
 
 ```
 GHCR (ghcr.io/{owner}/{repo}-enbu)
-├── recipient-{user}-{fingerprint}  ← 全メンバーの公開鍵
-└── secrets-default                 ← 暗号化されたシークレット
+├── recipient-{user}-{fingerprint}      ← 公開鍵（全環境で共有）
+├── secrets-default                     ← default 環境の暗号化シークレット
+└── secrets-dev                         ← dev 環境の暗号化シークレット
 ```
 
 1. `enbu add`  - 新規シークレットを全受信者の公開鍵で暗号化し、OCI Imageアーティファクトとしてプッシュ  
@@ -142,6 +177,7 @@ sequenceDiagram
     CLI->>CLI: age X25519 鍵ペア生成
     CLI->>CLI: 秘密鍵を OS キーチェーンに保存
     CLI->>GHCR: recipient-{user}-{fingerprint} として公開鍵を登録
+    Note over GHCR: recipient は環境非依存
     GHCR-->>CLI: 完了
     CLI-->>User: ✓ Initialized
 ```
@@ -174,7 +210,7 @@ sequenceDiagram
 
     New->>CLI: enbu init (join mode)
     CLI->>CLI: age 鍵ペア生成
-    CLI->>GHCR: recipient-{user} として公開鍵を登録
+    CLI->>GHCR: recipient-{user}-{fingerprint} として公開鍵を登録
     CLI-->>New: ✓ 鍵を登録しました
 
     Member->>CLI: enbu sync
