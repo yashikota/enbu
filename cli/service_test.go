@@ -19,3 +19,13 @@ func TestDefaultAppWithInvalidBackendReturnsKeystoreError(t *testing.T) {
 		t.Fatalf("expected unknown backend type error, got %v", err)
 	}
 }
+
+func TestLoadIdentitiesForRepoWithNilKeyStore(t *testing.T) {
+	_, err := app.LoadIdentitiesForRepo(nil, "owner", "repo")
+	if err == nil {
+		t.Fatal("expected error for nil keystore")
+	}
+	if !strings.Contains(err.Error(), "keystore is not initialized") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

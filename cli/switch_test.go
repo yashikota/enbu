@@ -241,3 +241,23 @@ output = ".env.dev"
 		t.Fatal("default not updated to development")
 	}
 }
+
+func TestSwitchRejectsTwoArgs(t *testing.T) {
+	dir := t.TempDir()
+	origDir, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	_ = os.Chdir(dir)
+
+	_ = os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(`version = "0.1"
+default = "dev"
+[env.dev]
+output = ".env.dev"
+`), 0o644)
+
+	a := &app.App{}
+	cmd := NewWithApp("test", a)
+	cmd.SetArgs([]string{"switch", "dev", "extra"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error when two positional args given")
+	}
+}
