@@ -11,12 +11,12 @@ import (
 
 func newSwitchCommand(svc *Service) *cobra.Command {
 	var (
-		create     bool
-		delete     bool
-		list       bool
-		moveOld    string
-		moveNew    string
-		doMove     bool
+		create  bool
+		delete  bool
+		list    bool
+		moveOld string
+		moveNew string
+		doMove  bool
 	)
 
 	cmd := &cobra.Command{
