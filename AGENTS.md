@@ -6,14 +6,19 @@ This file provides guidance to Agent tool when working with code in this reposit
 
 Keyless `.env` management powered by GitHub. Encrypts secrets with age, stores ciphertext as OCI artifacts on GHCR, and uses GitHub Device Flow for authentication. No shared master key — each team member gets their own age recipient key.
 
+## Notes
+
+- After writing code, always write tests for the relevant areas.
+- Force-pushes are prohibited.
+- After changing code, always run `task build`, `task test:all`, and `task check`.
+- When a Linear task is provided, use a branch name like `feat/enbu-01`.
+
 ## Commands
 
 ```bash
-task build          # Build binary → ./enbu
-task test           # Unit tests (go test ./...)
-task test:scenario  # Scenario tests (build tag: scenario)
-task lint           # golangci-lint run ./...
-task fmt            # golangci-lint fmt ./...
+task build          # Build binary
+task test           # Unit tests
+task test:scenario  # Scenario tests
 task check          # lint + test
 ```
 

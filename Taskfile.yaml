@@ -3,13 +3,13 @@ version: '3'
 tasks:
   test:
     cmds:
-      - go test ./...
+      - go test -v -shuffle=on -race ./... 
 
   test:scenario:
     cmds:
       - docker compose up -d --wait
       - defer: docker compose down
-      - go test -tags=scenario ./...
+      - go test -v -shuffle=on -race -tags=scenario ./...
 
   test:all:
     cmds:
