@@ -49,12 +49,14 @@ func TestScenario_ThreeUsersSequentialJoin(t *testing.T) {
 	)
 }
 
-func TestScenario_OverwriteSecret(t *testing.T) {
+func TestScenario_AddRejectsExistingSecretAndEditUpdates(t *testing.T) {
 	RunScenario(t,
 		Users("alice"),
 		Register("alice"),
 		Add("alice", "API_KEY", "old-key"),
-		Add("alice", "API_KEY", "new-key"),
+		AddFails("alice", "API_KEY", "new-key"),
+		PullContains("alice", "old-key"),
+		Edit("alice", "API_KEY", "new-key"),
 		PullDoesNotContain("alice", "old-key"),
 		PullContains("alice", "new-key"),
 	)
@@ -267,7 +269,7 @@ func TestScenario_RotateSharedSecretForWholeTeam(t *testing.T) {
 		Sync("alice"),
 		Register("charlie"),
 		Sync("bob"),
-		Add("charlie", "API_TOKEN", "new-token"),
+		Edit("charlie", "API_TOKEN", "new-token"),
 		PullDoesNotContain("alice", "old-token"),
 		PullContainsAll("alice", "API_TOKEN", "new-token", "UNCHANGED", "still-here"),
 		PullDoesNotContain("bob", "old-token"),

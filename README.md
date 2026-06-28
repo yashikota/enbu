@@ -61,12 +61,15 @@ Run once per user per repository. This automatically:
 - Creates `enbu.toml`
 - Updates `.gitignore`
 
-### 3. Add secrets
+### 3. Add or edit secrets
 
 ```bash
 enbu add DATABASE_URL "postgres://..."
 enbu add API_KEY "sk-..."
+enbu edit API_KEY "sk-new..."
 ```
+
+`add` creates a new secret and fails if the key already exists. Use `edit` to update an existing secret.
 
 ### 4. Delete secrets
 
@@ -109,10 +112,11 @@ GHCR (ghcr.io/{owner}/{repo}-enbu)
 └── secrets-default                 ← Encrypted secrets
 ```
 
-1. `enbu add` — Encrypts secrets for all recipients' public keys and pushes as an OCI image artifact
-2. `enbu delete` — Removes a secret from the encrypted bundle and pushes the updated artifact
-3. `enbu pull` — Pulls ciphertext, decrypts with your private key, writes to `.env`
-4. `enbu sync` — Re-encrypts with the current recipient list when members are added or removed
+1. `enbu add` — Creates a new secret, encrypts for all recipients' public keys, and pushes as an OCI image artifact
+2. `enbu edit` — Updates an existing secret in the encrypted bundle and pushes the updated artifact
+3. `enbu delete` — Removes a secret from the encrypted bundle and pushes the updated artifact
+4. `enbu pull` — Pulls ciphertext, decrypts with your private key, writes to `.env`
+5. `enbu sync` — Re-encrypts with the current recipient list when members are added or removed
 
 ### Authentication & Initialization Flow
 
