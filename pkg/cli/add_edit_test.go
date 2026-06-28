@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -108,6 +109,44 @@ func TestEditCommandUpdatesExistingSecret(t *testing.T) {
 	secrets := decryptAddEditSecrets(t, kp, reg)
 	if secrets["API_KEY"] != "new" {
 		t.Fatalf("expected API_KEY to be edited, got %q", secrets["API_KEY"])
+	}
+}
+
+func TestEditCommandReturnsKeyStoreError(t *testing.T) {
+	svc := &Service{
+		Registry:      &addEditRegistry{},
+		TokenProvider: &deleteTestTokenProvider{},
+		RepoDetector:  &deleteTestRepoDetector{},
+		KeyStore:      &failingKeyStore{err: errors.New("keychain locked")},
+	}
+	cmd := NewWithService("test", svc)
+	cmd.SetArgs([]string{"edit", "API_KEY", "secret"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "loading decryption keys") || !strings.Contains(err.Error(), "keychain locked") {
+		t.Fatalf("expected wrapped key store error, got %v", err)
+	}
+}
+
+func TestEditCommandSkipsPushWhenSecretIsAlreadyUpToDate(t *testing.T) {
+	kp, reg := newAddEditRegistry(t, map[string]string{"API_KEY": "secret"})
+	svc := newAddEditService(kp, reg)
+	cmd := NewWithService("test", svc)
+	cmd.SetArgs([]string{"edit", "API_KEY", "secret"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	if reg.pushes != 0 {
+		t.Fatalf("expected up-to-date edit not to push, got %d pushes", reg.pushes)
+	}
+
+	secrets := decryptAddEditSecrets(t, kp, reg)
+	if secrets["API_KEY"] != "secret" {
+		t.Fatalf("expected API_KEY to remain unchanged, got %q", secrets["API_KEY"])
 	}
 }
 

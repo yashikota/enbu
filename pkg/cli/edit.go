@@ -32,7 +32,10 @@ func newEditCommand(svc *Service) *cobra.Command {
 			}
 
 			identities, err := loadIdentitiesForRepo(svc.KeyStore, owner, repo)
-			if err != nil || len(identities) == 0 {
+			if err != nil {
+				return fmt.Errorf("loading decryption keys: %w", err)
+			}
+			if len(identities) == 0 {
 				return fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 			}
 
@@ -62,6 +65,10 @@ func newEditCommand(svc *Service) *cobra.Command {
 
 				if _, ok := secrets[key]; !ok {
 					return fmt.Errorf("secret %s does not exist (use 'enbu add %s VALUE' to create it)", key, key)
+				}
+				if secrets[key] == value {
+					fmt.Printf("✓ Secret %s is already up to date\n", key)
+					return nil
 				}
 				secrets[key] = value
 
