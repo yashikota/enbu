@@ -27,6 +27,7 @@ func NewWithApp(version string, a *app.App) *cobra.Command {
 		newPullCommand(a),
 		newSyncCommand(a),
 		newTuiCommand(a),
+		newHistoryCommand(a),
 	)
 
 	return rootCmd

@@ -127,6 +127,7 @@ func (a *App) AddSecret(ctx context.Context, env, key, value string) error {
 			return fmt.Errorf("pushing encrypted secrets: %w", err)
 		}
 
+		_ = a.Registry.Push(ctx, fmt.Sprintf("%s:%s", a.registryRef(owner, repo), snapshotTag(resolved.Name)), "application/vnd.enbu.secrets.age.v1", ciphertext, accessToken, &oci.PushOptions{SourceRepo: a.sourceRepoURL(owner, repo)})
 		a.emit(fmt.Sprintf("Added %s (%d secrets total)", key, len(secrets)))
 		return nil
 	}
@@ -202,6 +203,7 @@ func (a *App) EditSecret(ctx context.Context, env, key, value string) error {
 			return fmt.Errorf("pushing encrypted secrets: %w", err)
 		}
 
+		_ = a.Registry.Push(ctx, fmt.Sprintf("%s:%s", a.registryRef(owner, repo), snapshotTag(resolved.Name)), "application/vnd.enbu.secrets.age.v1", ciphertext, accessToken, &oci.PushOptions{SourceRepo: a.sourceRepoURL(owner, repo)})
 		a.emit(fmt.Sprintf("Updated %s (%d secrets total)", key, len(secrets)))
 		return nil
 	}
@@ -280,6 +282,7 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 			return fmt.Errorf("pushing encrypted secrets: %w", err)
 		}
 
+		_ = a.Registry.Push(ctx, fmt.Sprintf("%s:%s", a.registryRef(owner, repo), snapshotTag(resolved.Name)), "application/vnd.enbu.secrets.age.v1", ciphertext, accessToken, &oci.PushOptions{SourceRepo: a.sourceRepoURL(owner, repo)})
 		a.emit(fmt.Sprintf("Deleted %s (%d secrets remaining)", key, len(secrets)))
 		return nil
 	}

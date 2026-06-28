@@ -22,10 +22,12 @@ type addEditRegistry struct {
 
 func (a *addEditRegistry) Push(_ context.Context, _ string, _ string, data []byte, _ string, opts *oci.PushOptions) error {
 	a.pushes++
-	if opts != nil {
-		a.gotExpected = opts.ExpectedDigest
+	if a.pushes == 1 {
+		if opts != nil {
+			a.gotExpected = opts.ExpectedDigest
+		}
+		a.ciphertext = append([]byte(nil), data...)
 	}
-	a.ciphertext = append([]byte(nil), data...)
 	return nil
 }
 
@@ -77,8 +79,8 @@ func TestAddCommandCreatesNewSecret(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	if reg.pushes != 1 {
-		t.Fatalf("expected 1 push, got %d", reg.pushes)
+	if reg.pushes != 2 {
+		t.Fatalf("expected 2 push (main + snapshot), got %d", reg.pushes)
 	}
 	if reg.gotExpected != "" {
 		t.Fatalf("expected empty base digest for initial add, got %q", reg.gotExpected)
@@ -99,8 +101,8 @@ func TestEditCommandUpdatesExistingSecret(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
-	if reg.pushes != 1 {
-		t.Fatalf("expected 1 push, got %d", reg.pushes)
+	if reg.pushes != 2 {
+		t.Fatalf("expected 2 push (main + snapshot), got %d", reg.pushes)
 	}
 	if reg.gotExpected != "sha256:base" {
 		t.Fatalf("expected base digest to be passed to push, got %q", reg.gotExpected)

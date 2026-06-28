@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestScenario_SingleUserAddPull(t *testing.T) {
@@ -713,5 +714,37 @@ output = ".env.prod"
 			}
 		}),
 		PullEnvContainsAll("alice", "prod", "PROD_KEY", "prod-val"),
+	)
+}
+
+func TestScenario_HistoryAddRestore(t *testing.T) {
+	RunScenario(t,
+		Users("alice"),
+		Register("alice"),
+		Add("alice", "DB_HOST", "original-value"),
+		StepFunc("sleep 1s for distinct snapshot timestamp", func(t *testing.T, s *ScenarioState) {
+			// Snapshots are tagged with unix timestamp (1s resolution).
+			// Without this sleep, add and edit land on the same second
+			// and the second snapshot tag silently overwrites the first.
+			time.Sleep(1100 * time.Millisecond)
+		}),
+		Edit("alice", "DB_HOST", "updated-value"),
+		PullContains("alice", "updated-value"),
+		StepFunc("history has 2 entries", func(t *testing.T, s *ScenarioState) {
+			entries, err := s.user(t, "alice").svc.ListHistory(s.ctx, "")
+			if err != nil {
+				t.Fatalf("ListHistory: %v", err)
+			}
+			if len(entries) != 2 {
+				t.Fatalf("expected 2 history entries, got %d", len(entries))
+			}
+		}),
+		StepFunc("restore to version 1", func(t *testing.T, s *ScenarioState) {
+			if err := executeCommand(s.ctx, s.user(t, "alice").svc, "history", "restore", "1"); err != nil {
+				t.Fatalf("history restore: %v", err)
+			}
+		}),
+		PullContains("alice", "original-value"),
+		PullDoesNotContain("alice", "updated-value"),
 	)
 }
