@@ -313,8 +313,10 @@ func (m *mockKeyStore) Load(_, key string) ([]byte, error) {
 }
 
 type mockGitHubClient struct {
-	user *provider.User
-	orgs map[string]bool
+	user        *provider.User
+	orgs        map[string]bool
+	userTeams   map[string][]string
+	permissions map[string]string
 }
 
 func (m *mockGitHubClient) GetUser(_ context.Context) (*provider.User, error) {
@@ -327,6 +329,22 @@ func (m *mockGitHubClient) IsOrganization(_ context.Context, login string) bool 
 
 func (m *mockGitHubClient) SourceRepoURL(owner, repo string) string {
 	return "https://github.com/" + owner + "/" + repo
+}
+
+func (m *mockGitHubClient) GetUserTeams(_ context.Context, _, username string) ([]string, error) {
+	if m.userTeams != nil {
+		return m.userTeams[username], nil
+	}
+	return nil, nil
+}
+
+func (m *mockGitHubClient) GetCollaboratorPermission(_ context.Context, _, _, username string) (string, error) {
+	if m.permissions != nil {
+		if p, ok := m.permissions[username]; ok {
+			return p, nil
+		}
+	}
+	return "read", nil
 }
 
 func repoKeystoreKey(owner, repo string) string {

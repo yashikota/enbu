@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	agecrypto "filippo.io/age"
-	"github.com/yashikota/enbu/utils/age"
 	"github.com/yashikota/enbu/provider"
+	"github.com/yashikota/enbu/utils/age"
 	"github.com/yashikota/enbu/utils/keystore"
 	"github.com/yashikota/enbu/utils/oci"
 )
