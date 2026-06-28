@@ -31,6 +31,8 @@ type PlatformClient interface {
 	GetUser(ctx context.Context) (*provider.User, error)
 	IsOrganization(ctx context.Context, login string) bool
 	SourceRepoURL(owner, repo string) string
+	GetUserTeams(ctx context.Context, org, username string) ([]string, error)
+	GetCollaboratorPermission(ctx context.Context, owner, repo, username string) (string, error)
 }
 
 type EventHandler interface {

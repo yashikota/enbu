@@ -19,6 +19,12 @@ const (
 	DefaultEnvironment = "default"
 )
 
+type Recipient struct {
+	Username  string
+	PublicKey string
+	Tag       string
+}
+
 func RepoKeystoreKey(owner, repo string) string {
 	return fmt.Sprintf("%s/%s", strings.ToLower(owner), strings.ToLower(repo))
 }
@@ -63,6 +69,41 @@ func PullAllRecipients(ctx context.Context, reg Registry, ref string, token stri
 		publicKeys = append(publicKeys, string(data))
 	}
 	return publicKeys, nil
+}
+
+func PullAllRecipientsWithMeta(ctx context.Context, reg Registry, ref string, token string) ([]Recipient, error) {
+	tags, err := reg.ListTags(ctx, ref, token)
+	if err != nil {
+		return nil, err
+	}
+
+	var recipients []Recipient
+	for _, tag := range tags {
+		if !IsUserRecipientTag(tag) {
+			continue
+		}
+		tagRef := fmt.Sprintf("%s:%s", ref, tag)
+		data, err := reg.Pull(ctx, tagRef, token)
+		if err != nil {
+			return nil, fmt.Errorf("pulling recipient %s: %w", tag, err)
+		}
+		pubKey := string(data)
+		username := UsernameFromRecipientTag(tag, pubKey)
+		recipients = append(recipients, Recipient{
+			Username:  username,
+			PublicKey: pubKey,
+			Tag:       tag,
+		})
+	}
+	return recipients, nil
+}
+
+func UsernameFromRecipientTag(tag, publicKey string) string {
+	stripped := strings.TrimPrefix(tag, "recipient-")
+	fingerprint := age.Fingerprint(publicKey)
+	cleanFP := oci.CleanTag(fingerprint)
+	username := strings.TrimSuffix(stripped, "-"+cleanFP)
+	return username
 }
 
 func PullSecretsWithDigest(ctx context.Context, reg Registry, ref, token string, identities ...agecrypto.Identity) (map[string]string, string, error) {

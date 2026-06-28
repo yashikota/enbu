@@ -12,6 +12,7 @@ import (
 
 	agecrypto "filippo.io/age"
 	"github.com/yashikota/enbu/utils/age"
+	"github.com/yashikota/enbu/provider"
 	"github.com/yashikota/enbu/utils/keystore"
 	"github.com/yashikota/enbu/utils/oci"
 )
@@ -278,3 +279,168 @@ output = ".env.dev"
 
 // compile-time check: age.KeyPair.Identity implements agecrypto.Identity
 var _ agecrypto.Identity = (*agecrypto.X25519Identity)(nil)
+
+// --- policy filtering tests ---
+
+type mockPlatformClient struct {
+	isOrg       bool
+	userTeams   map[string][]string
+	permissions map[string]string
+}
+
+func (m *mockPlatformClient) GetUser(_ context.Context) (*provider.User, error) {
+	return &provider.User{Login: "admin"}, nil
+}
+
+func (m *mockPlatformClient) IsOrganization(_ context.Context, _ string) bool {
+	return m.isOrg
+}
+
+func (m *mockPlatformClient) SourceRepoURL(owner, repo string) string {
+	return fmt.Sprintf("https://github.com/%s/%s", owner, repo)
+}
+
+func (m *mockPlatformClient) GetUserTeams(_ context.Context, _, username string) ([]string, error) {
+	if teams, ok := m.userTeams[username]; ok {
+		return teams, nil
+	}
+	return nil, nil
+}
+
+func (m *mockPlatformClient) GetCollaboratorPermission(_ context.Context, _, _, username string) (string, error) {
+	if perm, ok := m.permissions[username]; ok {
+		return perm, nil
+	}
+	return "read", nil
+}
+
+func newTestAppWithPolicy(t *testing.T, owner, repo, env string, keys []*age.KeyPair, usernames []string, platform PlatformClient) *App {
+	t.Helper()
+	reg := newMemRegistry()
+	ks := newMemKeyStore()
+
+	// store first key as the sync executor's private key
+	if err := ks.Store(KeystoreService, RepoKeystoreKey(owner, repo), []byte(keys[0].Identity.String())); err != nil {
+		t.Fatalf("store private key: %v", err)
+	}
+
+	a := &App{
+		Registry:      reg,
+		TokenProvider: &staticTokenProvider{token: "tok", username: usernames[0]},
+		RepoDetector:  &staticRepoDetector{owner: owner, repo: repo},
+		KeyStore:      ks,
+		Platform:      platform,
+	}
+
+	registryRef := a.registryRef(owner, repo)
+	for i, kp := range keys {
+		fp := age.Fingerprint(kp.PublicKey)
+		tag := fmt.Sprintf("recipient-%s-%s", usernames[i], fp)
+		recipientRef := fmt.Sprintf("%s:%s", registryRef, tag)
+		if err := reg.Push(context.Background(), recipientRef, "application/vnd.enbu.recipient.age.v1", []byte(kp.PublicKey), "tok", nil); err != nil {
+			t.Fatalf("push recipient %s: %v", usernames[i], err)
+		}
+	}
+
+	return a
+}
+
+func TestSyncSecrets_NoPolicyAllowsAll(t *testing.T) {
+	dir := t.TempDir()
+	origDir, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	_ = os.Chdir(dir)
+
+	kp1 := mustKeyPair(t)
+	kp2 := mustKeyPair(t)
+	a := newTestAppWithPolicy(t, "owner", "repo", "default", []*age.KeyPair{kp1, kp2}, []string{"alice", "bob"}, nil)
+
+	// add a secret first
+	if err := a.AddSecret(context.Background(), "default", "KEY", "val"); err != nil {
+		t.Fatalf("AddSecret: %v", err)
+	}
+
+	// sync without policy file -> should include all recipients
+	if err := a.SyncSecrets(context.Background(), "default"); err != nil {
+		t.Fatalf("SyncSecrets: %v", err)
+	}
+
+	// both should be able to decrypt
+	secretsRef := a.secretsRef("owner", "repo", "default")
+	ciphertext, err := a.Registry.Pull(context.Background(), secretsRef, "tok")
+	if err != nil {
+		t.Fatalf("pull: %v", err)
+	}
+	for _, kp := range []*age.KeyPair{kp1, kp2} {
+		_, err := age.Decrypt(ciphertext, kp.Identity)
+		if err != nil {
+			t.Fatalf("expected both recipients to decrypt, got: %v", err)
+		}
+	}
+}
+
+func TestSyncSecrets_PolicyFiltersRecipients(t *testing.T) {
+	dir := t.TempDir()
+	origDir, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	_ = os.Chdir(dir)
+
+	// write policy that only allows infra team for production
+	policyContent := `package enbu
+
+import rego.v1
+
+default allow_recipient := false
+
+allow_recipient if {
+	"infra" in input.recipient.teams
+}
+`
+	if err := os.WriteFile("enbu.rego", []byte(policyContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	kp1 := mustKeyPair(t)
+	kp2 := mustKeyPair(t)
+
+	platform := &mockPlatformClient{
+		isOrg: true,
+		userTeams: map[string][]string{
+			"alice": {"infra", "backend"},
+			"bob":   {"backend"},
+		},
+		permissions: map[string]string{
+			"alice": "admin",
+			"bob":   "write",
+		},
+	}
+
+	a := newTestAppWithPolicy(t, "owner", "repo", "production", []*age.KeyPair{kp1, kp2}, []string{"alice", "bob"}, platform)
+
+	// add a secret
+	if err := a.AddSecret(context.Background(), "production", "SECRET", "val"); err != nil {
+		t.Fatalf("AddSecret: %v", err)
+	}
+
+	// sync with policy -> only alice (infra) should be included
+	if err := a.SyncSecrets(context.Background(), "production"); err != nil {
+		t.Fatalf("SyncSecrets: %v", err)
+	}
+
+	// alice should decrypt
+	secretsRef := a.secretsRef("owner", "repo", "production")
+	ciphertext, err := a.Registry.Pull(context.Background(), secretsRef, "tok")
+	if err != nil {
+		t.Fatalf("pull: %v", err)
+	}
+	_, err = age.Decrypt(ciphertext, kp1.Identity)
+	if err != nil {
+		t.Fatalf("alice should decrypt: %v", err)
+	}
+
+	// bob should NOT decrypt
+	_, err = age.Decrypt(ciphertext, kp2.Identity)
+	if err == nil {
+		t.Fatal("bob should not be able to decrypt (policy denied)")
+	}
+}
