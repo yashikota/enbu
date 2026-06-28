@@ -175,7 +175,7 @@ func snapshotTag(env string) string {
 	if env == "" {
 		env = DefaultEnvironment
 	}
-	return fmt.Sprintf("secrets-%s-%d", oci.CleanTag(env), time.Now().Unix())
+	return fmt.Sprintf("secrets-%s-%d", oci.CleanTag(env), time.Now().UnixMilli())
 }
 
 func IsSnapshotTag(env, tag string) bool {
@@ -195,5 +195,5 @@ func snapshotTimestamp(env, tag string) (time.Time, bool) {
 	if err != nil {
 		return time.Time{}, false
 	}
-	return time.Unix(ts, 0), true
+	return time.UnixMilli(ts), true
 }

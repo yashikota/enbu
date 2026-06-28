@@ -172,7 +172,13 @@ func (a *App) RestoreHistory(ctx context.Context, env string, idx int) error {
 	pushOpts := &oci.PushOptions{SourceRepo: a.sourceRepoURL(owner, repo)}
 
 	for attempt := range maxRetries {
-		baseDigest, _ := a.Registry.GetDigest(ctx, secretsRef, accessToken)
+		baseDigest, err := a.Registry.GetDigest(ctx, secretsRef, accessToken)
+		if err != nil && !IsNotFoundError(err) {
+			return fmt.Errorf("getting current digest: %w", err)
+		}
+		if IsNotFoundError(err) {
+			baseDigest = ""
+		}
 		pushOpts.ExpectedDigest = baseDigest
 
 		plaintext := bundle.Marshal(secrets)
