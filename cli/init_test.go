@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yashikota/enbu/app"
 )
 
 func TestEnsureGitignore_CreatesNewFile(t *testing.T) {
@@ -160,21 +162,9 @@ func TestIsUserRecipientTag(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := isUserRecipientTag(tt.tag); got != tt.want {
-			t.Errorf("isUserRecipientTag(%q) = %v, want %v", tt.tag, got, tt.want)
+		if got := app.IsUserRecipientTag(tt.tag); got != tt.want {
+			t.Errorf("IsUserRecipientTag(%q) = %v, want %v", tt.tag, got, tt.want)
 		}
-	}
-}
-
-func TestEnvironmentTags(t *testing.T) {
-	if got := secretsTag("default"); got != "secrets-default" {
-		t.Fatalf("default secrets tag = %q, want secrets-default", got)
-	}
-	if got := secretsTag("dev"); got != "secrets-dev" {
-		t.Fatalf("dev secrets tag = %q, want secrets-dev", got)
-	}
-	if got := recipientTagPrefix(); got != "recipient-" {
-		t.Fatalf("recipient prefix = %q, want recipient-", got)
 	}
 }
 

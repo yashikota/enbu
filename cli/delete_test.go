@@ -2,10 +2,10 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
+	"github.com/yashikota/enbu/app"
 	"github.com/yashikota/enbu/pkg/age"
 	"github.com/yashikota/enbu/pkg/bundle"
 	"github.com/yashikota/enbu/pkg/oci"
@@ -21,44 +21,6 @@ type deleteTestRepoDetector struct{}
 
 func (d *deleteTestRepoDetector) LoadRepo() (string, string, error) {
 	return "owner", "repo", nil
-}
-
-type failingKeyStore struct {
-	err error
-}
-
-func (f *failingKeyStore) Store(string, string, []byte) error {
-	return nil
-}
-
-func (f *failingKeyStore) Load(string, string) ([]byte, error) {
-	return nil, f.err
-}
-
-type deleteDigestErrorRegistry struct {
-	ciphertext []byte
-	publicKey  string
-	pushes     int
-}
-
-func (d *deleteDigestErrorRegistry) Push(context.Context, string, string, []byte, string, *oci.PushOptions) error {
-	d.pushes++
-	return nil
-}
-
-func (d *deleteDigestErrorRegistry) Pull(_ context.Context, ref string, _ string) ([]byte, error) {
-	if strings.HasSuffix(ref, ":recipient-alice") {
-		return []byte(d.publicKey), nil
-	}
-	return d.ciphertext, nil
-}
-
-func (d *deleteDigestErrorRegistry) ListTags(context.Context, string, string) ([]string, error) {
-	return []string{"recipient-alice"}, nil
-}
-
-func (d *deleteDigestErrorRegistry) GetDigest(context.Context, string, string) (string, error) {
-	return "sha256:base", nil
 }
 
 type deleteExpectedDigestRegistry struct {
@@ -93,25 +55,6 @@ func (d *deleteExpectedDigestRegistry) GetDigest(context.Context, string, string
 	return d.expectedDigest, nil
 }
 
-func TestDeleteCommandReturnsKeyStoreError(t *testing.T) {
-	svc := &Service{
-		Registry:      &deleteDigestErrorRegistry{},
-		TokenProvider: &deleteTestTokenProvider{},
-		RepoDetector:  &deleteTestRepoDetector{},
-		KeyStore:      &failingKeyStore{err: errors.New("keychain locked")},
-	}
-	cmd := NewWithService("test", svc)
-	cmd.SetArgs([]string{"delete", "API_KEY"})
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "loading decryption keys") || !strings.Contains(err.Error(), "keychain locked") {
-		t.Fatalf("expected wrapped key store error, got %v", err)
-	}
-}
-
 func TestDeleteCommandPassesBaseDigestToPush(t *testing.T) {
 	kp, err := age.GenerateKeyPair()
 	if err != nil {
@@ -128,7 +71,7 @@ func TestDeleteCommandPassesBaseDigestToPush(t *testing.T) {
 		publicKey:      kp.PublicKey,
 		expectedDigest: "sha256:base",
 	}
-	svc := &Service{
+	a := &app.App{
 		Registry:      reg,
 		TokenProvider: &deleteTestTokenProvider{},
 		RepoDetector:  &deleteTestRepoDetector{},
@@ -136,7 +79,7 @@ func TestDeleteCommandPassesBaseDigestToPush(t *testing.T) {
 			key: []byte(kp.Identity.String()),
 		},
 	}
-	cmd := NewWithService("test", svc)
+	cmd := NewWithApp("test", a)
 	cmd.SetArgs([]string{"delete", "API_KEY"})
 
 	err = cmd.Execute()

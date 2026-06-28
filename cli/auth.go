@@ -6,6 +6,7 @@ import (
 
 	agecrypto "filippo.io/age"
 	"github.com/spf13/cobra"
+	"github.com/yashikota/enbu/app"
 	"github.com/yashikota/enbu/pkg/auth"
 	"github.com/yashikota/enbu/pkg/config"
 	"github.com/yashikota/enbu/pkg/keystore"
@@ -131,8 +132,8 @@ func newAuthStatusCommand() *cobra.Command {
 				return nil
 			}
 
-			repoKey := repoKeystoreKey(cfg.Owner, cfg.Repo)
-			privBytes, err := backend.Load(keystoreService, repoKey)
+			repoKey := app.RepoKeystoreKey(cfg.Owner, cfg.Repo)
+			privBytes, err := backend.Load(app.KeystoreService, repoKey)
 			if err == nil && len(privBytes) > 0 {
 				id, err := agecrypto.ParseX25519Identity(string(privBytes))
 				if err == nil {

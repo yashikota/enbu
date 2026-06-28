@@ -1,4 +1,4 @@
-package cli
+package app
 
 import (
 	"context"
@@ -9,56 +9,59 @@ import (
 	"github.com/yashikota/enbu/pkg/config"
 	"github.com/yashikota/enbu/pkg/keystore"
 	"github.com/yashikota/enbu/pkg/oci"
-	gh "github.com/yashikota/enbu/pkg/provider/github"
 )
 
-type Registry interface {
-	Push(ctx context.Context, ref string, mediaType string, data []byte, token string, opts *oci.PushOptions) error
-	Pull(ctx context.Context, ref string, token string) ([]byte, error)
-	ListTags(ctx context.Context, ref string, token string) ([]string, error)
-	GetDigest(ctx context.Context, ref string, token string) (string, error)
-}
-
-type TokenProvider interface {
-	LoadToken() (accessToken string, username string, err error)
-}
-
-type KeyStore interface {
-	Store(service, key string, value []byte) error
-	Load(service, key string) ([]byte, error)
-}
-
-type RepoDetector interface {
-	LoadRepo() (owner, repo string, err error)
-}
-
-type GitHubClient interface {
-	GetUser(ctx context.Context) (*gh.User, error)
-	IsOrganization(ctx context.Context, login string) bool
-}
-
-type Service struct {
+type App struct {
 	Registry      Registry
 	TokenProvider TokenProvider
 	KeyStore      KeyStore
 	RepoDetector  RepoDetector
 	GitHub        GitHubClient
+	Events        EventHandler
 	RegistryHost  string
 }
 
-func (s *Service) registryHost() string {
-	if s.RegistryHost != "" {
-		return s.RegistryHost
+func (a *App) registryHost() string {
+	if a.RegistryHost != "" {
+		return a.RegistryHost
 	}
 	return "ghcr.io"
 }
 
-func (s *Service) registryRef(owner, repo string) string {
-	return fmt.Sprintf("%s/%s/%s-enbu", s.registryHost(), strings.ToLower(owner), strings.ToLower(repo))
+func (a *App) registryRef(owner, repo string) string {
+	return fmt.Sprintf("%s/%s/%s-enbu", a.registryHost(), strings.ToLower(owner), strings.ToLower(repo))
 }
 
-func (s *Service) secretsRef(owner, repo, env string) string {
-	return s.registryRef(owner, repo) + ":" + secretsTag(env)
+func (a *App) secretsRef(owner, repo, env string) string {
+	return a.registryRef(owner, repo) + ":" + secretsTag(env)
+}
+
+func (a *App) emit(msg string) {
+	if a.Events != nil {
+		a.Events.OnProgress(msg)
+	}
+}
+
+func (a *App) emitRetry(attempt, max int) {
+	if a.Events != nil {
+		a.Events.OnConflictRetry(attempt, max)
+	}
+}
+
+func New() *App {
+	ks, err := keystore.New()
+	var keystoreImpl KeyStore
+	if err != nil {
+		keystoreImpl = &unavailableKeyStore{err: fmt.Errorf("initializing keystore: %w", err)}
+	} else {
+		keystoreImpl = &defaultKeyStore{backend: ks}
+	}
+	return &App{
+		Registry:      &defaultRegistry{},
+		TokenProvider: &defaultTokenProvider{},
+		KeyStore:      keystoreImpl,
+		RepoDetector:  &defaultRepoDetector{},
+	}
 }
 
 type defaultRegistry struct{}
@@ -121,20 +124,4 @@ func (u *unavailableKeyStore) Store(_, _ string, _ []byte) error {
 
 func (u *unavailableKeyStore) Load(_, _ string) ([]byte, error) {
 	return nil, u.err
-}
-
-func DefaultService() *Service {
-	ks, err := keystore.New()
-	var keystoreImpl KeyStore
-	if err != nil {
-		keystoreImpl = &unavailableKeyStore{err: fmt.Errorf("initializing keystore: %w", err)}
-	} else {
-		keystoreImpl = &defaultKeyStore{backend: ks}
-	}
-	return &Service{
-		Registry:      &defaultRegistry{},
-		TokenProvider: &defaultTokenProvider{},
-		KeyStore:      keystoreImpl,
-		RepoDetector:  &defaultRepoDetector{},
-	}
 }

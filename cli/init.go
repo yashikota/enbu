@@ -11,39 +11,39 @@ import (
 
 	agecrypto "filippo.io/age"
 	"github.com/spf13/cobra"
+	"github.com/yashikota/enbu/app"
 	"github.com/yashikota/enbu/pkg/age"
-	"github.com/yashikota/enbu/pkg/bundle"
 	"github.com/yashikota/enbu/pkg/config"
 	"github.com/yashikota/enbu/pkg/keystore"
 	"github.com/yashikota/enbu/pkg/oci"
 	gh "github.com/yashikota/enbu/pkg/provider/github"
 )
 
-func newInitCommand(svc *Service) *cobra.Command {
+func newInitCommand(a *app.App) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize enbu for this repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			accessToken, username, err := svc.TokenProvider.LoadToken()
+			accessToken, username, err := a.TokenProvider.LoadToken()
 			if err != nil {
 				return err
 			}
 
-			owner, repo, err := svc.RepoDetector.LoadRepo()
+			owner, repo, err := a.RepoDetector.LoadRepo()
 			if err != nil {
 				return fmt.Errorf("detecting repository: %w (run inside a git repository)", err)
 			}
 
-			registryRef := svc.registryRef(owner, repo)
+			registryRef := fmt.Sprintf("%s/%s/%s-enbu", registryHost(a), strings.ToLower(owner), strings.ToLower(repo))
 
 			projectCfg, err := config.LoadProject()
 			configMissing := false
 			if err != nil {
 				if strings.Contains(err.Error(), "enbu.toml not found") {
 					configMissing = true
-					projectCfg = config.NewProjectWithEnvironment(defaultEnvironment)
+					projectCfg = config.NewProjectWithEnvironment(app.DefaultEnvironment)
 				} else {
 					return err
 				}
@@ -54,14 +54,14 @@ func newInitCommand(svc *Service) *cobra.Command {
 				return fmt.Errorf("finding repository root: %w", err)
 			}
 
-			existingTags, err := svc.Registry.ListTags(ctx, registryRef, accessToken)
+			existingTags, err := a.Registry.ListTags(ctx, registryRef, accessToken)
 			if err != nil && !strings.Contains(err.Error(), "404") && !strings.Contains(err.Error(), "NAME_UNKNOWN") {
 				return fmt.Errorf("checking existing setup: %w", err)
 			}
 			hasRecipients := false
 			hasSecrets := false
 			for _, tag := range existingTags {
-				if isUserRecipientTag(tag) {
+				if app.IsUserRecipientTag(tag) {
 					hasRecipients = true
 				}
 				if strings.HasPrefix(tag, "secrets-") {
@@ -75,10 +75,10 @@ func newInitCommand(svc *Service) *cobra.Command {
 				fmt.Println("Entering join mode — registering your key only.")
 			}
 
-			repoKey := repoKeystoreKey(owner, repo)
+			repoKey := app.RepoKeystoreKey(owner, repo)
 			var publicKey string
 
-			existingPriv, err := svc.KeyStore.Load(keystoreService, repoKey)
+			existingPriv, err := a.KeyStore.Load(app.KeystoreService, repoKey)
 			if err == nil && len(existingPriv) > 0 {
 				id, err := agecrypto.ParseX25519Identity(string(existingPriv))
 				if err != nil {
@@ -97,19 +97,19 @@ func newInitCommand(svc *Service) *cobra.Command {
 				publicKey = kp.PublicKey
 				fmt.Printf("Generated age public key: %s\n", publicKey)
 
-				if err := svc.KeyStore.Store(keystoreService, repoKey, []byte(kp.Identity.String())); err != nil {
+				if err := a.KeyStore.Store(app.KeystoreService, repoKey, []byte(kp.Identity.String())); err != nil {
 					return fmt.Errorf("storing private key: %w", err)
 				}
 			}
 
 			fingerprint := age.Fingerprint(publicKey)
 			tag := oci.CleanTag(fmt.Sprintf("%s-%s", username, fingerprint))
-			ref := fmt.Sprintf("%s:%s%s", registryRef, recipientTagPrefix(), tag)
+			ref := fmt.Sprintf("%s:%s%s", registryRef, app.RecipientTagPrefix(), tag)
 			fmt.Println("Pushing public key to registry...")
 			pushOpts := &oci.PushOptions{
 				SourceRepo: fmt.Sprintf("https://github.com/%s/%s", owner, repo),
 			}
-			if err := svc.Registry.Push(ctx, ref, "application/vnd.enbu.recipient.age.v1", []byte(publicKey), accessToken, pushOpts); err != nil {
+			if err := a.Registry.Push(ctx, ref, "application/vnd.enbu.recipient.age.v1", []byte(publicKey), accessToken, pushOpts); err != nil {
 				return fmt.Errorf("pushing public key to GHCR: %w", err)
 			}
 			fmt.Println("✓ Registered user public key.")
@@ -117,14 +117,14 @@ func newInitCommand(svc *Service) *cobra.Command {
 			if joinMode {
 				fmt.Println("\nYour key has been registered.")
 				if hasSecrets {
-					identities, err := loadIdentitiesForRepo(svc.KeyStore, owner, repo)
+					identities, err := app.LoadIdentitiesForRepo(a.KeyStore, owner, repo)
 					if err != nil || len(identities) == 0 {
 						fmt.Println("Could not load decryption keys; run 'enbu pull' after an existing member runs 'enbu sync'.")
 						return nil
 					}
 					env := projectCfg.CurrentEnvironment()
-					secretsRef := svc.secretsRef(owner, repo, env)
-					ok, err := verifyCurrentUserCanDecrypt(ctx, svc.Registry, secretsRef, accessToken, identities)
+					secretsRef := fmt.Sprintf("%s:secrets-%s", registryRef, oci.CleanTag(env))
+					ok, err := verifyCurrentUserCanDecrypt(ctx, a.Registry, secretsRef, accessToken, identities)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: failed to verify decryption: %v\n", err)
 						fmt.Println("Your key is registered, but we couldn't verify if you can decrypt the secrets.")
@@ -150,19 +150,20 @@ func newInitCommand(svc *Service) *cobra.Command {
 
 			ensureProjectGitignore(repoRoot, projectCfg)
 
-			fmt.Println("Committing generated files...")
-			if err := gitCommitInitFiles(repoRoot); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: auto-commit failed: %v\n", err)
-				fmt.Println("  Please commit enbu.toml and .gitignore manually.")
-			} else {
-				fmt.Println("✓ Committed enbu.toml and .gitignore")
+			if configMissing {
+				if err := gitCommitInitFiles(repoRoot); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to commit init files: %v\n", err)
+					fmt.Println("  Run: git add enbu.toml .gitignore && git commit -m 'chore: add enbu config'")
+				} else {
+					fmt.Println("✓ Committed enbu.toml and .gitignore")
+				}
 			}
 
-			fmt.Println("\nInitialization complete!")
+			fmt.Println("\n🎉 enbu initialized!")
 			fmt.Println("")
-			fmt.Println("Configure the package at:")
+			fmt.Println("Before sharing secrets, make the package at:")
 
-			ghClient := svc.GitHub
+			ghClient := a.GitHub
 			if ghClient == nil {
 				ghClient = gh.NewClient(accessToken)
 			}
@@ -183,6 +184,25 @@ func newInitCommand(svc *Service) *cobra.Command {
 	}
 
 	return cmd
+}
+
+func registryHost(a *app.App) string {
+	if a.RegistryHost != "" {
+		return a.RegistryHost
+	}
+	return "ghcr.io"
+}
+
+func verifyCurrentUserCanDecrypt(ctx context.Context, reg app.Registry, secretsRef, token string, identities []agecrypto.Identity) (bool, error) {
+	ciphertext, err := reg.Pull(ctx, secretsRef, token)
+	if err != nil {
+		return false, err
+	}
+	_, err = age.Decrypt(ciphertext, identities...)
+	if err != nil {
+		return false, nil
+	}
+	return true, nil
 }
 
 var gitignoreEntries = []string{
@@ -290,66 +310,4 @@ func gitCommitInitFiles(repoRoot string) error {
 	}
 
 	return nil
-}
-
-func pullAllRecipients(ctx context.Context, reg Registry, ref string, token string) ([]string, error) {
-	tags, err := reg.ListTags(ctx, ref, token)
-	if err != nil {
-		return nil, err
-	}
-
-	var publicKeys []string
-	for _, tag := range tags {
-		if !isUserRecipientTag(tag) {
-			continue
-		}
-		tagRef := fmt.Sprintf("%s:%s", ref, tag)
-		data, err := reg.Pull(ctx, tagRef, token)
-		if err != nil {
-			return nil, fmt.Errorf("pulling recipient %s: %w", tag, err)
-		}
-		publicKeys = append(publicKeys, string(data))
-	}
-	return publicKeys, nil
-}
-
-func secretsExists(ctx context.Context, reg Registry, ref, token string) bool {
-	_, err := reg.GetDigest(ctx, ref, token)
-	return err == nil
-}
-
-func pullSecretsWithDigest(ctx context.Context, reg Registry, ref, token string, identities ...agecrypto.Identity) (map[string]string, string, error) {
-	digest, err := reg.GetDigest(ctx, ref, token)
-	if err != nil {
-		return nil, "", err
-	}
-
-	ciphertext, err := reg.Pull(ctx, ref, token)
-	if err != nil {
-		return nil, "", err
-	}
-
-	plaintext, err := age.Decrypt(ciphertext, identities...)
-	if err != nil {
-		return nil, "", err
-	}
-
-	secrets, err := bundle.Unmarshal(plaintext)
-	if err != nil {
-		return nil, "", err
-	}
-
-	return secrets, digest, nil
-}
-
-func verifyCurrentUserCanDecrypt(ctx context.Context, reg Registry, secretsRef, token string, identities []agecrypto.Identity) (bool, error) {
-	ciphertext, err := reg.Pull(ctx, secretsRef, token)
-	if err != nil {
-		return false, err
-	}
-	_, err = age.Decrypt(ciphertext, identities...)
-	if err != nil {
-		return false, nil
-	}
-	return true, nil
 }

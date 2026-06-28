@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yashikota/enbu/app"
 )
 
 func TestSwitchCreate(t *testing.T) {
@@ -21,8 +23,8 @@ output = ".env"
 `
 	_ = os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(content), 0o644)
 
-	svc := &Service{}
-	cmd := NewWithService("test", svc)
+	a := &app.App{}
+	cmd := NewWithApp("test", a)
 	cmd.SetArgs([]string{"switch", "-c", "staging"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("switch -c staging: %v", err)
@@ -54,8 +56,8 @@ output = ".env.staging"
 `
 	_ = os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(content), 0o644)
 
-	svc := &Service{}
-	cmd := NewWithService("test", svc)
+	a := &app.App{}
+	cmd := NewWithApp("test", a)
 	cmd.SetArgs([]string{"switch", "staging"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("switch staging: %v", err)
@@ -81,8 +83,8 @@ output = ".env.dev"
 `
 	_ = os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(content), 0o644)
 
-	svc := &Service{}
-	cmd := NewWithService("test", svc)
+	a := &app.App{}
+	cmd := NewWithApp("test", a)
 	cmd.SetArgs([]string{"switch", "prod"})
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
@@ -108,15 +110,15 @@ output = ".env.staging"
 `
 	_ = os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(content), 0o644)
 
-	svc := &Service{}
+	a := &app.App{}
 
-	cmd1 := NewWithService("test", svc)
+	cmd1 := NewWithApp("test", a)
 	cmd1.SetArgs([]string{"switch", "staging"})
 	if err := cmd1.Execute(); err != nil {
 		t.Fatalf("switch staging: %v", err)
 	}
 
-	cmd2 := NewWithService("test", svc)
+	cmd2 := NewWithApp("test", a)
 	cmd2.SetArgs([]string{"switch", "-"})
 	if err := cmd2.Execute(); err != nil {
 		t.Fatalf("switch -: %v", err)
@@ -145,8 +147,8 @@ output = ".env.staging"
 `
 	_ = os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(content), 0o644)
 
-	svc := &Service{}
-	cmd := NewWithService("test", svc)
+	a := &app.App{}
+	cmd := NewWithApp("test", a)
 	cmd.SetArgs([]string{"switch", "-d", "staging"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("switch -d staging: %v", err)
@@ -172,8 +174,8 @@ output = ".env.dev"
 `
 	_ = os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(content), 0o644)
 
-	svc := &Service{}
-	cmd := NewWithService("test", svc)
+	a := &app.App{}
+	cmd := NewWithApp("test", a)
 	cmd.SetArgs([]string{"switch", "-d", "dev"})
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
@@ -199,8 +201,8 @@ output = ".env.staging"
 `
 	_ = os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(content), 0o644)
 
-	svc := &Service{}
-	cmd := NewWithService("test", svc)
+	a := &app.App{}
+	cmd := NewWithApp("test", a)
 	cmd.SetArgs([]string{"switch", "--list"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("switch --list: %v", err)
@@ -221,8 +223,8 @@ output = ".env.dev"
 `
 	_ = os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(content), 0o644)
 
-	svc := &Service{}
-	cmd := NewWithService("test", svc)
+	a := &app.App{}
+	cmd := NewWithApp("test", a)
 	cmd.SetArgs([]string{"switch", "-m", "dev", "development"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("switch -m dev development: %v", err)

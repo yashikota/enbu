@@ -2,13 +2,14 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/yashikota/enbu/app"
 )
 
 func New(version string) *cobra.Command {
-	return NewWithService(version, DefaultService())
+	return NewWithApp(version, app.New())
 }
 
-func NewWithService(version string, svc *Service) *cobra.Command {
+func NewWithApp(version string, a *app.App) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:          "enbu",
 		Short:        "Keyless .env management powered by GitHub",
@@ -18,13 +19,14 @@ func NewWithService(version string, svc *Service) *cobra.Command {
 
 	rootCmd.AddCommand(
 		newAuthCommand(),
-		newInitCommand(svc),
-		newSwitchCommand(svc),
-		newAddCommand(svc),
-		newEditCommand(svc),
-		newDeleteCommand(svc),
-		newPullCommand(svc),
-		newSyncCommand(svc),
+		newInitCommand(a),
+		newSwitchCommand(a),
+		newAddCommand(a),
+		newEditCommand(a),
+		newDeleteCommand(a),
+		newPullCommand(a),
+		newSyncCommand(a),
+		newTuiCommand(a),
 	)
 
 	return rootCmd

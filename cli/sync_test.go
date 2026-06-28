@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yashikota/enbu/app"
+	"github.com/yashikota/enbu/pkg/age"
 	"github.com/yashikota/enbu/pkg/oci"
 )
 
@@ -29,17 +31,20 @@ func (f *failingDigestRegistry) GetDigest(context.Context, string, string) (stri
 	return "", f.err
 }
 
-func TestDoSyncReturnsNonNotFoundSecretPullErrors(t *testing.T) {
-	err := doSync(
-		context.Background(),
-		&failingDigestRegistry{err: errors.New("unauthorized")},
-		"example.com/owner/repo-enbu:secrets-default",
-		"example.com/owner/repo-enbu",
-		"token",
-		nil,
-		nil,
-	)
+func TestSyncReturnsNonNotFoundSecretPullErrors(t *testing.T) {
+	kp, err := age.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
 
+	a := &app.App{
+		Registry:      &failingDigestRegistry{err: errors.New("unauthorized")},
+		TokenProvider: &deleteTestTokenProvider{},
+		RepoDetector:  &deleteTestRepoDetector{},
+		KeyStore:      &staticKeyStore{key: []byte(kp.Identity.String())},
+	}
+
+	err = a.SyncSecrets(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected error")
 	}
