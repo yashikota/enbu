@@ -2,6 +2,7 @@ package tui
 
 type secretsLoadedMsg struct {
 	secrets map[string]string
+	current string
 }
 
 type envsLoadedMsg struct {

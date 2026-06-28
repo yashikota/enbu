@@ -91,6 +91,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case secretsLoadedMsg:
 		m.loading = false
 		m.secrets = mapToEntries(msg.secrets)
+		m.current = msg.current
 		m.err = nil
 		if m.cursor >= len(m.secrets) {
 			m.cursor = max(0, len(m.secrets)-1)
@@ -433,8 +434,7 @@ func (m model) loadSecrets() tea.Cmd {
 			return errMsg{err}
 		}
 		cur, _ := m.app.CurrentEnvironment()
-		m.current = cur
-		return secretsLoadedMsg{secrets}
+		return secretsLoadedMsg{secrets: secrets, current: cur}
 	}
 }
 
