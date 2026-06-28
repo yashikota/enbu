@@ -1,6 +1,6 @@
 //go:build scenario
 
-package cli
+package test
 
 import (
 	"bytes"
@@ -10,14 +10,18 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
-	"github.com/yashikota/enbu/internal/age"
-	"github.com/yashikota/enbu/internal/oci"
+	"github.com/yashikota/enbu/pkg/age"
+	enbucli "github.com/yashikota/enbu/pkg/cli"
+	"github.com/yashikota/enbu/pkg/keystore"
+	"github.com/yashikota/enbu/pkg/oci"
+	"github.com/yashikota/enbu/pkg/provider/github"
 )
 
 type testUser struct {
-	svc     *Service
+	svc     *enbucli.Service
 	keyPair *age.KeyPair
 	name    string
 }
@@ -159,11 +163,11 @@ func setupTestUser(t *testing.T, owner, repo, username string) *testUser {
 
 	ks := newMockKeyStore()
 	repoKey := repoKeystoreKey(owner, repo)
-	if err := ks.Store(keystoreService, repoKey, []byte(kp.Identity.String())); err != nil {
+	if err := ks.Store("enbu", repoKey, []byte(kp.Identity.String())); err != nil {
 		t.Fatalf("storing key for %s: %v", username, err)
 	}
 
-	svc := &Service{
+	svc := &enbucli.Service{
 		RegistryHost:  "localhost:5000",
 		Registry:      &defaultRegistry{},
 		TokenProvider: &mockTokenProvider{accessToken: "", username: username},
@@ -175,10 +179,89 @@ func setupTestUser(t *testing.T, owner, repo, username string) *testUser {
 	return &testUser{svc: svc, keyPair: kp, name: username}
 }
 
+type defaultRegistry struct{}
+
+func (d *defaultRegistry) Push(ctx context.Context, ref string, mediaType string, data []byte, token string, opts *oci.PushOptions) error {
+	return oci.Push(ctx, ref, mediaType, data, token, opts)
+}
+
+func (d *defaultRegistry) Pull(ctx context.Context, ref string, token string) ([]byte, error) {
+	return oci.Pull(ctx, ref, token)
+}
+
+func (d *defaultRegistry) ListTags(ctx context.Context, ref string, token string) ([]string, error) {
+	return oci.ListTags(ctx, ref, token)
+}
+
+func (d *defaultRegistry) GetDigest(ctx context.Context, ref string, token string) (string, error) {
+	return oci.GetDigest(ctx, ref, token)
+}
+
+type mockTokenProvider struct {
+	accessToken string
+	username    string
+}
+
+func (m *mockTokenProvider) LoadToken() (string, string, error) {
+	return m.accessToken, m.username, nil
+}
+
+type mockRepoDetector struct {
+	owner string
+	repo  string
+}
+
+func (m *mockRepoDetector) LoadRepo() (string, string, error) {
+	return m.owner, m.repo, nil
+}
+
+type mockKeyStore struct {
+	mu   sync.RWMutex
+	data map[string][]byte
+}
+
+func newMockKeyStore() *mockKeyStore {
+	return &mockKeyStore{data: make(map[string][]byte)}
+}
+
+func (m *mockKeyStore) Store(_, key string, value []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.data[key] = append([]byte(nil), value...)
+	return nil
+}
+
+func (m *mockKeyStore) Load(_, key string) ([]byte, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	d, ok := m.data[key]
+	if !ok {
+		return nil, keystore.ErrNotFound
+	}
+	return append([]byte(nil), d...), nil
+}
+
+type mockGitHubClient struct {
+	user *github.User
+	orgs map[string]bool
+}
+
+func (m *mockGitHubClient) GetUser(_ context.Context) (*github.User, error) {
+	return m.user, nil
+}
+
+func (m *mockGitHubClient) IsOrganization(_ context.Context, login string) bool {
+	return m.orgs[login]
+}
+
+func repoKeystoreKey(owner, repo string) string {
+	return fmt.Sprintf("%s/%s", strings.ToLower(owner), strings.ToLower(repo))
+}
+
 func registerRecipient(t *testing.T, ctx context.Context, registryRef string, user *testUser) {
 	t.Helper()
-	fingerprint := keyFingerprint(user.keyPair.PublicKey)
-	tag := cleanTag(fmt.Sprintf("%s-%s", user.name, fingerprint))
+	fingerprint := age.Fingerprint(user.keyPair.PublicKey)
+	tag := oci.CleanTag(fmt.Sprintf("%s-%s", user.name, fingerprint))
 	ref := fmt.Sprintf("%s:recipient-%s", registryRef, tag)
 	if err := oci.Push(ctx, ref, "application/vnd.enbu.recipient.age.v1", []byte(user.keyPair.PublicKey), "", nil); err != nil {
 		t.Fatalf("registering recipient %s: %v", user.name, err)
@@ -221,10 +304,7 @@ func captureStdout(t *testing.T, fn func()) string {
 func pullStdout(t *testing.T, ctx context.Context, user *testUser) string {
 	t.Helper()
 	return captureStdout(t, func() {
-		cmd := newPullCommand(user.svc)
-		cmd.SetArgs([]string{"--stdout"})
-		cmd.SetContext(ctx)
-		if err := cmd.Execute(); err != nil {
+		if err := executeCommand(ctx, user.svc, "pull", "--stdout"); err != nil {
 			t.Fatalf("%s pull: %v", user.name, err)
 		}
 	})
@@ -232,12 +312,6 @@ func pullStdout(t *testing.T, ctx context.Context, user *testUser) string {
 
 func pullExpectFail(t *testing.T, ctx context.Context, user *testUser) error {
 	t.Helper()
-	cmd := newPullCommand(user.svc)
-	cmd.SetArgs([]string{"--stdout"})
-	cmd.SetContext(ctx)
-	cmd.SilenceErrors = true
-	cmd.SilenceUsage = true
-
 	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -250,34 +324,33 @@ func pullExpectFail(t *testing.T, ctx context.Context, user *testUser) error {
 		os.Stdout = origStdout
 	}()
 
-	return cmd.Execute()
+	return executeCommand(ctx, user.svc, "pull", "--stdout")
 }
 
 func addSecret(t *testing.T, ctx context.Context, user *testUser, key, value string) {
 	t.Helper()
-	cmd := newAddCommand(user.svc)
-	cmd.SetArgs([]string{key, value})
-	cmd.SetContext(ctx)
-	if err := cmd.Execute(); err != nil {
+	if err := executeCommand(ctx, user.svc, "add", key, value); err != nil {
 		t.Fatalf("%s add %s: %v", user.name, key, err)
 	}
 }
 
 func addSecretExpectFail(t *testing.T, ctx context.Context, user *testUser, key, value string) error {
 	t.Helper()
-	cmd := newAddCommand(user.svc)
-	cmd.SetArgs([]string{key, value})
-	cmd.SetContext(ctx)
-	cmd.SilenceErrors = true
-	cmd.SilenceUsage = true
-	return cmd.Execute()
+	return executeCommand(ctx, user.svc, "add", key, value)
 }
 
 func syncSecrets(t *testing.T, ctx context.Context, user *testUser) {
 	t.Helper()
-	cmd := newSyncCommand(user.svc)
-	cmd.SetContext(ctx)
-	if err := cmd.Execute(); err != nil {
+	if err := executeCommand(ctx, user.svc, "sync"); err != nil {
 		t.Fatalf("%s sync: %v", user.name, err)
 	}
+}
+
+func executeCommand(ctx context.Context, svc *enbucli.Service, args ...string) error {
+	cmd := enbucli.NewWithService("test", svc)
+	cmd.SetArgs(args)
+	cmd.SetContext(ctx)
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	return cmd.Execute()
 }

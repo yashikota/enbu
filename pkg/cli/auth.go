@@ -6,10 +6,10 @@ import (
 
 	agecrypto "filippo.io/age"
 	"github.com/spf13/cobra"
-	"github.com/yashikota/enbu/internal/auth"
-	"github.com/yashikota/enbu/internal/config"
-	gh "github.com/yashikota/enbu/internal/github"
-	"github.com/yashikota/enbu/internal/keystore"
+	"github.com/yashikota/enbu/pkg/auth"
+	"github.com/yashikota/enbu/pkg/config"
+	"github.com/yashikota/enbu/pkg/keystore"
+	gh "github.com/yashikota/enbu/pkg/provider/github"
 )
 
 const defaultClientID = "Ov23li6nFmfdF4FW9ikd"

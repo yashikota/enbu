@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/yashikota/enbu/internal/github"
-	"github.com/yashikota/enbu/internal/oci"
+	"github.com/yashikota/enbu/pkg/keystore"
+	"github.com/yashikota/enbu/pkg/oci"
+	"github.com/yashikota/enbu/pkg/provider/github"
 )
 
 type mockRegistry struct {
@@ -101,7 +102,7 @@ func (m *mockKeyStore) Load(_, key string) ([]byte, error) {
 	defer m.mu.RUnlock()
 	d, ok := m.data[key]
 	if !ok {
-		return nil, fmt.Errorf("secret not found")
+		return nil, keystore.ErrNotFound
 	}
 	return append([]byte(nil), d...), nil
 }

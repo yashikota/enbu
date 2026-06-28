@@ -1,6 +1,6 @@
 //go:build scenario
 
-package cli
+package test
 
 import (
 	"fmt"
@@ -152,21 +152,11 @@ func TestScenario_ConcurrentAdds(t *testing.T) {
 			wg.Add(2)
 			go func() {
 				defer wg.Done()
-				cmd := newAddCommand(user1.svc)
-				cmd.SetArgs([]string{"FROM_ALICE", "alice-data"})
-				cmd.SetContext(s.ctx)
-				cmd.SilenceErrors = true
-				cmd.SilenceUsage = true
-				err1 = cmd.Execute()
+				err1 = executeCommand(s.ctx, user1.svc, "add", "FROM_ALICE", "alice-data")
 			}()
 			go func() {
 				defer wg.Done()
-				cmd := newAddCommand(user2.svc)
-				cmd.SetArgs([]string{"FROM_BOB", "bob-data"})
-				cmd.SetContext(s.ctx)
-				cmd.SilenceErrors = true
-				cmd.SilenceUsage = true
-				err2 = cmd.Execute()
+				err2 = executeCommand(s.ctx, user2.svc, "add", "FROM_BOB", "bob-data")
 			}()
 			wg.Wait()
 

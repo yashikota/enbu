@@ -2,8 +2,6 @@ package cli
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -13,12 +11,12 @@ import (
 
 	agecrypto "filippo.io/age"
 	"github.com/spf13/cobra"
-	"github.com/yashikota/enbu/internal/age"
-	"github.com/yashikota/enbu/internal/bundle"
-	"github.com/yashikota/enbu/internal/config"
-	gh "github.com/yashikota/enbu/internal/github"
-	"github.com/yashikota/enbu/internal/keystore"
-	"github.com/yashikota/enbu/internal/oci"
+	"github.com/yashikota/enbu/pkg/age"
+	"github.com/yashikota/enbu/pkg/bundle"
+	"github.com/yashikota/enbu/pkg/config"
+	"github.com/yashikota/enbu/pkg/keystore"
+	"github.com/yashikota/enbu/pkg/oci"
+	gh "github.com/yashikota/enbu/pkg/provider/github"
 )
 
 func newInitCommand(svc *Service) *cobra.Command {
@@ -93,8 +91,8 @@ func newInitCommand(svc *Service) *cobra.Command {
 				}
 			}
 
-			fingerprint := keyFingerprint(publicKey)
-			tag := cleanTag(fmt.Sprintf("%s-%s", username, fingerprint))
+			fingerprint := age.Fingerprint(publicKey)
+			tag := oci.CleanTag(fmt.Sprintf("%s-%s", username, fingerprint))
 			ref := fmt.Sprintf("%s:recipient-%s", registryRef, tag)
 			fmt.Println("Pushing public key to registry...")
 			pushOpts := &oci.PushOptions{
@@ -236,27 +234,6 @@ func gitCommitInitFiles(repoRoot string) error {
 	}
 
 	return nil
-}
-
-func cleanTag(s string) string {
-	var sb strings.Builder
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' {
-			sb.WriteRune(r)
-		} else {
-			sb.WriteRune('-')
-		}
-	}
-	res := sb.String()
-	if len(res) > 128 {
-		res = res[:128]
-	}
-	return res
-}
-
-func keyFingerprint(pubKey string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(pubKey)))
-	return hex.EncodeToString(sum[:])[:8]
 }
 
 func isUserRecipientTag(tag string) bool {

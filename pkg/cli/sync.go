@@ -10,9 +10,9 @@ import (
 
 	agecrypto "filippo.io/age"
 	"github.com/spf13/cobra"
-	"github.com/yashikota/enbu/internal/age"
-	"github.com/yashikota/enbu/internal/bundle"
-	"github.com/yashikota/enbu/internal/oci"
+	"github.com/yashikota/enbu/pkg/age"
+	"github.com/yashikota/enbu/pkg/bundle"
+	"github.com/yashikota/enbu/pkg/oci"
 )
 
 var errConflict = errors.New("secrets changed by another user")

@@ -1,12 +1,12 @@
 //go:build scenario
 
-package oci_test
+package test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/yashikota/enbu/internal/oci"
+	"github.com/yashikota/enbu/pkg/oci"
 )
 
 const scenarioRegistryRef = "localhost:5000/test/enbu-scenario-registry"

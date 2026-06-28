@@ -130,42 +130,6 @@ func TestEnsureGitignore_NoTrailingNewline(t *testing.T) {
 	}
 }
 
-func TestCleanTag(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"user-abc123", "user-abc123"},
-		{"user@host", "user-host"},
-		{"a/b/c", "a-b-c"},
-		{strings.Repeat("x", 200), strings.Repeat("x", 128)},
-	}
-
-	for _, tt := range tests {
-		got := cleanTag(tt.input)
-		if got != tt.want {
-			t.Errorf("cleanTag(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
-func TestKeyFingerprint(t *testing.T) {
-	fp := keyFingerprint("age1abc123")
-	if len(fp) != 8 {
-		t.Errorf("fingerprint length = %d, want 8", len(fp))
-	}
-
-	fp2 := keyFingerprint("age1abc123")
-	if fp != fp2 {
-		t.Error("fingerprint not deterministic")
-	}
-
-	fp3 := keyFingerprint("age1different")
-	if fp == fp3 {
-		t.Error("different keys produced same fingerprint")
-	}
-}
-
 func TestIsUserRecipientTag(t *testing.T) {
 	tests := []struct {
 		tag  string

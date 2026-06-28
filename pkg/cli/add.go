@@ -5,9 +5,9 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/yashikota/enbu/internal/age"
-	"github.com/yashikota/enbu/internal/bundle"
-	"github.com/yashikota/enbu/internal/oci"
+	"github.com/yashikota/enbu/pkg/age"
+	"github.com/yashikota/enbu/pkg/bundle"
+	"github.com/yashikota/enbu/pkg/oci"
 )
 
 const maxRetries = 3
