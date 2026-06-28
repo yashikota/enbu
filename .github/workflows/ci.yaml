@@ -31,6 +31,15 @@ jobs:
       - name: Check
         run: task check
 
+      - name: Verify no diff
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            git diff --exit-code || true
+            echo "::error::CI checks produced file changes. Run 'task check' locally and commit the result."
+            exit 1
+          fi
+
   test:
     name: Unit test
     runs-on: ubuntu-latest
