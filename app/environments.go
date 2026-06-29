@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/yashikota/enbu/config"
@@ -86,6 +87,10 @@ func (a *App) CreateEnvironment(name string) error {
 
 	cfg, err := config.LoadProject()
 	if err != nil {
+		var notFound config.ErrConfigNotFound
+		if !errors.As(err, &notFound) {
+			return err
+		}
 		cfg = config.NewProjectWithEnvironment(name)
 		if err := config.SaveProject(cfg); err != nil {
 			return err

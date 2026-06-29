@@ -201,11 +201,9 @@ func TestEnvironmentWithoutSection(t *testing.T) {
 		t.Fatalf("got output %q, want .env", env.Output)
 	}
 
-	env, err = cfg.Environment("dev")
-	if err == nil {
+	if _, err = cfg.Environment("dev"); err == nil {
 		t.Fatal("expected error for undefined non-default env without sections")
 	}
-	_ = env
 }
 
 func TestSaveProject(t *testing.T) {

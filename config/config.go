@@ -16,6 +16,13 @@ type RepoConfig struct {
 	Repo  string
 }
 
+// ErrConfigNotFound is returned when enbu.toml does not exist.
+// Callers that need to distinguish "file missing" from "file invalid"
+// should use errors.As(err, &config.ErrConfigNotFound{}).
+type ErrConfigNotFound struct{ msg string }
+
+func (e ErrConfigNotFound) Error() string { return e.msg }
+
 const currentVersion = "v1alpha1"
 
 type ProjectConfig struct {
@@ -43,7 +50,7 @@ func LoadRepo() (*RepoConfig, error) {
 func LoadProject() (*ProjectConfig, error) {
 	path, err := findProjectConfig()
 	if err != nil {
-		return nil, err
+		return nil, ErrConfigNotFound{msg: err.Error()}
 	}
 
 	var cfg ProjectConfig
