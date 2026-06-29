@@ -3,12 +3,14 @@ package app
 import (
 	"context"
 	"errors"
-	agecrypto "filippo.io/age"
 	"fmt"
 	"math/rand/v2"
 	"os"
 	"time"
 
+	agecrypto "filippo.io/age"
+
+	"github.com/yashikota/enbu/policy"
 	"github.com/yashikota/enbu/utils/age"
 	"github.com/yashikota/enbu/utils/bundle"
 	"github.com/yashikota/enbu/utils/oci"
@@ -381,7 +383,7 @@ func (a *App) SyncSecrets(ctx context.Context, env string) error {
 	backoff := 1 * time.Second
 
 	for attempt := range syncMaxRetries {
-		err := a.doSync(ctx, secretsRef, recipientsRef, accessToken, identities, pushOpts)
+		err := a.doSync(ctx, secretsRef, recipientsRef, accessToken, identities, pushOpts, owner, repo, resolved.Name)
 		if err == nil {
 			return nil
 		}
@@ -407,7 +409,7 @@ func (a *App) SyncSecrets(ctx context.Context, env string) error {
 	return nil
 }
 
-func (a *App) doSync(ctx context.Context, secretsRef, recipientsRef, token string, identities []agecrypto.Identity, pushOpts *oci.PushOptions) error {
+func (a *App) doSync(ctx context.Context, secretsRef, recipientsRef, token string, identities []agecrypto.Identity, pushOpts *oci.PushOptions, owner, repo, env string) error {
 	secrets, baseDigest, err := PullSecretsWithDigest(ctx, a.Registry, secretsRef, token, identities...)
 	if err != nil {
 		if IsNotFoundError(err) {
@@ -417,12 +419,20 @@ func (a *App) doSync(ctx context.Context, secretsRef, recipientsRef, token strin
 		return fmt.Errorf("pulling secrets: %w", err)
 	}
 
-	publicKeys, err := PullAllRecipients(ctx, a.Registry, recipientsRef, token)
+	recipients, err := PullAllRecipientsWithMeta(ctx, a.Registry, recipientsRef, token)
 	if err != nil {
 		return fmt.Errorf("pulling recipients: %w", err)
 	}
-	if len(publicKeys) == 0 {
+	if len(recipients) == 0 {
 		return fmt.Errorf("no recipients found")
+	}
+
+	allowedKeys, err := a.filterRecipientsByPolicy(ctx, recipients, owner, repo, env)
+	if err != nil {
+		return err
+	}
+	if len(allowedKeys) == 0 {
+		return fmt.Errorf("policy denied all recipients")
 	}
 
 	if baseDigest != "" {
@@ -433,7 +443,7 @@ func (a *App) doSync(ctx context.Context, secretsRef, recipientsRef, token strin
 	}
 
 	plaintext := bundle.Marshal(secrets)
-	ciphertext, err := age.EncryptForPublicKeys(plaintext, publicKeys)
+	ciphertext, err := age.EncryptForPublicKeys(plaintext, allowedKeys)
 	if err != nil {
 		return fmt.Errorf("encrypting secrets: %w", err)
 	}
@@ -442,6 +452,113 @@ func (a *App) doSync(ctx context.Context, secretsRef, recipientsRef, token strin
 		return fmt.Errorf("pushing encrypted secrets: %w", err)
 	}
 
-	a.emit(fmt.Sprintf("Synchronized secrets for %d recipients (%d secrets)", len(publicKeys), len(secrets)))
+	a.emit(fmt.Sprintf("Synchronized secrets for %d recipients (%d secrets)", len(allowedKeys), len(secrets)))
 	return nil
+}
+
+func (a *App) filterRecipientsByPolicy(ctx context.Context, recipients []Recipient, owner, repo, env string) ([]string, error) {
+	evaluator, err := policy.Load(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("loading policy: %w", err)
+	}
+
+	if evaluator == nil {
+		keys := make([]string, len(recipients))
+		for i, r := range recipients {
+			keys[i] = r.PublicKey
+		}
+		return keys, nil
+	}
+
+	isOrg := false
+	if a.Platform != nil {
+		isOrg = a.Platform.IsOrganization(ctx, owner)
+	}
+
+	recipientData, err := a.fetchRecipientData(ctx, recipients, owner, repo, isOrg)
+	if err != nil {
+		return nil, err
+	}
+
+	var allowedKeys []string
+	for _, r := range recipients {
+		rd := recipientData[r.Username]
+		input := &policy.Input{
+			TargetEnv: env,
+			Recipient: policy.RecipientInput{
+				Username:   r.Username,
+				Teams:      rd.teams,
+				Permission: rd.permission,
+			},
+			Repo: policy.RepoInput{Owner: owner, Name: repo, IsOrg: isOrg},
+		}
+
+		allowed, err := evaluator.Evaluate(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("evaluating policy for %s: %w", r.Username, err)
+		}
+		if allowed {
+			allowedKeys = append(allowedKeys, r.PublicKey)
+		} else {
+			a.emit(fmt.Sprintf("Policy denied: %s", r.Username))
+		}
+	}
+	return allowedKeys, nil
+}
+
+type recipientGitHubData struct {
+	teams      []string
+	permission string
+}
+
+func (a *App) fetchRecipientData(ctx context.Context, recipients []Recipient, owner, repo string, isOrg bool) (map[string]recipientGitHubData, error) {
+	if a.Platform == nil {
+		result := make(map[string]recipientGitHubData, len(recipients))
+		for _, r := range recipients {
+			result[r.Username] = recipientGitHubData{}
+		}
+		return result, nil
+	}
+
+	type fetchResult struct {
+		username string
+		data     recipientGitHubData
+		err      error
+	}
+
+	ch := make(chan fetchResult, len(recipients))
+	for _, r := range recipients {
+		r := r
+		go func() {
+			var rd recipientGitHubData
+			if isOrg {
+				teams, err := a.Platform.GetUserTeams(ctx, owner, r.Username)
+				if err != nil {
+					ch <- fetchResult{username: r.Username, err: fmt.Errorf("getting teams for %s: %w", r.Username, err)}
+					return
+				}
+				rd.teams = teams
+			}
+
+			perm, err := a.Platform.GetCollaboratorPermission(ctx, owner, repo, r.Username)
+			if err != nil {
+				ch <- fetchResult{username: r.Username, err: fmt.Errorf("getting permission for %s: %w", r.Username, err)}
+				return
+			}
+			rd.permission = perm
+			ch <- fetchResult{username: r.Username, data: rd}
+		}()
+	}
+
+	out := make(map[string]recipientGitHubData, len(recipients))
+	for range recipients {
+		r := <-ch
+		if r.err != nil {
+			a.emit(fmt.Sprintf("Warning: %v (denying)", r.err))
+			out[r.username] = recipientGitHubData{}
+			continue
+		}
+		out[r.username] = r.data
+	}
+	return out, nil
 }
