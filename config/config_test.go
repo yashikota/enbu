@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -81,7 +82,7 @@ func TestLoadProjectConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	content := `version = "0.1"` + "\n"
+	content := `version = "v1alpha1"` + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -90,8 +91,8 @@ func TestLoadProjectConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProject: %v", err)
 	}
-	if cfg.Version != "0.1" {
-		t.Fatalf("got version %q, want %q", cfg.Version, "0.1")
+	if cfg.Version != "v1alpha1" {
+		t.Fatalf("got version %q, want %q", cfg.Version, "v1alpha1")
 	}
 	env, err := cfg.Environment("default")
 	if err != nil {
@@ -113,7 +114,7 @@ func TestLoadProjectConfigWithEnvironments(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	content := `version = "0.1"
+	content := `version = "v1alpha1"
 
 [env.dev]
 output = ".env.dev"
@@ -165,6 +166,46 @@ func TestLoadProjectConfigNotFound(t *testing.T) {
 	}
 }
 
+func TestLoadProjectUnsupportedVersion(t *testing.T) {
+	versions := []string{"", "0.1", "v2", "1.0"}
+	for _, v := range versions {
+		t.Run(v, func(t *testing.T) {
+			dir := t.TempDir()
+			origDir, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chdir(origDir) })
+			if err := os.Chdir(dir); err != nil {
+				t.Fatal(err)
+			}
+			content := fmt.Sprintf("version = %q\n", v)
+			if err := os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, err = LoadProject()
+			if err == nil {
+				t.Fatalf("expected error for version %q", v)
+			}
+		})
+	}
+}
+
+func TestEnvironmentWithoutSection(t *testing.T) {
+	cfg := &ProjectConfig{Version: "v1alpha1"}
+	env, err := cfg.Environment("default")
+	if err != nil {
+		t.Fatalf("Environment(default) with no sections: %v", err)
+	}
+	if env.Output != ".env" {
+		t.Fatalf("got output %q, want .env", env.Output)
+	}
+
+	if _, err = cfg.Environment("dev"); err == nil {
+		t.Fatal("expected error for undefined non-default env without sections")
+	}
+}
+
 func TestSaveProject(t *testing.T) {
 	dir := t.TempDir()
 	origDir, err := os.Getwd()
@@ -185,11 +226,11 @@ func TestSaveProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProject after save: %v", err)
 	}
-	if loaded.Version != "0.1" {
-		t.Fatalf("got version %q, want %q", loaded.Version, "0.1")
+	if loaded.Version != "v1alpha1" {
+		t.Fatalf("got version %q, want %q", loaded.Version, "v1alpha1")
 	}
-	if loaded.Default != "dev" {
-		t.Fatalf("got default %q, want dev", loaded.Default)
+	if loaded.DefaultEnv != "dev" {
+		t.Fatalf("got default %q, want dev", loaded.DefaultEnv)
 	}
 	env, err := loaded.Environment("dev")
 	if err != nil {
@@ -202,8 +243,8 @@ func TestSaveProject(t *testing.T) {
 
 func TestNewProjectWithEnvironment(t *testing.T) {
 	cfg := NewProjectWithEnvironment("dev")
-	if cfg.Default != "dev" {
-		t.Fatalf("got default %q, want dev", cfg.Default)
+	if cfg.DefaultEnv != "dev" {
+		t.Fatalf("got default %q, want dev", cfg.DefaultEnv)
 	}
 	dev, err := cfg.Environment("dev")
 	if err != nil {
@@ -216,8 +257,8 @@ func TestNewProjectWithEnvironment(t *testing.T) {
 
 func TestNewProjectWithEnvironmentDefault(t *testing.T) {
 	cfg := NewProjectWithEnvironment("")
-	if cfg.Default != "default" {
-		t.Fatalf("got default %q, want default", cfg.Default)
+	if cfg.DefaultEnv != "default" {
+		t.Fatalf("got default %q, want default", cfg.DefaultEnv)
 	}
 	env, err := cfg.Environment("default")
 	if err != nil {
@@ -263,8 +304,8 @@ func TestRenameEnvironment(t *testing.T) {
 	if !cfg.HasEnvironment("development") {
 		t.Fatal("development should exist")
 	}
-	if cfg.Default != "development" {
-		t.Fatalf("default should be updated, got %q", cfg.Default)
+	if cfg.DefaultEnv != "development" {
+		t.Fatalf("default should be updated, got %q", cfg.DefaultEnv)
 	}
 }
 

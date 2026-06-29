@@ -1,0 +1,5 @@
+[[rule]]
+include = ["**/enbu.toml"]
+
+[rule.schema]
+path = "enbu.schema.json"

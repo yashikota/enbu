@@ -12,8 +12,8 @@ func TestSwitchEnvironmentWithoutLocalFile(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	_ = os.Chdir(dir)
 
-	cfg := `version = "0.1"
-default = "dev"
+	cfg := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"

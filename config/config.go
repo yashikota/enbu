@@ -16,9 +16,18 @@ type RepoConfig struct {
 	Repo  string
 }
 
+// ErrConfigNotFound is returned when enbu.toml does not exist.
+// Callers that need to distinguish "file missing" from "file invalid"
+// should use errors.As(err, &config.ErrConfigNotFound{}).
+type ErrConfigNotFound struct{ msg string }
+
+func (e ErrConfigNotFound) Error() string { return e.msg }
+
+const currentVersion = "v1alpha1"
+
 type ProjectConfig struct {
 	Version      string                       `toml:"version"`
-	Default      string                       `toml:"default,omitempty"`
+	DefaultEnv   string                       `toml:"default_env,omitempty"`
 	Environments map[string]EnvironmentConfig `toml:"env,omitempty"`
 }
 
@@ -41,12 +50,15 @@ func LoadRepo() (*RepoConfig, error) {
 func LoadProject() (*ProjectConfig, error) {
 	path, err := findProjectConfig()
 	if err != nil {
-		return nil, err
+		return nil, ErrConfigNotFound{msg: err.Error()}
 	}
 
 	var cfg ProjectConfig
 	if _, err := toml.DecodeFile(path, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing enbu.toml: %w", err)
+	}
+	if cfg.Version != currentVersion {
+		return nil, fmt.Errorf("enbu.toml: unsupported version %q (run 'enbu init' to recreate)", cfg.Version)
 	}
 	return &cfg, nil
 }
@@ -133,21 +145,21 @@ func NewProjectWithEnvironment(name string) *ProjectConfig {
 		name: {Output: DefaultOutput(name)},
 	}
 	return &ProjectConfig{
-		Version:      "0.1",
-		Default:      name,
+		Version:      currentVersion,
+		DefaultEnv:   name,
 		Environments: envs,
 	}
 }
 
 func (cfg *ProjectConfig) CurrentEnvironment() string {
-	if cfg.Default != "" {
-		return cfg.Default
+	if cfg.DefaultEnv != "" {
+		return cfg.DefaultEnv
 	}
 	return "default"
 }
 
 func (cfg *ProjectConfig) SetDefault(name string) {
-	cfg.Default = name
+	cfg.DefaultEnv = name
 }
 
 func (cfg *ProjectConfig) AddEnvironment(name string) error {
@@ -157,9 +169,9 @@ func (cfg *ProjectConfig) AddEnvironment(name string) error {
 	if cfg.Environments == nil {
 		cfg.Environments = make(map[string]EnvironmentConfig)
 	}
-	if len(cfg.Environments) == 0 && cfg.Default == "" {
+	if len(cfg.Environments) == 0 && cfg.DefaultEnv == "" {
 		cfg.Environments["default"] = EnvironmentConfig{Output: DefaultOutput("default")}
-		cfg.Default = "default"
+		cfg.DefaultEnv = "default"
 	}
 	if _, exists := cfg.Environments[name]; exists {
 		return fmt.Errorf("environment %q already exists", name)
@@ -173,8 +185,8 @@ func (cfg *ProjectConfig) RemoveEnvironment(name string) error {
 		return fmt.Errorf("environment %q does not exist", name)
 	}
 	delete(cfg.Environments, name)
-	if cfg.Default == name {
-		cfg.Default = ""
+	if cfg.DefaultEnv == name {
+		cfg.DefaultEnv = ""
 	}
 	return nil
 }
@@ -193,8 +205,8 @@ func (cfg *ProjectConfig) RenameEnvironment(oldName, newName string) error {
 	delete(cfg.Environments, oldName)
 	env.Output = DefaultOutput(newName)
 	cfg.Environments[newName] = env
-	if cfg.Default == oldName {
-		cfg.Default = newName
+	if cfg.DefaultEnv == oldName {
+		cfg.DefaultEnv = newName
 	}
 	return nil
 }

@@ -76,7 +76,7 @@ func TestEnvironmentSecretsAreIsolated(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	config := `version = "0.1"
+	config := `version = "v1alpha1"
 
 [env.dev]
 output = ".env.dev"

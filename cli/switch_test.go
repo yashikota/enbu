@@ -15,8 +15,8 @@ func TestSwitchCreate(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	_ = os.Chdir(dir)
 
-	content := `version = "0.1"
-default = "default"
+	content := `version = "v1alpha1"
+default_env = "default"
 
 [env.default]
 output = ".env"
@@ -34,7 +34,7 @@ output = ".env"
 	if !strings.Contains(string(data), "staging") {
 		t.Fatal("staging not in enbu.toml")
 	}
-	if !strings.Contains(string(data), `default = "staging"`) {
+	if !strings.Contains(string(data), `default_env = "staging"`) {
 		t.Fatal("default not set to staging")
 	}
 }
@@ -45,8 +45,8 @@ func TestSwitchToExisting(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	_ = os.Chdir(dir)
 
-	content := `version = "0.1"
-default = "dev"
+	content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -64,7 +64,7 @@ output = ".env.staging"
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, "enbu.toml"))
-	if !strings.Contains(string(data), `default = "staging"`) {
+	if !strings.Contains(string(data), `default_env = "staging"`) {
 		t.Fatal("default not set to staging")
 	}
 }
@@ -75,8 +75,8 @@ func TestSwitchNonExistent(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	_ = os.Chdir(dir)
 
-	content := `version = "0.1"
-default = "dev"
+	content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -99,8 +99,8 @@ func TestSwitchPrevious(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	_ = os.Chdir(dir)
 
-	content := `version = "0.1"
-default = "dev"
+	content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -125,7 +125,7 @@ output = ".env.staging"
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, "enbu.toml"))
-	if !strings.Contains(string(data), `default = "dev"`) {
+	if !strings.Contains(string(data), `default_env = "dev"`) {
 		t.Fatalf("expected default to be dev, got: %s", data)
 	}
 }
@@ -136,8 +136,8 @@ func TestSwitchDelete(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	_ = os.Chdir(dir)
 
-	content := `version = "0.1"
-default = "dev"
+	content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -166,8 +166,8 @@ func TestSwitchDeleteCurrentFails(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	_ = os.Chdir(dir)
 
-	content := `version = "0.1"
-default = "dev"
+	content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -190,8 +190,8 @@ func TestSwitchList(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	_ = os.Chdir(dir)
 
-	content := `version = "0.1"
-default = "dev"
+	content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -215,8 +215,8 @@ func TestSwitchMove(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	_ = os.Chdir(dir)
 
-	content := `version = "0.1"
-default = "dev"
+	content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -237,7 +237,7 @@ output = ".env.dev"
 	if !strings.Contains(string(data), "development") {
 		t.Fatal("development not in enbu.toml")
 	}
-	if !strings.Contains(string(data), `default = "development"`) {
+	if !strings.Contains(string(data), `default_env = "development"`) {
 		t.Fatal("default not updated to development")
 	}
 }
@@ -248,8 +248,8 @@ func TestSwitchRejectsTwoArgs(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	_ = os.Chdir(dir)
 
-	_ = os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(`version = "0.1"
-default = "dev"
+	_ = os.WriteFile(filepath.Join(dir, "enbu.toml"), []byte(`version = "v1alpha1"
+default_env = "dev"
 [env.dev]
 output = ".env.dev"
 `), 0o644)
