@@ -34,8 +34,10 @@ type deleteExpectedDigestRegistry struct {
 
 func (d *deleteExpectedDigestRegistry) Push(_ context.Context, _ string, _ string, _ []byte, _ string, opts *oci.PushOptions) error {
 	d.pushes++
-	if opts != nil {
-		d.gotExpected = opts.ExpectedDigest
+	if d.pushes == 1 {
+		if opts != nil {
+			d.gotExpected = opts.ExpectedDigest
+		}
 	}
 	return d.pushErr
 }
@@ -89,8 +91,8 @@ func TestDeleteCommandPassesBaseDigestToPush(t *testing.T) {
 	if reg.gotExpected != "sha256:base" {
 		t.Fatalf("expected push to receive base digest, got %q", reg.gotExpected)
 	}
-	if reg.pushes != 1 {
-		t.Fatalf("expected 1 push, got %d", reg.pushes)
+	if reg.pushes != 2 {
+		t.Fatalf("expected 2 push (main + snapshot), got %d", reg.pushes)
 	}
 }
 

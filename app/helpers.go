@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	agecrypto "filippo.io/age"
 	"github.com/yashikota/enbu/config"
@@ -167,4 +169,31 @@ func IsNotInitializedError(err error) bool {
 	s := err.Error()
 	return strings.Contains(s, "enbu.toml not found") ||
 		strings.Contains(s, "no private key found")
+}
+
+func snapshotTag(env string) string {
+	if env == "" {
+		env = DefaultEnvironment
+	}
+	return fmt.Sprintf("secrets-%s-%d", oci.CleanTag(env), time.Now().UnixMilli())
+}
+
+func IsSnapshotTag(env, tag string) bool {
+	prefix := "secrets-" + oci.CleanTag(env) + "-"
+	if !strings.HasPrefix(tag, prefix) {
+		return false
+	}
+	suffix := strings.TrimPrefix(tag, prefix)
+	_, err := strconv.ParseInt(suffix, 10, 64)
+	return err == nil
+}
+
+func snapshotTimestamp(env, tag string) (time.Time, bool) {
+	prefix := "secrets-" + oci.CleanTag(env) + "-"
+	suffix := strings.TrimPrefix(tag, prefix)
+	ts, err := strconv.ParseInt(suffix, 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.UnixMilli(ts), true
 }
