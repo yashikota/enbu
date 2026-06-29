@@ -263,8 +263,8 @@ func TestScenario_SyncBeforeFirstSecretThenTeamCanPull(t *testing.T) {
 func TestScenario_EnvironmentSecretsAreIsolated(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
-			content := `version = "0.1"
-default = "dev"
+			content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -339,8 +339,8 @@ func TestScenario_FullLifecycleMultiStage(t *testing.T) {
 func TestScenario_MultiEnvironmentSameRecipient(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
-			content := `version = "0.1"
-default = "dev"
+			content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -372,8 +372,8 @@ output = ".env.prod"
 func TestScenario_EnvironmentIndependentEditsAndDeletes(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
-			content := `version = "0.1"
-default = "dev"
+			content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -425,8 +425,8 @@ output = ".env.prod"
 func TestScenario_SyncReEncryptsForAllRecipients(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
-			content := `version = "0.1"
-default = "dev"
+			content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -458,8 +458,8 @@ output = ".env.prod"
 func TestScenario_LateJoinerGetsAllEnvironments(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
-			content := `version = "0.1"
-default = "dev"
+			content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -491,8 +491,8 @@ output = ".env.staging"
 func TestScenario_ConcurrentSyncsOnDifferentEnvironments(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
-			content := `version = "0.1"
-default = "dev"
+			content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -539,8 +539,8 @@ output = ".env.prod"
 func TestScenario_DefaultEnvironmentUsedWhenNoEnvFlag(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config with dev as default", func(t *testing.T, s *ScenarioState) {
-			content := `version = "0.1"
-default = "dev"
+			content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -563,8 +563,8 @@ output = ".env.prod"
 func TestScenario_EnvFlagOverridesDefault(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config with dev as default", func(t *testing.T, s *ScenarioState) {
-			content := `version = "0.1"
-default = "dev"
+			content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -590,8 +590,8 @@ output = ".env.prod"
 func TestScenario_EditInOneEnvDoesNotAffectOther(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
-			content := `version = "0.1"
-default = "dev"
+			content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -622,8 +622,8 @@ output = ".env.prod"
 func TestScenario_SyncOnEmptyEnvironmentIsNoop(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
-			content := `version = "0.1"
-default = "dev"
+			content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -648,8 +648,8 @@ output = ".env.empty"
 func TestScenario_ManyUsersAllEnvironments(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
-			content := `version = "0.1"
-default = "dev"
+			content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"
@@ -685,8 +685,8 @@ output = ".env.prod"
 func TestScenario_DeleteAllSecretsInEnvironment(t *testing.T) {
 	RunScenario(t,
 		StepFunc("environment config exists", func(t *testing.T, s *ScenarioState) {
-			content := `version = "0.1"
-default = "dev"
+			content := `version = "v1alpha1"
+default_env = "dev"
 
 [env.dev]
 output = ".env.dev"

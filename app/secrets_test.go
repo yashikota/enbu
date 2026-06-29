@@ -225,8 +225,8 @@ func TestPullSecretsToFile_WritesFile(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	_ = os.Chdir(dir)
 
-	if err := os.WriteFile("enbu.toml", []byte(`version = "0.1"
-default = "dev"
+	if err := os.WriteFile("enbu.toml", []byte(`version = "v1alpha1"
+default_env = "dev"
 [env.dev]
 output = ".env.dev"
 `), 0o644); err != nil {
@@ -255,8 +255,8 @@ func TestPullSecretsToFile_ErrorWhenCannotDecrypt(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	_ = os.Chdir(dir)
 
-	if err := os.WriteFile("enbu.toml", []byte(`version = "0.1"
-default = "dev"
+	if err := os.WriteFile("enbu.toml", []byte(`version = "v1alpha1"
+default_env = "dev"
 [env.dev]
 output = ".env.dev"
 `), 0o644); err != nil {
