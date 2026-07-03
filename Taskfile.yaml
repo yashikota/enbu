@@ -27,31 +27,29 @@ tasks:
   frontend:lint:
     dir: web/frontend
     cmds:
-      - pnpm exec tsgo -p tsconfig.app.json
-      - pnpm exec oxlint ./src --ignore-pattern routeTree.gen.ts
+      - pnpm run typecheck
+      - pnpm run lint
 
   frontend:fmt:
     dir: web/frontend
     cmds:
-      - pnpm exec oxfmt ./src
+      - pnpm run fmt
 
   frontend:test:
     dir: web/frontend
     cmds:
-      - pnpm exec vitest run
+      - pnpm run test
 
   frontend:check:
     dir: web/frontend
     cmds:
-      - task: frontend:lint
-      - task: frontend:fmt
-      - task: frontend:test
+      - pnpm run check
 
   build:frontend:
     dir: web/frontend
     cmds:
       - pnpm install --frozen-lockfile
-      - pnpm exec vite build
+      - pnpm run build
 
   build:
     cmds:

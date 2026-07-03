@@ -8,10 +8,10 @@
     "build": "vite build",
     "typecheck": "tsgo -p tsconfig.app.json",
     "lint": "oxlint ./src --ignore-pattern routeTree.gen.ts",
-    "fmt": "oxfmt ./src --ignore routeTree.gen.ts",
-    "fmt:check": "oxfmt --check ./src --ignore routeTree.gen.ts",
+    "fmt": "oxfmt ./src",
+    "fmt:check": "oxfmt --check ./src",
     "test": "vitest run",
-    "check": "pnpm run typecheck && pnpm run lint && pnpm run fmt:check",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run fmt:check && pnpm run test",
     "preview": "vite preview"
   },
   "dependencies": {
