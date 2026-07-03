@@ -33,8 +33,16 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
-	s.state = generateToken()
-	redirectURL := auth.AuthorizeURL(s.clientID, s.state)
+	state := generateToken()
+	http.SetCookie(w, &http.Cookie{
+		Name:     "oauth_state",
+		Value:    state,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   300,
+	})
+	redirectURL := auth.AuthorizeURL(s.clientID, state)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"redirect_url": redirectURL,
 	})
@@ -42,11 +50,19 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
-	if state == "" || state != s.state {
+	cookie, err := r.Cookie("oauth_state")
+	if err != nil || state == "" || state != cookie.Value {
 		writeError(w, http.StatusBadRequest, "INVALID_STATE", "invalid OAuth state")
 		return
 	}
-	s.state = ""
+	// Clear the state cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "oauth_state",
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		MaxAge:   -1,
+	})
 
 	code := r.URL.Query().Get("code")
 	if code == "" {

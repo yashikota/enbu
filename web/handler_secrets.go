@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 )
 
 func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
@@ -14,9 +15,15 @@ func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]map[string]string, 0, len(secrets))
-	for k, v := range secrets {
-		items = append(items, map[string]string{"key": k, "value": v})
+	keys := make([]string, 0, len(secrets))
+	for k := range secrets {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	items := make([]map[string]string, len(keys))
+	for i, k := range keys {
+		items[i] = map[string]string{"key": k, "value": secrets[k]}
 	}
 
 	currentEnv, _ := s.app.CurrentEnvironment()

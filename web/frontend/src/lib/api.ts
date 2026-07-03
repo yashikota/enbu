@@ -1,16 +1,13 @@
-let csrfToken = "";
-
-export function setCsrfToken(token: string) {
-  csrfToken = token;
+function getCsrfToken(): string {
+  const match = document.cookie.match(/(?:^|; )enbu_csrf=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : "";
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "X-ENBU-Token": getCsrfToken(),
   };
-  if (csrfToken) {
-    headers["X-ENBU-Token"] = csrfToken;
-  }
 
   const res = await fetch(path, {
     method,

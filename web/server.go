@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/yashikota/enbu/app"
 )
@@ -16,7 +17,6 @@ var ClientSecret string
 type Server struct {
 	app       *app.App
 	csrfToken string
-	state     string
 	mux       *http.ServeMux
 	clientID  string
 }
@@ -56,7 +56,30 @@ func NewServer(a *app.App, clientID string, frontend fs.FS) *Server {
 	mux.HandleFunc("POST /api/history/{index}/restore", s.csrfMiddleware(s.handleRestoreHistory))
 
 	if frontend != nil {
-		mux.Handle("/", http.FileServerFS(frontend))
+		fileServer := http.FileServerFS(frontend)
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			// Set CSRF token cookie on every page load
+			http.SetCookie(w, &http.Cookie{
+				Name:     "enbu_csrf",
+				Value:    s.csrfToken,
+				Path:     "/",
+				SameSite: http.SameSiteStrictMode,
+			})
+
+			path := strings.TrimPrefix(r.URL.Path, "/")
+			if path == "" {
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+			// Serve static file if it exists
+			if _, err := fs.Stat(frontend, path); err == nil {
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+			// SPA fallback: serve index.html for client-side routes
+			r.URL.Path = "/"
+			fileServer.ServeHTTP(w, r)
+		})
 	}
 
 	s.mux = mux

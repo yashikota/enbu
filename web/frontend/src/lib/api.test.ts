@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { api, setCsrfToken } from "./api";
+import { api } from "./api";
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  setCsrfToken("test-token");
+  Object.defineProperty(document, "cookie", {
+    writable: true,
+    value: "enbu_csrf=test-token",
+  });
 });
 
 describe("api.auth.status", () => {
@@ -21,7 +24,7 @@ describe("api.auth.status", () => {
     expect(result.username).toBe("testuser");
   });
 
-  it("sends CSRF token header", async () => {
+  it("sends CSRF token from cookie", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ data: { authenticated: false } })),
     );

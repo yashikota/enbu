@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/yashikota/enbu/app"
@@ -16,16 +17,25 @@ func newGUICommand(a *app.App) *cobra.Command {
 		Use:   "gui",
 		Short: "Launch web-based management UI",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			clientID := defaultClientID
+			if v := os.Getenv("ENBU_CLIENT_ID"); v != "" {
+				clientID = v
+			}
+			if v := os.Getenv("ENBU_CLIENT_SECRET"); v != "" {
+				web.ClientSecret = v
+			}
+
 			frontend := web.FrontendFS()
-			srv := web.NewServer(a, defaultClientID, frontend)
+			srv := web.NewServer(a, clientID, frontend)
 
 			addr := fmt.Sprintf("127.0.0.1:%d", defaultPort)
 			url := fmt.Sprintf("http://%s", addr)
 
-			fmt.Printf("Starting enbu UI at %s\n", url)
-			fmt.Printf("CSRF Token: %s\n", srv.CSRFToken())
+			fmt.Printf("Starting enbu GUI at %s\n", url)
 
-			_ = auth.OpenBrowser(url)
+			go func() {
+				_ = auth.OpenBrowser(url)
+			}()
 
 			return srv.ListenAndServe(addr)
 		},
