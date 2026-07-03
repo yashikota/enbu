@@ -11,9 +11,9 @@ import (
 
 const defaultPort = 3939
 
-func newUICommand(a *app.App) *cobra.Command {
+func newGUICommand(a *app.App) *cobra.Command {
 	return &cobra.Command{
-		Use:   "ui",
+		Use:   "gui",
 		Short: "Launch web-based management UI",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			frontend := web.FrontendFS()
