@@ -24,8 +24,15 @@ tasks:
     cmds:
       - golangci-lint fmt ./...
 
+  build:frontend:
+    dir: web/frontend
+    cmds:
+      - pnpm install --frozen-lockfile
+      - pnpm exec vite build
+
   build:
     cmds:
+      - task: build:frontend
       - go build -o enbu .
 
   check:

@@ -19,3 +19,7 @@ coverage.*
 *.coverprofile
 profile.cov
 
+
+# Frontend
+web/frontend/node_modules/
+web/frontend/dist/
