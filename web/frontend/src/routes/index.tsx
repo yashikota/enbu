@@ -31,9 +31,7 @@ function HomePage() {
     return (
       <VStack gap={6} py={20}>
         <Heading size="lg">Welcome to enbu</Heading>
-        <Text color="gray.600">
-          Keyless .env management powered by GitHub
-        </Text>
+        <Text color="gray.600">Keyless .env management powered by GitHub</Text>
         <Button
           colorScheme="blue"
           size="lg"

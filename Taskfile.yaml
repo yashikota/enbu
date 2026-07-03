@@ -24,6 +24,29 @@ tasks:
     cmds:
       - golangci-lint fmt ./...
 
+  frontend:lint:
+    dir: web/frontend
+    cmds:
+      - pnpm exec tsgo -p tsconfig.app.json
+      - pnpm exec oxlint ./src --ignore-pattern routeTree.gen.ts
+
+  frontend:fmt:
+    dir: web/frontend
+    cmds:
+      - pnpm exec oxfmt ./src
+
+  frontend:test:
+    dir: web/frontend
+    cmds:
+      - pnpm exec vitest run
+
+  frontend:check:
+    dir: web/frontend
+    cmds:
+      - task: frontend:lint
+      - task: frontend:fmt
+      - task: frontend:test
+
   build:frontend:
     dir: web/frontend
     cmds:
@@ -39,3 +62,4 @@ tasks:
     cmds:
       - task: lint
       - task: fmt
+      - task: frontend:check
