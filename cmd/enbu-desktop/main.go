@@ -8,8 +8,11 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/yashikota/enbu/app"
+	"github.com/yashikota/enbu/assets"
 	"github.com/yashikota/enbu/cli"
 	"github.com/yashikota/enbu/desktop"
 	"github.com/yashikota/enbu/web"
@@ -35,6 +38,16 @@ func main() {
 		Height: 760,
 		AssetServer: &assetserver.Options{
 			Assets: web.FrontendFS(),
+		},
+		Mac: &mac.Options{
+			About: &mac.AboutInfo{
+				Title: "enbu",
+				Icon:  assets.Icon,
+			},
+		},
+		Linux: &linux.Options{
+			Icon:        assets.Icon,
+			ProgramName: "enbu",
 		},
 		OnStartup: core.Startup,
 		Bind: []interface{}{

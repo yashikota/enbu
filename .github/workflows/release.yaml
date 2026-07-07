@@ -103,6 +103,12 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm run build
 
+      - name: Prepare Wails icon
+        shell: bash
+        run: |
+          mkdir -p cmd/enbu-desktop/build
+          cp assets/icon.png cmd/enbu-desktop/build/appicon.png
+
       - name: Build Wails app
         shell: bash
         working-directory: cmd/enbu-desktop
