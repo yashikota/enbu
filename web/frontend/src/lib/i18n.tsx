@@ -13,6 +13,27 @@ const en = {
     continue: "Continue",
     current: "Repository: {owner}/{repo}",
   },
+  init: {
+    title: "Initialize repository",
+    description: "Create enbu.toml and register your age recipient on GHCR.",
+    action: "Initialize",
+    success: "Initialized {environment}.",
+  },
+  dashboard: {
+    secrets: "Secrets",
+    environments: "Environments",
+    empty: "No secrets yet.",
+    key: "Key",
+    value: "Value",
+    add: "Add secret",
+    save: "Save",
+    delete: "Delete",
+    pull: "Pull",
+    sync: "Sync",
+    newEnvironment: "New environment",
+    createEnvironment: "Create",
+    currentEnvironment: "Current environment",
+  },
   auth: {
     welcome: "Welcome to enbu",
     tagline: "Keyless .env management powered by GitHub",
@@ -35,6 +56,7 @@ const en = {
   },
   common: {
     loading: "Loading...",
+    error: "Error",
   },
 };
 
@@ -52,6 +74,27 @@ const ja: Messages = {
     pathPlaceholder: "C:\\Users\\you\\src\\your-repo",
     continue: "続行",
     current: "リポジトリ: {owner}/{repo}",
+  },
+  init: {
+    title: "リポジトリを初期化",
+    description: "enbu.tomlを作成し、age recipientをGHCRへ登録します。",
+    action: "初期化",
+    success: "{environment} を初期化しました。",
+  },
+  dashboard: {
+    secrets: "シークレット",
+    environments: "環境",
+    empty: "シークレットはまだありません。",
+    key: "キー",
+    value: "値",
+    add: "シークレットを追加",
+    save: "保存",
+    delete: "削除",
+    pull: "Pull",
+    sync: "Sync",
+    newEnvironment: "新しい環境",
+    createEnvironment: "作成",
+    currentEnvironment: "現在の環境",
   },
   auth: {
     welcome: "enbuへようこそ",
@@ -75,6 +118,7 @@ const ja: Messages = {
   },
   common: {
     loading: "読み込み中...",
+    error: "エラー",
   },
 };
 

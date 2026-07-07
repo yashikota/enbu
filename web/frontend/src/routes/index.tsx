@@ -14,7 +14,7 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { backend, type DeviceStart, type DeviceStatus } from "../lib/backend";
-import type { AuthStatus, GUIRepoStatus } from "../lib/api";
+import type { AuthStatus, Environment, GUIRepoStatus, SecretsResponse } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 
 export const Route = createFileRoute("/")({
@@ -33,6 +33,14 @@ function HomePage() {
   const [deviceStatus, setDeviceStatus] = useState<DeviceStatus | null>(null);
   const [authError, setAuthError] = useState("");
   const [startingAuth, setStartingAuth] = useState(false);
+  const [initializing, setInitializing] = useState(false);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [secrets, setSecrets] = useState<SecretsResponse | null>(null);
+  const [secretKey, setSecretKey] = useState("");
+  const [secretValue, setSecretValue] = useState("");
+  const [newEnv, setNewEnv] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
   async function refresh() {
@@ -81,6 +89,31 @@ function HomePage() {
     }
     return Math.max(0, Math.ceil((new Date(deviceStart.expires_at).getTime() - now) / 1000));
   }, [deviceStart, now]);
+
+  const currentEnvironment = useMemo(() => {
+    return environments.find((env) => env.current)?.name ?? secrets?.environment ?? "";
+  }, [environments, secrets?.environment]);
+
+  async function refreshWorkspace(env = currentEnvironment) {
+    setWorkspaceLoading(true);
+    setActionError("");
+    try {
+      const envs = await backend.listEnvironments();
+      const nextEnv = env || envs.find((item) => item.current)?.name || "";
+      setEnvironments(envs);
+      setSecrets(await backend.listSecrets(nextEnv));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (repoStatus?.selected && repoStatus.repo?.initialized) {
+      void refreshWorkspace();
+    }
+  }, [repoStatus?.selected, repoStatus?.repo?.initialized]);
 
   if (loading) {
     return (
@@ -216,15 +249,219 @@ function HomePage() {
     );
   }
 
+  if (!repoStatus.repo?.initialized) {
+    return (
+      <VStack gap={5} align="stretch" maxW="xl" mx="auto" py={16}>
+        <Box>
+          <Heading size="lg">{t("init.title")}</Heading>
+          <Text color="gray.600" mt={2}>
+            {t("init.description")}
+          </Text>
+          <Text color="gray.600" mt={2}>
+            {t("repo.current", {
+              owner: repoStatus.repo?.owner ?? "",
+              repo: repoStatus.repo?.repo ?? "",
+            })}
+          </Text>
+        </Box>
+        {actionError && <AlertText message={actionError} />}
+        <Button
+          colorScheme="blue"
+          loading={initializing}
+          onClick={async () => {
+            setInitializing(true);
+            setActionError("");
+            try {
+              await backend.initialize();
+              setRepoStatus(await backend.repoStatus());
+            } catch (err) {
+              setActionError(err instanceof Error ? err.message : String(err));
+            } finally {
+              setInitializing(false);
+            }
+          }}
+        >
+          {t("init.action")}
+        </Button>
+      </VStack>
+    );
+  }
+
   return (
-    <VStack gap={6} align="stretch">
+    <VStack gap={6} align="stretch" maxW="4xl" mx="auto" py={8}>
       <Box>
         <Heading size="md">{t("auth.hello", { username: status.username ?? "" })}</Heading>
-        {status.repo && (
-          <Text color="gray.600">
-            {t("repo.current", { owner: status.repo.owner, repo: status.repo.name })}
-          </Text>
+        <Text color="gray.600">
+          {t("repo.current", { owner: repoStatus.repo.owner, repo: repoStatus.repo.repo })}
+        </Text>
+      </Box>
+
+      {actionError && <AlertText message={actionError} />}
+
+      <Box borderWidth="1px" p={4}>
+        <Heading size="sm" mb={3}>
+          {t("dashboard.environments")}
+        </Heading>
+        <HStack wrap="wrap" gap={2}>
+          {environments.map((env) => (
+            <Button
+              key={env.name}
+              size="sm"
+              variant={env.current ? "solid" : "outline"}
+              onClick={async () => {
+                setActionError("");
+                try {
+                  await backend.switchEnvironment(env.name);
+                  await refreshWorkspace(env.name);
+                } catch (err) {
+                  setActionError(err instanceof Error ? err.message : String(err));
+                }
+              }}
+            >
+              {env.name}
+            </Button>
+          ))}
+        </HStack>
+        <HStack mt={3}>
+          <Input
+            value={newEnv}
+            onChange={(event) => setNewEnv(event.target.value)}
+            placeholder={t("dashboard.newEnvironment")}
+          />
+          <Button
+            variant="outline"
+            onClick={async () => {
+              if (!newEnv.trim()) {
+                return;
+              }
+              setActionError("");
+              try {
+                await backend.createEnvironment(newEnv.trim());
+                setNewEnv("");
+                await refreshWorkspace(newEnv.trim());
+              } catch (err) {
+                setActionError(err instanceof Error ? err.message : String(err));
+              }
+            }}
+          >
+            {t("dashboard.createEnvironment")}
+          </Button>
+        </HStack>
+      </Box>
+
+      <Box borderWidth="1px" p={4}>
+        <HStack justify="space-between" mb={3}>
+          <Heading size="sm">{t("dashboard.secrets")}</Heading>
+          <HStack>
+            <Button
+              size="sm"
+              variant="outline"
+              loading={workspaceLoading}
+              onClick={async () => {
+                try {
+                  await backend.pullSecrets(currentEnvironment);
+                  await refreshWorkspace(currentEnvironment);
+                } catch (err) {
+                  setActionError(err instanceof Error ? err.message : String(err));
+                }
+              }}
+            >
+              {t("dashboard.pull")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              loading={workspaceLoading}
+              onClick={async () => {
+                try {
+                  await backend.syncSecrets(currentEnvironment);
+                  await refreshWorkspace(currentEnvironment);
+                } catch (err) {
+                  setActionError(err instanceof Error ? err.message : String(err));
+                }
+              }}
+            >
+              {t("dashboard.sync")}
+            </Button>
+          </HStack>
+        </HStack>
+
+        {workspaceLoading && (
+          <HStack>
+            <Spinner size="sm" />
+            <Text color="gray.600">{t("common.loading")}</Text>
+          </HStack>
         )}
+
+        {!workspaceLoading && (secrets?.secrets.length ?? 0) === 0 && (
+          <Text color="gray.600">{t("dashboard.empty")}</Text>
+        )}
+
+        <VStack align="stretch" gap={2}>
+          {secrets?.secrets.map((secret) => (
+            <HStack key={secret.key} align="stretch">
+              <Input value={secret.key} readOnly />
+              <Input
+                defaultValue={secret.value}
+                onBlur={async (event) => {
+                  if (event.target.value === secret.value) {
+                    return;
+                  }
+                  try {
+                    await backend.editSecret(secret.key, event.target.value, currentEnvironment);
+                    await refreshWorkspace(currentEnvironment);
+                  } catch (err) {
+                    setActionError(err instanceof Error ? err.message : String(err));
+                  }
+                }}
+              />
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await backend.deleteSecret(secret.key, currentEnvironment);
+                    await refreshWorkspace(currentEnvironment);
+                  } catch (err) {
+                    setActionError(err instanceof Error ? err.message : String(err));
+                  }
+                }}
+              >
+                {t("dashboard.delete")}
+              </Button>
+            </HStack>
+          ))}
+        </VStack>
+
+        <HStack mt={4}>
+          <Input
+            value={secretKey}
+            onChange={(event) => setSecretKey(event.target.value)}
+            placeholder={t("dashboard.key")}
+          />
+          <Input
+            value={secretValue}
+            onChange={(event) => setSecretValue(event.target.value)}
+            placeholder={t("dashboard.value")}
+          />
+          <Button
+            colorScheme="blue"
+            onClick={async () => {
+              if (!secretKey.trim()) {
+                return;
+              }
+              try {
+                await backend.addSecret(secretKey.trim(), secretValue, currentEnvironment);
+                setSecretKey("");
+                setSecretValue("");
+                await refreshWorkspace(currentEnvironment);
+              } catch (err) {
+                setActionError(err instanceof Error ? err.message : String(err));
+              }
+            }}
+          >
+            {t("dashboard.add")}
+          </Button>
+        </HStack>
       </Box>
     </VStack>
   );

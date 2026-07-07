@@ -81,7 +81,7 @@ export interface AuthStatus {
 
 export interface GUIRepoStatus {
   selected: boolean;
-  repo?: { path: string; owner: string; repo: string };
+  repo?: { path: string; owner: string; repo: string; initialized?: boolean };
 }
 
 export interface RepoStatus {
