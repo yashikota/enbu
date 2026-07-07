@@ -61,6 +61,8 @@ tasks:
       - go build -o enbu .
 
   build:desktop:
+    deps:
+      - build:frontend
     dir: cmd/enbu-desktop
     cmds:
       - go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build
