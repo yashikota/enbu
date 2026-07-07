@@ -23,6 +23,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const api = {
+  gui: {
+    repo: () => request<GUIRepoStatus>("GET", "/api/gui/repo"),
+    selectRepo: (path: string) => request<GUIRepoStatus>("POST", "/api/gui/repo", { path }),
+  },
   auth: {
     status: () => request<AuthStatus>("GET", "/api/auth/status"),
     login: () => request<{ redirect_url: string }>("GET", "/api/auth/login"),
@@ -73,6 +77,11 @@ export interface AuthStatus {
   authenticated: boolean;
   username?: string;
   repo?: { owner: string; name: string };
+}
+
+export interface GUIRepoStatus {
+  selected: boolean;
+  repo?: { path: string; owner: string; repo: string };
 }
 
 export interface RepoStatus {

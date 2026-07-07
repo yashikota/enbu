@@ -54,6 +54,40 @@ describe("api.auth.status", () => {
   });
 });
 
+describe("api.gui", () => {
+  it("loads selected repository status", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            selected: true,
+            repo: { path: "/repo", owner: "octo", repo: "hello" },
+          },
+        }),
+      ),
+    );
+
+    const result = await api.gui.repo();
+    expect(result.selected).toBe(true);
+    expect(result.repo?.owner).toBe("octo");
+  });
+
+  it("selects a repository path", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: { selected: true } })),
+    );
+
+    await api.gui.selectRepo("/repo");
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/gui/repo",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ path: "/repo" }),
+      }),
+    );
+  });
+});
+
 describe("api.secrets", () => {
   it("lists secrets for environment", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(

@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/yashikota/enbu/app"
 )
@@ -15,10 +16,12 @@ import (
 var ClientSecret string
 
 type Server struct {
-	app       *app.App
-	csrfToken string
-	mux       *http.ServeMux
-	clientID  string
+	app          *app.App
+	csrfToken    string
+	mux          *http.ServeMux
+	clientID     string
+	repoMu       sync.Mutex
+	selectedRepo string
 }
 
 func NewServer(a *app.App, clientID string, frontend fs.FS) *Server {
@@ -27,33 +30,37 @@ func NewServer(a *app.App, clientID string, frontend fs.FS) *Server {
 		csrfToken: generateToken(),
 		clientID:  clientID,
 	}
+	s.loadSelectedRepo()
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /api/auth/status", s.csrfMiddleware(s.handleAuthStatus))
+	mux.HandleFunc("GET /api/gui/repo", s.csrfMiddleware(s.handleGUIRepoStatus))
+	mux.HandleFunc("POST /api/gui/repo", s.csrfMiddleware(s.handleSelectGUIRepo))
+
+	mux.HandleFunc("GET /api/auth/status", s.csrfMiddleware(s.withSelectedRepo(s.handleAuthStatus)))
 	mux.HandleFunc("GET /api/auth/login", s.handleAuthLogin)
 	mux.HandleFunc("GET /api/auth/callback", s.handleAuthCallback)
 	mux.HandleFunc("POST /api/auth/logout", s.csrfMiddleware(s.handleAuthLogout))
 
-	mux.HandleFunc("GET /api/repo", s.csrfMiddleware(s.handleRepoStatus))
-	mux.HandleFunc("POST /api/init", s.csrfMiddleware(s.handleInit))
+	mux.HandleFunc("GET /api/repo", s.csrfMiddleware(s.withSelectedRepo(s.handleRepoStatus)))
+	mux.HandleFunc("POST /api/init", s.csrfMiddleware(s.withSelectedRepo(s.handleInit)))
 
-	mux.HandleFunc("GET /api/environments", s.csrfMiddleware(s.handleListEnvironments))
-	mux.HandleFunc("POST /api/environments", s.csrfMiddleware(s.handleCreateEnvironment))
-	mux.HandleFunc("PUT /api/environments/{name}/switch", s.csrfMiddleware(s.handleSwitchEnvironment))
-	mux.HandleFunc("PUT /api/environments/{name}", s.csrfMiddleware(s.handleRenameEnvironment))
-	mux.HandleFunc("DELETE /api/environments/{name}", s.csrfMiddleware(s.handleDeleteEnvironment))
+	mux.HandleFunc("GET /api/environments", s.csrfMiddleware(s.withSelectedRepo(s.handleListEnvironments)))
+	mux.HandleFunc("POST /api/environments", s.csrfMiddleware(s.withSelectedRepo(s.handleCreateEnvironment)))
+	mux.HandleFunc("PUT /api/environments/{name}/switch", s.csrfMiddleware(s.withSelectedRepo(s.handleSwitchEnvironment)))
+	mux.HandleFunc("PUT /api/environments/{name}", s.csrfMiddleware(s.withSelectedRepo(s.handleRenameEnvironment)))
+	mux.HandleFunc("DELETE /api/environments/{name}", s.csrfMiddleware(s.withSelectedRepo(s.handleDeleteEnvironment)))
 
-	mux.HandleFunc("GET /api/secrets", s.csrfMiddleware(s.handleListSecrets))
-	mux.HandleFunc("POST /api/secrets", s.csrfMiddleware(s.handleAddSecret))
-	mux.HandleFunc("PUT /api/secrets/{key}", s.csrfMiddleware(s.handleEditSecret))
-	mux.HandleFunc("DELETE /api/secrets/{key}", s.csrfMiddleware(s.handleDeleteSecret))
-	mux.HandleFunc("POST /api/secrets/pull", s.csrfMiddleware(s.handlePullSecrets))
-	mux.HandleFunc("POST /api/secrets/sync", s.csrfMiddleware(s.handleSyncSecrets))
+	mux.HandleFunc("GET /api/secrets", s.csrfMiddleware(s.withSelectedRepo(s.handleListSecrets)))
+	mux.HandleFunc("POST /api/secrets", s.csrfMiddleware(s.withSelectedRepo(s.handleAddSecret)))
+	mux.HandleFunc("PUT /api/secrets/{key}", s.csrfMiddleware(s.withSelectedRepo(s.handleEditSecret)))
+	mux.HandleFunc("DELETE /api/secrets/{key}", s.csrfMiddleware(s.withSelectedRepo(s.handleDeleteSecret)))
+	mux.HandleFunc("POST /api/secrets/pull", s.csrfMiddleware(s.withSelectedRepo(s.handlePullSecrets)))
+	mux.HandleFunc("POST /api/secrets/sync", s.csrfMiddleware(s.withSelectedRepo(s.handleSyncSecrets)))
 
-	mux.HandleFunc("GET /api/history", s.csrfMiddleware(s.handleListHistory))
-	mux.HandleFunc("GET /api/history/diff", s.csrfMiddleware(s.handleDiffHistory))
-	mux.HandleFunc("POST /api/history/{index}/restore", s.csrfMiddleware(s.handleRestoreHistory))
+	mux.HandleFunc("GET /api/history", s.csrfMiddleware(s.withSelectedRepo(s.handleListHistory)))
+	mux.HandleFunc("GET /api/history/diff", s.csrfMiddleware(s.withSelectedRepo(s.handleDiffHistory)))
+	mux.HandleFunc("POST /api/history/{index}/restore", s.csrfMiddleware(s.withSelectedRepo(s.handleRestoreHistory)))
 
 	if frontend != nil {
 		fileServer := http.FileServerFS(frontend)
@@ -92,6 +99,10 @@ func (s *Server) CSRFToken() string {
 
 func (s *Server) ListenAndServe(addr string) error {
 	return http.ListenAndServe(addr, s.mux)
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mux.ServeHTTP(w, r)
 }
 
 func (s *Server) csrfMiddleware(next http.HandlerFunc) http.HandlerFunc {

@@ -2,10 +2,14 @@ version: '3'
 
 tasks:
   test:
+    deps:
+      - build:frontend
     cmds:
       - go test -v -shuffle=on -race ./... 
 
   test:scenario:
+    deps:
+      - build:frontend
     cmds:
       - docker compose up -d --wait
       - defer: docker compose down
@@ -57,6 +61,8 @@ tasks:
       - go build -o enbu .
 
   check:
+    deps:
+      - build:frontend
     cmds:
       - task: lint
       - task: fmt
