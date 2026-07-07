@@ -13,4 +13,5 @@ registries:
 packages:
 - name: go-task/task@v3.51.1
 - name: golangci/golangci-lint@v2.12.2
+- name: pnpm/pnpm@v11.10.0
 - name: suzuki-shunsuke/pinact@v4.1.0
