@@ -23,23 +23,10 @@ archives:
         formats:
           - zip
           - tar.gz
-    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
-checksum:
-  name_template: "checksums.txt"
-
-sboms:
-  - artifacts: archive
-
-signs:
-  - cmd: cosign
-    signature: "${artifact}.sigstore.json"
-    args:
-      - sign-blob
-      - "--bundle=${signature}"
-      - "${artifact}"
-      - "--yes"
-    artifacts: checksum
+release:
+  disable: true
 
 changelog:
   sort: asc

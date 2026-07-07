@@ -9,9 +9,10 @@
 #   - all
 registries:
 - type: standard
-  ref: v4.529.0 # renovate: depName=aquaproj/aqua-registry
+  ref: v4.533.0 # renovate: depName=aquaproj/aqua-registry
 packages:
 - name: go-task/task@v3.51.1
 - name: golangci/golangci-lint@v2.12.2
+- name: koki-develop/ghasec@v0.17.0
 - name: pnpm/pnpm@v11.10.0
 - name: suzuki-shunsuke/pinact@v4.1.0
