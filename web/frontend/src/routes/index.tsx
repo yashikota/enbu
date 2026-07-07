@@ -36,11 +36,10 @@ function HomePage() {
   const [now, setNow] = useState(() => Date.now());
 
   async function refresh() {
-    const repo = await backend.repoStatus();
-    setRepoStatus(repo);
-    if (repo.selected) {
-      const auth = await backend.authStatus().catch(() => ({ authenticated: false }));
-      setStatus(auth);
+    const auth = await backend.authStatus().catch(() => ({ authenticated: false }));
+    setStatus(auth);
+    if (auth.authenticated) {
+      setRepoStatus(await backend.repoStatus());
     }
   }
 
@@ -67,6 +66,7 @@ function HomePage() {
         if (next.state === "success") {
           window.clearInterval(poll);
           setStatus(await backend.authStatus());
+          setRepoStatus(await backend.repoStatus());
         }
       },
       Math.max(deviceStart.interval, 2) * 1000,
@@ -87,6 +87,65 @@ function HomePage() {
       <VStack py={20}>
         <Spinner size="xl" />
         <Text color="gray.600">{t("common.loading")}</Text>
+      </VStack>
+    );
+  }
+
+  if (!status?.authenticated) {
+    return (
+      <VStack gap={6} py={16} maxW="xl" mx="auto" align="stretch">
+        <Box textAlign="center">
+          <Heading size="lg">{t("auth.welcome")}</Heading>
+          <Text color="gray.600" mt={2}>
+            {t("auth.tagline")}
+          </Text>
+        </Box>
+
+        {authError && (
+          <Alert.Root status="error">
+            <Alert.Indicator />
+            <Alert.Content>{authError}</Alert.Content>
+          </Alert.Root>
+        )}
+
+        {!deviceStart ? (
+          <Button
+            colorScheme="blue"
+            size="lg"
+            loading={startingAuth}
+            onClick={async () => {
+              setStartingAuth(true);
+              setAuthError("");
+              try {
+                const start = await backend.startDeviceLogin();
+                setDeviceStart(start);
+                setDeviceStatus({ state: "pending" });
+              } catch (err) {
+                setAuthError(err instanceof Error ? err.message : String(err));
+              } finally {
+                setStartingAuth(false);
+              }
+            }}
+          >
+            {t("auth.connect")}
+          </Button>
+        ) : (
+          <DeviceLoginPanel
+            start={deviceStart}
+            status={deviceStatus}
+            expiresIn={expiresIn}
+            onCancel={async () => {
+              await backend.cancelDeviceLogin(deviceStart.session_id);
+              setDeviceStart(null);
+              setDeviceStatus(null);
+            }}
+            onRetry={() => {
+              setDeviceStart(null);
+              setDeviceStatus(null);
+              setAuthError("");
+            }}
+          />
+        )}
       </VStack>
     );
   }
@@ -153,70 +212,6 @@ function HomePage() {
         >
           {t("repo.continue")}
         </Button>
-      </VStack>
-    );
-  }
-
-  if (!status?.authenticated) {
-    return (
-      <VStack gap={6} py={16} maxW="xl" mx="auto" align="stretch">
-        <Box textAlign="center">
-          <Heading size="lg">{t("auth.welcome")}</Heading>
-          <Text color="gray.600" mt={2}>
-            {t("auth.tagline")}
-          </Text>
-          {repoStatus.repo && (
-            <Text color="gray.600" mt={2}>
-              {t("repo.current", { owner: repoStatus.repo.owner, repo: repoStatus.repo.repo })}
-            </Text>
-          )}
-        </Box>
-
-        {authError && (
-          <Alert.Root status="error">
-            <Alert.Indicator />
-            <Alert.Content>{authError}</Alert.Content>
-          </Alert.Root>
-        )}
-
-        {!deviceStart ? (
-          <Button
-            colorScheme="blue"
-            size="lg"
-            loading={startingAuth}
-            onClick={async () => {
-              setStartingAuth(true);
-              setAuthError("");
-              try {
-                const start = await backend.startDeviceLogin();
-                setDeviceStart(start);
-                setDeviceStatus({ state: "pending" });
-              } catch (err) {
-                setAuthError(err instanceof Error ? err.message : String(err));
-              } finally {
-                setStartingAuth(false);
-              }
-            }}
-          >
-            {t("auth.connect")}
-          </Button>
-        ) : (
-          <DeviceLoginPanel
-            start={deviceStart}
-            status={deviceStatus}
-            expiresIn={expiresIn}
-            onCancel={async () => {
-              await backend.cancelDeviceLogin(deviceStart.session_id);
-              setDeviceStart(null);
-              setDeviceStatus(null);
-            }}
-            onRetry={() => {
-              setDeviceStart(null);
-              setDeviceStatus(null);
-              setAuthError("");
-            }}
-          />
-        )}
       </VStack>
     );
   }
