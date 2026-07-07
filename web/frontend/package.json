@@ -7,9 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsgo -p tsconfig.app.json",
-    "lint": "oxlint ./src --ignore-pattern routeTree.gen.ts",
-    "fmt": "oxfmt ./src",
-    "fmt:check": "oxfmt --check ./src",
+    "lint": "oxlint ./src --ignore-pattern routeTree.gen.ts --ignore-pattern wailsjs",
+    "fmt": "oxfmt ./src/lib ./src/routes",
+    "fmt:check": "oxfmt --check ./src/lib ./src/routes",
     "test": "vitest run",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run fmt:check && pnpm run test",
     "preview": "vite preview"

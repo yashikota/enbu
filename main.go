@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"runtime"
 	"runtime/debug"
 
 	enbucli "github.com/yashikota/enbu/cli"
@@ -17,19 +16,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	if shouldLaunchGUIByDefault(runtime.GOOS, os.Args) {
-		os.Args = append(os.Args, "gui")
-	}
-
 	app := enbucli.New(getVersion())
 	if err := app.ExecuteContext(ctx); err != nil {
 		log.SetFlags(0)
 		os.Exit(1)
 	}
-}
-
-func shouldLaunchGUIByDefault(goos string, args []string) bool {
-	return goos == "windows" && len(args) == 1
 }
 
 func getVersion() string {

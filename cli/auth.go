@@ -15,6 +15,10 @@ import (
 
 const defaultClientID = "Ov23li6nFmfdF4FW9ikd"
 
+func DefaultClientID() string {
+	return defaultClientID
+}
+
 func newAuthCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
