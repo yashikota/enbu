@@ -1,6 +1,7 @@
 enbu
 dist/
 .env
+.worktrees/
 *.enc
 output/
 
