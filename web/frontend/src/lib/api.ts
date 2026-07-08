@@ -15,11 +15,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const json = await res.json();
+  const json = (await res.json()) as { data: T; error?: { message: string } };
   if (json.error) {
     throw new Error(json.error.message);
   }
-  return json.data as T;
+  return json.data;
 }
 
 export const api = {

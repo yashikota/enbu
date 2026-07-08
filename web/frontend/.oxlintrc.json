@@ -1,8 +1,21 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "options": {
+    "typeAware": true
+  },
   "plugins": ["react", "typescript", "oxc"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": "off"
-  }
+    "react/only-export-components": "off",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-unsafe-assignment": "warn"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "rules": {
+        "typescript/no-unsafe-assignment": "off"
+      }
+    }
+  ]
 }

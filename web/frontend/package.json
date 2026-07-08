@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsgo -p tsconfig.app.json",
+    "typecheck": "tsc -p tsconfig.app.json",
     "lint": "oxlint ./src --ignore-pattern routeTree.gen.ts --ignore-pattern wailsjs",
     "fmt": "oxfmt ./src/lib ./src/routes",
     "fmt:check": "oxfmt --check ./src/lib ./src/routes",
@@ -18,8 +18,10 @@
     "@chakra-ui/react": "^3.36.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@icons-pack/react-simple-icons": "^13.13.0",
     "@tanstack/react-router": "^1.170.17",
     "framer-motion": "^12.42.2",
+    "lucide-react": "^1.23.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
@@ -29,12 +31,12 @@
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@typescript/native-preview": "^7.0.0-dev.20260702.3",
     "@vitejs/plugin-react": "^6.0.3",
     "jsdom": "^29.1.1",
     "oxfmt": "^0.57.0",
     "oxlint": "^1.71.0",
-    "typescript": "~6.0.2",
+    "oxlint-tsgolint": "^0.24.0",
+    "typescript": "~7.0.2",
     "vite": "^8.1.1",
     "vitest": "^4.1.9"
   }
