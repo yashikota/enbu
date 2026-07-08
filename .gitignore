@@ -2,6 +2,7 @@ enbu
 dist/
 .env
 *.enc
+output/
 
 # Binaries for programs and plugins
 *.exe
