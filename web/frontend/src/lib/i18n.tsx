@@ -53,6 +53,10 @@ const en = {
     expired: "The code expired.",
     error: "Authorization failed.",
     hello: "Hello, {username}!",
+    signedIn: "Signed in",
+    signedOut: "Not signed in",
+    checkFailed: "Auth status unavailable",
+    logout: "Log out",
   },
   common: {
     loading: "Loading...",
@@ -115,6 +119,10 @@ const ja: Messages = {
     expired: "コードの有効期限が切れました。",
     error: "認証に失敗しました。",
     hello: "{username} さん、こんにちは",
+    signedIn: "ログイン中",
+    signedOut: "未ログイン",
+    checkFailed: "認証状態を確認できません",
+    logout: "ログアウト",
   },
   common: {
     loading: "読み込み中...",

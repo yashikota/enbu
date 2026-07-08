@@ -58,6 +58,12 @@ function HomePage() {
   }, []);
 
   useEffect(() => {
+    const onAuthChanged = () => void refresh();
+    window.addEventListener("enbu-auth-changed", onAuthChanged);
+    return () => window.removeEventListener("enbu-auth-changed", onAuthChanged);
+  }, []);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
@@ -74,6 +80,7 @@ function HomePage() {
         if (next.state === "success") {
           window.clearInterval(poll);
           setStatus(await backend.authStatus());
+          window.dispatchEvent(new Event("enbu-auth-changed"));
           setRepoStatus(await backend.repoStatus());
         }
       },

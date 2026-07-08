@@ -94,6 +94,14 @@ export const backend = {
   async cancelDeviceLogin(sessionID: string): Promise<void> {
     await service()?.CancelDeviceLogin(sessionID);
   },
+  async logout(): Promise<void> {
+    const svc = service();
+    if (!svc) {
+      await api.auth.logout();
+      return;
+    }
+    await svc.Logout();
+  },
   async repoStatus(): Promise<GUIRepoStatus> {
     const svc = service();
     if (!svc) {
