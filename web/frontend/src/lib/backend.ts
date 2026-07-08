@@ -9,7 +9,7 @@ import {
 import { mockBackend } from "./mock-backend";
 
 const isMock =
-  new URLSearchParams(window.location.search).has("mock") ||
+  (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("mock")) ||
   import.meta.env.BASE_URL.includes("/enbu/");
 
 export interface DeviceStart {

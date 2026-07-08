@@ -8,6 +8,31 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+var (
+	demoSecretsByEnv = map[string][]secretEntry{
+		"development": {
+			{key: "API_KEY", value: "sk-demo-abc123"},
+			{key: "DATABASE_URL", value: "postgres://localhost:5432/enbu"},
+			{key: "SECRET_TOKEN", value: "tok-enbu-xyz789"},
+		},
+		"production": {
+			{key: "API_KEY", value: "sk-prod-abc123"},
+			{key: "DATABASE_URL", value: "postgres://prod.example.com:5432/enbu"},
+			{key: "SECRET_TOKEN", value: "tok-prod-xyz789"},
+		},
+		"staging": {
+			{key: "API_KEY", value: "sk-stg-abc123"},
+			{key: "DATABASE_URL", value: "postgres://staging.example.com:5432/enbu"},
+		},
+	}
+	demoEnvs = []envItem{
+		{name: "development", isCurrent: true},
+		{name: "production", isCurrent: false},
+		{name: "staging", isCurrent: false},
+	}
+	demoCurrent = "development"
+)
+
 func RunDemo() error {
 	m := newDemoModel()
 	p := tea.NewProgram(m, tea.WithAltScreen())
@@ -30,23 +55,15 @@ func newDemoModel() model {
 	vi.CharLimit = 4096
 
 	return model{
-		app:     nil,
-		view:    viewSecrets,
-		spinner: sp,
+		app:        nil,
+		view:       viewSecrets,
+		spinner:    sp,
 		keyInput:   ki,
 		valueInput: vi,
 		focusKey:   true,
 		loading:    false,
-		current:    "development",
-		secrets: []secretEntry{
-			{key: "API_KEY", value: "sk-demo-abc123"},
-			{key: "DATABASE_URL", value: "postgres://localhost:5432/enbu"},
-			{key: "SECRET_TOKEN", value: "tok-enbu-xyz789"},
-		},
-		envs: []envItem{
-			{name: "development", isCurrent: true},
-			{name: "production", isCurrent: false},
-			{name: "staging", isCurrent: false},
-		},
+		current:    demoCurrent,
+		secrets:    demoSecretsByEnv[demoCurrent],
+		envs:       demoEnvs,
 	}
 }
