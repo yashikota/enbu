@@ -47,6 +47,8 @@ tasks:
   frontend:check:
     dir: web/frontend
     cmds:
+      - pnpm install --frozen-lockfile
+      - pnpm run build
       - pnpm run check
 
   build:frontend:
