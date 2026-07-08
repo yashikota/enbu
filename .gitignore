@@ -24,3 +24,4 @@ profile.cov
 web/frontend/node_modules/
 web/frontend/dist/
 web/frontend/package.json.md5
+cmd/enbu-desktop/build/
