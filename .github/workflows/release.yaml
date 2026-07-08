@@ -106,12 +106,12 @@ jobs:
       - name: Prepare Wails icon
         shell: bash
         run: |
-          mkdir -p cmd/enbu-desktop/build
-          cp assets/icon.png cmd/enbu-desktop/build/appicon.png
+          mkdir -p desktop/wails/build
+          cp assets/icon.png desktop/wails/build/appicon.png
 
       - name: Build Wails app
         shell: bash
-        working-directory: cmd/enbu-desktop
+        working-directory: desktop/wails
         env:
           WAILS_PLATFORM: ${{ matrix.platform }}
         run: |
@@ -128,7 +128,7 @@ jobs:
           DESKTOP_SUFFIX: ${{ matrix.suffix }}
         run: |
           mkdir -p release
-          tar -C cmd/enbu-desktop/build/bin \
+          tar -C desktop/wails/build/bin \
             -czf "release/enbu-desktop_${GITHUB_REF_NAME}_${DESKTOP_SUFFIX}.tar.gz" \
             .
 
@@ -140,7 +140,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path release | Out-Null
           Compress-Archive `
-            -Path cmd/enbu-desktop/build/bin/* `
+            -Path desktop/wails/build/bin/* `
             -DestinationPath "release/enbu-desktop_${env:GITHUB_REF_NAME}_${env:DESKTOP_SUFFIX}.zip"
 
       - name: Upload desktop artifact

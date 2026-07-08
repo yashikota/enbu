@@ -26,4 +26,4 @@ web/frontend/dist/
 web/frontend/package.json.md5
 web/frontend/src/routeTree.gen.ts
 web/frontend/src/wailsjs/
-cmd/enbu-desktop/build/
+desktop/wails/build/
