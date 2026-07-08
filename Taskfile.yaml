@@ -4,7 +4,6 @@ tasks:
   test:
     deps:
       - build:frontend
-      - frontend:test
     cmds:
       - sh -c "go list ./... | grep -v '/desktop/wails$' | xargs go test -v -shuffle=on -race"
 
@@ -24,12 +23,10 @@ tasks:
   lint:
     cmds:
       - sh -c "go list ./... | grep -v '/desktop/wails$' | sed 's#^github.com/yashikota/enbu#.#' | xargs golangci-lint run --fix"
-      - task: frontend:lint
 
   fmt:
     cmds:
       - sh -c "go list ./... | grep -v '/desktop/wails$' | sed 's#^github.com/yashikota/enbu#.#' | xargs golangci-lint fmt"
-      - task: frontend:fmt
 
   frontend:lint:
     dir: web/frontend
