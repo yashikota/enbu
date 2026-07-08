@@ -35,8 +35,8 @@ const en = {
     currentEnvironment: "Current environment",
   },
   auth: {
-    welcome: "Welcome to enbu",
-    tagline: "Keyless .env management powered by GitHub",
+    welcome: "Sign in to GitHub",
+    tagline: "Authorize enbu to access your repositories.",
     connect: "Connect with GitHub",
     waiting: "Waiting for GitHub authorization...",
     userCode: "Enter this code on GitHub",
@@ -57,6 +57,7 @@ const en = {
     signedOut: "Not signed in",
     checkFailed: "Auth status unavailable",
     logout: "Log out",
+    authorizeTitle: "Authorize GitHub",
   },
   common: {
     loading: "Loading...",
@@ -101,8 +102,8 @@ const ja: Messages = {
     currentEnvironment: "現在の環境",
   },
   auth: {
-    welcome: "enbuへようこそ",
-    tagline: "GitHubだけで完結するキーレス.env管理",
+    welcome: "GitHubにサインイン",
+    tagline: "enbuがリポジトリにアクセスすることを許可してください。",
     connect: "GitHubで接続",
     waiting: "GitHubでの承認を待っています...",
     userCode: "GitHubでこのコードを入力してください",
@@ -118,11 +119,12 @@ const ja: Messages = {
     denied: "認証がキャンセルされました。",
     expired: "コードの有効期限が切れました。",
     error: "認証に失敗しました。",
-    hello: "{username} さん、こんにちは",
+    hello: "{username} さん、こんにちは！",
     signedIn: "ログイン中",
     signedOut: "未ログイン",
     checkFailed: "認証状態を確認できません",
     logout: "ログアウト",
+    authorizeTitle: "GitHubを認証",
   },
   common: {
     loading: "読み込み中...",
@@ -174,7 +176,7 @@ export function useI18n() {
 }
 
 export function detectLocale(): Locale {
-  const saved = localStorage.getItem("enbu_locale");
+  const saved = typeof localStorage !== "undefined" ? localStorage.getItem("enbu_locale") : null;
   if (isLocale(saved)) {
     return saved;
   }

@@ -1,21 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Badge,
   Box,
   Button,
-  Code,
-  Heading,
+  Flex,
   HStack,
+  Heading,
   Input,
+  Separator,
   Spinner,
   Text,
   VStack,
 } from "@chakra-ui/react";
+import { Copy, Eye, EyeOff } from "lucide-react";
+import { SiGithub } from "@icons-pack/react-simple-icons";
 import { backend, type DeviceStart, type DeviceStatus } from "../lib/backend";
-import type { AuthStatus, Environment, GUIRepoStatus, SecretsResponse } from "../lib/api";
+import type { Environment, SecretsResponse } from "../lib/api";
 import { useI18n } from "../lib/i18n";
+import { useAuth } from "./__root";
 
 export const Route = createFileRoute("/")({
   component: HomePage,
@@ -23,9 +26,12 @@ export const Route = createFileRoute("/")({
 
 function HomePage() {
   const { t } = useI18n();
-  const [repoStatus, setRepoStatus] = useState<GUIRepoStatus | null>(null);
-  const [status, setStatus] = useState<AuthStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { status, loading: authLoading } = useAuth();
+
+  const [repoStatus, setRepoStatus] = useState<{
+    selected: boolean;
+    repo?: { path?: string; owner: string; repo: string; initialized?: boolean };
+  } | null>(null);
   const [repoPath, setRepoPath] = useState("");
   const [repoError, setRepoError] = useState("");
   const [selectingRepo, setSelectingRepo] = useState(false);
@@ -43,25 +49,31 @@ function HomePage() {
   const [newEnv, setNewEnv] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
-  async function refresh() {
-    const auth = await backend.authStatus().catch(() => ({ authenticated: false }));
-    setStatus(auth);
-    if (auth.authenticated) {
+  const fetchRepoStatus = useCallback(async () => {
+    if (status?.authenticated) {
       setRepoStatus(await backend.repoStatus());
     }
-  }
+  }, [status?.authenticated]);
 
   useEffect(() => {
-    refresh()
-      .catch((err) => setRepoError(err instanceof Error ? err.message : String(err)))
-      .finally(() => setLoading(false));
-  }, []);
+    fetchRepoStatus().catch((err) =>
+      setRepoError(err instanceof Error ? err.message : String(err)),
+    );
+  }, [fetchRepoStatus]);
 
   useEffect(() => {
-    const onAuthChanged = () => void refresh();
+    const onAuthChanged = () => void fetchRepoStatus();
     window.addEventListener("enbu-auth-changed", onAuthChanged);
     return () => window.removeEventListener("enbu-auth-changed", onAuthChanged);
-  }, []);
+  }, [fetchRepoStatus]);
+
+  useEffect(() => {
+    const onConnect = () => {
+      if (!status?.authenticated && !deviceStart) void handleStartAuth();
+    };
+    window.addEventListener("enbu-connect-github", onConnect);
+    return () => window.removeEventListener("enbu-connect-github", onConnect);
+  }, [status?.authenticated, deviceStart]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -69,37 +81,31 @@ function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!deviceStart || deviceStatus?.state === "success") {
-      return;
-    }
-
+    if (!deviceStart || deviceStatus?.state === "success") return;
     const poll = window.setInterval(
       async () => {
         const next = await backend.deviceStatus(deviceStart.session_id);
         setDeviceStatus(next);
         if (next.state === "success") {
           window.clearInterval(poll);
-          setStatus(await backend.authStatus());
           window.dispatchEvent(new Event("enbu-auth-changed"));
           setRepoStatus(await backend.repoStatus());
         }
       },
       Math.max(deviceStart.interval, 2) * 1000,
     );
-
     return () => window.clearInterval(poll);
   }, [deviceStart, deviceStatus?.state]);
 
   const expiresIn = useMemo(() => {
-    if (!deviceStart) {
-      return 0;
-    }
+    if (!deviceStart) return 0;
     return Math.max(0, Math.ceil((new Date(deviceStart.expires_at).getTime() - now) / 1000));
   }, [deviceStart, now]);
 
-  const currentEnvironment = useMemo(() => {
-    return environments.find((env) => env.current)?.name ?? secrets?.environment ?? "";
-  }, [environments, secrets?.environment]);
+  const currentEnvironment = useMemo(
+    () => environments.find((env) => env.current)?.name ?? secrets?.environment ?? "",
+    [environments, secrets?.environment],
+  );
 
   async function refreshWorkspace(env = currentEnvironment) {
     setWorkspaceLoading(true);
@@ -117,111 +123,139 @@ function HomePage() {
   }
 
   useEffect(() => {
-    if (repoStatus?.selected && repoStatus.repo?.initialized) {
-      void refreshWorkspace();
-    }
+    if (repoStatus?.selected && repoStatus.repo?.initialized) void refreshWorkspace();
   }, [repoStatus?.selected, repoStatus?.repo?.initialized]);
 
-  if (loading) {
+  async function handleStartAuth() {
+    setStartingAuth(true);
+    setAuthError("");
+    try {
+      const start = await backend.startDeviceLogin();
+      setDeviceStart(start);
+      setDeviceStatus({ state: "pending" });
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStartingAuth(false);
+    }
+  }
+
+  // Screen 01: Loading
+  if (authLoading) {
     return (
-      <VStack py={20}>
-        <Spinner size="xl" />
-        <Text color="gray.600">{t("common.loading")}</Text>
-      </VStack>
+      <PageCenter>
+        <VStack gap={3}>
+          <Spinner size="xl" color="accent.default" />
+          <Text color="fg.muted">{t("common.loading")}</Text>
+        </VStack>
+      </PageCenter>
     );
   }
 
-  if (!status?.authenticated) {
+  // Screen 02: Auth start
+  if (!status?.authenticated && !deviceStart) {
     return (
-      <VStack gap={6} py={16} maxW="xl" mx="auto" align="stretch">
-        <Box textAlign="center">
-          <Heading size="lg">{t("auth.welcome")}</Heading>
-          <Text color="gray.600" mt={2}>
-            {t("auth.tagline")}
-          </Text>
-        </Box>
-
-        {authError && (
-          <Alert.Root status="error">
-            <Alert.Indicator />
-            <Alert.Content>{authError}</Alert.Content>
-          </Alert.Root>
-        )}
-
-        {!deviceStart ? (
+      <PageCenter>
+        <VStack gap={5} w="full" maxW="480px" textAlign="center">
+          <Box>
+            <Heading size="2xl" fontWeight="extrabold" mb={2}>
+              {t("auth.welcome")}
+            </Heading>
+            <Text color="fg.muted">{t("auth.tagline")}</Text>
+          </Box>
+          {authError && <ErrorAlert message={authError} />}
           <Button
-            colorScheme="blue"
-            size="lg"
+            w="full"
+            bg="accent.default"
+            color="accent.fg"
+            fontWeight="semibold"
             loading={startingAuth}
-            onClick={async () => {
-              setStartingAuth(true);
-              setAuthError("");
-              try {
-                const start = await backend.startDeviceLogin();
-                setDeviceStart(start);
-                setDeviceStatus({ state: "pending" });
-              } catch (err) {
-                setAuthError(err instanceof Error ? err.message : String(err));
-              } finally {
-                setStartingAuth(false);
-              }
-            }}
+            onClick={handleStartAuth}
           >
+            <SiGithub size={16} />
             {t("auth.connect")}
           </Button>
-        ) : (
-          <DeviceLoginPanel
-            start={deviceStart}
-            status={deviceStatus}
-            expiresIn={expiresIn}
-            onCancel={async () => {
-              await backend.cancelDeviceLogin(deviceStart.session_id);
-              setDeviceStart(null);
-              setDeviceStatus(null);
-            }}
-            onRetry={() => {
-              setDeviceStart(null);
-              setDeviceStatus(null);
-              setAuthError("");
-            }}
-          />
-        )}
-      </VStack>
+        </VStack>
+      </PageCenter>
     );
   }
 
+  // Screen 03: Device flow
+  if (!status?.authenticated && deviceStart) {
+    return (
+      <PageCenter>
+        <DeviceLoginPanel
+          start={deviceStart}
+          status={deviceStatus}
+          expiresIn={expiresIn}
+          onCancel={async () => {
+            await backend.cancelDeviceLogin(deviceStart.session_id);
+            setDeviceStart(null);
+            setDeviceStatus(null);
+          }}
+          onRetry={() => {
+            setDeviceStart(null);
+            setDeviceStatus(null);
+            setAuthError("");
+          }}
+        />
+      </PageCenter>
+    );
+  }
+
+  // Screen 04: Repository selection
   if (!repoStatus?.selected) {
     return (
-      <VStack gap={5} align="stretch" maxW="xl" mx="auto" py={16}>
-        <Box>
-          <Heading size="lg">{t("repo.selectTitle")}</Heading>
-          <Text color="gray.600" mt={2}>
-            {t("repo.selectDescription")}
-          </Text>
-        </Box>
-        {repoError && (
-          <Alert.Root status="error">
-            <Alert.Indicator />
-            <Alert.Content>{repoError}</Alert.Content>
-          </Alert.Root>
-        )}
-        <HStack align="stretch">
-          <Input
-            value={repoPath}
-            onChange={(event) => setRepoPath(event.target.value)}
-            placeholder={t("repo.pathPlaceholder")}
-          />
+      <PageCenter>
+        <VStack gap={5} w="full" maxW="540px" align="stretch">
+          <Box>
+            <Heading size="2xl" fontWeight="extrabold" mb={2}>
+              {t("repo.selectTitle")}
+            </Heading>
+            <Text color="fg.muted">{t("repo.selectDescription")}</Text>
+          </Box>
+          {repoError && <ErrorAlert message={repoError} />}
+          <HStack>
+            <Input
+              value={repoPath}
+              onChange={(e) => setRepoPath(e.target.value)}
+              placeholder={t("repo.pathPlaceholder")}
+              h="38px"
+              borderColor="border.default"
+              borderRadius="md"
+            />
+            <Button
+              variant="outline"
+              h="38px"
+              borderColor="border.default"
+              color="fg.default"
+              fontWeight="semibold"
+              flexShrink={0}
+              onClick={async () => {
+                setSelectingRepo(true);
+                setRepoError("");
+                try {
+                  setRepoStatus(await backend.browseRepository());
+                } catch (err) {
+                  setRepoError(err instanceof Error ? err.message : String(err));
+                } finally {
+                  setSelectingRepo(false);
+                }
+              }}
+            >
+              {t("repo.browse")}
+            </Button>
+          </HStack>
           <Button
-            variant="outline"
+            bg="accent.default"
+            color="accent.fg"
+            fontWeight="semibold"
+            loading={selectingRepo}
             onClick={async () => {
               setSelectingRepo(true);
               setRepoError("");
               try {
-                const repo = await backend.browseRepository();
-                setRepoStatus(repo);
-                if (repo.selected) {
-                  setStatus(await backend.authStatus().catch(() => ({ authenticated: false })));
-                }
+                setRepoStatus(await backend.selectRepository(repoPath));
               } catch (err) {
                 setRepoError(err instanceof Error ? err.message : String(err));
               } finally {
@@ -229,202 +263,212 @@ function HomePage() {
               }
             }}
           >
-            {t("repo.browse")}
+            {t("repo.continue")}
           </Button>
-        </HStack>
-        <Button
-          colorScheme="blue"
-          loading={selectingRepo}
-          onClick={async () => {
-            setSelectingRepo(true);
-            setRepoError("");
-            try {
-              const repo = await backend.selectRepository(repoPath);
-              setRepoStatus(repo);
-              const auth = await backend.authStatus().catch(() => ({ authenticated: false }));
-              setStatus(auth);
-            } catch (err) {
-              setRepoError(err instanceof Error ? err.message : String(err));
-            } finally {
-              setSelectingRepo(false);
-            }
-          }}
-        >
-          {t("repo.continue")}
-        </Button>
-      </VStack>
+        </VStack>
+      </PageCenter>
     );
   }
 
+  // Screen 05: Initialize
   if (!repoStatus.repo?.initialized) {
     return (
-      <VStack gap={5} align="stretch" maxW="xl" mx="auto" py={16}>
-        <Box>
-          <Heading size="lg">{t("init.title")}</Heading>
-          <Text color="gray.600" mt={2}>
-            {t("init.description")}
-          </Text>
-          <Text color="gray.600" mt={2}>
-            {t("repo.current", {
-              owner: repoStatus.repo?.owner ?? "",
-              repo: repoStatus.repo?.repo ?? "",
-            })}
-          </Text>
-        </Box>
-        {actionError && <AlertText message={actionError} />}
-        <Button
-          colorScheme="blue"
-          loading={initializing}
-          onClick={async () => {
-            setInitializing(true);
-            setActionError("");
-            try {
-              await backend.initialize();
-              setRepoStatus(await backend.repoStatus());
-            } catch (err) {
-              setActionError(err instanceof Error ? err.message : String(err));
-            } finally {
-              setInitializing(false);
-            }
-          }}
-        >
-          {t("init.action")}
-        </Button>
-      </VStack>
-    );
-  }
-
-  return (
-    <VStack gap={6} align="stretch" maxW="4xl" mx="auto" py={8}>
-      <Box>
-        <Heading size="md">{t("auth.hello", { username: status.username ?? "" })}</Heading>
-        <Text color="gray.600">
-          {t("repo.current", { owner: repoStatus.repo.owner, repo: repoStatus.repo.repo })}
-        </Text>
-      </Box>
-
-      {actionError && <AlertText message={actionError} />}
-
-      <Box borderWidth="1px" p={4}>
-        <Heading size="sm" mb={3}>
-          {t("dashboard.environments")}
-        </Heading>
-        <HStack wrap="wrap" gap={2}>
-          {environments.map((env) => (
-            <Button
-              key={env.name}
-              size="sm"
-              variant={env.current ? "solid" : "outline"}
-              onClick={async () => {
-                setActionError("");
-                try {
-                  await backend.switchEnvironment(env.name);
-                  await refreshWorkspace(env.name);
-                } catch (err) {
-                  setActionError(err instanceof Error ? err.message : String(err));
-                }
-              }}
-            >
-              {env.name}
-            </Button>
-          ))}
-        </HStack>
-        <HStack mt={3}>
-          <Input
-            value={newEnv}
-            onChange={(event) => setNewEnv(event.target.value)}
-            placeholder={t("dashboard.newEnvironment")}
-          />
+      <PageCenter>
+        <VStack gap={5} w="full" maxW="540px" align="stretch">
+          <Box>
+            <Heading size="2xl" fontWeight="extrabold" mb={2}>
+              {t("init.title")}
+            </Heading>
+            <Text color="fg.muted">{t("init.description")}</Text>
+            <Text color="fg.muted" mt={1}>
+              {t("repo.current", {
+                owner: repoStatus.repo?.owner ?? "",
+                repo: repoStatus.repo?.repo ?? "",
+              })}
+            </Text>
+          </Box>
+          {actionError && <ErrorAlert message={actionError} />}
           <Button
-            variant="outline"
+            bg="accent.default"
+            color="accent.fg"
+            fontWeight="semibold"
+            loading={initializing}
             onClick={async () => {
-              if (!newEnv.trim()) {
-                return;
-              }
+              setInitializing(true);
               setActionError("");
               try {
-                await backend.createEnvironment(newEnv.trim());
-                setNewEnv("");
-                await refreshWorkspace(newEnv.trim());
+                await backend.initialize();
+                setRepoStatus(await backend.repoStatus());
               } catch (err) {
                 setActionError(err instanceof Error ? err.message : String(err));
+              } finally {
+                setInitializing(false);
               }
             }}
           >
-            {t("dashboard.createEnvironment")}
+            {t("init.action")}
           </Button>
-        </HStack>
-      </Box>
+        </VStack>
+      </PageCenter>
+    );
+  }
 
-      <Box borderWidth="1px" p={4}>
-        <HStack justify="space-between" mb={3}>
-          <Heading size="sm">{t("dashboard.secrets")}</Heading>
-          <HStack>
-            <Button
-              size="sm"
-              variant="outline"
-              loading={workspaceLoading}
-              onClick={async () => {
-                try {
-                  await backend.pullSecrets(currentEnvironment);
-                  await refreshWorkspace(currentEnvironment);
-                } catch (err) {
-                  setActionError(err instanceof Error ? err.message : String(err));
-                }
-              }}
-            >
-              {t("dashboard.pull")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              loading={workspaceLoading}
-              onClick={async () => {
-                try {
-                  await backend.syncSecrets(currentEnvironment);
-                  await refreshWorkspace(currentEnvironment);
-                } catch (err) {
-                  setActionError(err instanceof Error ? err.message : String(err));
-                }
-              }}
-            >
-              {t("dashboard.sync")}
-            </Button>
-          </HStack>
-        </HStack>
+  // Screen 06/07: Dashboard
+  return (
+    <Box minH="calc(100vh - 64px)" py={8} px={6} display="grid" placeItems="start center">
+      <VStack gap={6} w="full" maxW="880px" align="stretch">
+        <Box>
+          <Heading size="xl" fontWeight="extrabold" mb={1}>
+            {t("auth.hello", { username: status?.username ?? "" })}
+          </Heading>
+          <Text color="fg.muted">
+            {t("repo.current", {
+              owner: repoStatus.repo.owner,
+              repo: repoStatus.repo.repo,
+            })}
+          </Text>
+        </Box>
 
-        {workspaceLoading && (
-          <HStack>
-            <Spinner size="sm" />
-            <Text color="gray.600">{t("common.loading")}</Text>
-          </HStack>
-        )}
+        {actionError && <ErrorAlert message={actionError} />}
 
-        {!workspaceLoading && (secrets?.secrets.length ?? 0) === 0 && (
-          <Text color="gray.600">{t("dashboard.empty")}</Text>
-        )}
-
-        <VStack align="stretch" gap={2}>
-          {secrets?.secrets.map((secret) => (
-            <HStack key={secret.key} align="stretch">
-              <Input value={secret.key} readOnly />
-              <Input
-                defaultValue={secret.value}
-                onBlur={async (event) => {
-                  if (event.target.value === secret.value) {
-                    return;
-                  }
+        {/* Environments panel */}
+        <Panel>
+          <Heading size="md" fontWeight="bold" mb={3}>
+            {t("dashboard.environments")}
+          </Heading>
+          <HStack wrap="wrap" gap={2}>
+            {environments.map((env) => (
+              <Button
+                key={env.name}
+                size="sm"
+                variant={env.current ? "solid" : "outline"}
+                bg={env.current ? "accent.default" : undefined}
+                color={env.current ? "accent.fg" : "fg.default"}
+                borderColor={env.current ? undefined : "border.default"}
+                fontWeight="semibold"
+                onClick={async () => {
+                  setActionError("");
                   try {
-                    await backend.editSecret(secret.key, event.target.value, currentEnvironment);
+                    await backend.switchEnvironment(env.name);
+                    await refreshWorkspace(env.name);
+                  } catch (err) {
+                    setActionError(err instanceof Error ? err.message : String(err));
+                  }
+                }}
+              >
+                {env.name}
+              </Button>
+            ))}
+          </HStack>
+          <HStack mt={3}>
+            <Input
+              value={newEnv}
+              onChange={(e) => setNewEnv(e.target.value)}
+              placeholder={t("dashboard.newEnvironment")}
+              h="38px"
+              borderColor="border.default"
+              borderRadius="md"
+            />
+            <Button
+              variant="outline"
+              h="38px"
+              borderColor="border.default"
+              color="fg.default"
+              fontWeight="semibold"
+              flexShrink={0}
+              onClick={async () => {
+                if (!newEnv.trim()) return;
+                setActionError("");
+                try {
+                  await backend.createEnvironment(newEnv.trim());
+                  setNewEnv("");
+                  await refreshWorkspace(newEnv.trim());
+                } catch (err) {
+                  setActionError(err instanceof Error ? err.message : String(err));
+                }
+              }}
+            >
+              {t("dashboard.createEnvironment")}
+            </Button>
+          </HStack>
+        </Panel>
+
+        {/* Secrets panel */}
+        <Panel>
+          <Flex justify="space-between" align="center" mb={3}>
+            <Heading size="md" fontWeight="bold">
+              {t("dashboard.secrets")}
+            </Heading>
+            <HStack>
+              <Button
+                size="sm"
+                variant="outline"
+                borderColor="border.default"
+                color="fg.default"
+                fontWeight="semibold"
+                loading={workspaceLoading}
+                onClick={async () => {
+                  try {
+                    await backend.pullSecrets(currentEnvironment);
                     await refreshWorkspace(currentEnvironment);
                   } catch (err) {
                     setActionError(err instanceof Error ? err.message : String(err));
                   }
                 }}
-              />
+              >
+                {t("dashboard.pull")}
+              </Button>
               <Button
+                size="sm"
                 variant="outline"
+                borderColor="border.default"
+                color="fg.default"
+                fontWeight="semibold"
+                loading={workspaceLoading}
                 onClick={async () => {
+                  try {
+                    await backend.syncSecrets(currentEnvironment);
+                    await refreshWorkspace(currentEnvironment);
+                  } catch (err) {
+                    setActionError(err instanceof Error ? err.message : String(err));
+                  }
+                }}
+              >
+                {t("dashboard.sync")}
+              </Button>
+            </HStack>
+          </Flex>
+
+          {workspaceLoading && (
+            <HStack mb={3}>
+              <Spinner size="sm" color="accent.default" />
+              <Text fontSize="sm" color="fg.muted">
+                {t("common.loading")}
+              </Text>
+            </HStack>
+          )}
+
+          {!workspaceLoading && (secrets?.secrets.length ?? 0) === 0 && (
+            <Text color="fg.muted" fontSize="sm" py={2}>
+              {t("dashboard.empty")}
+            </Text>
+          )}
+
+          <VStack align="stretch" gap={2}>
+            {secrets?.secrets.map((secret) => (
+              <SecretRow
+                key={secret.key}
+                secretKey={secret.key}
+                secretValue={secret.value}
+                onEdit={async (val) => {
+                  try {
+                    await backend.editSecret(secret.key, val, currentEnvironment);
+                    await refreshWorkspace(currentEnvironment);
+                  } catch (err) {
+                    setActionError(err instanceof Error ? err.message : String(err));
+                  }
+                }}
+                onDelete={async () => {
                   try {
                     await backend.deleteSecret(secret.key, currentEnvironment);
                     await refreshWorkspace(currentEnvironment);
@@ -432,45 +476,153 @@ function HomePage() {
                     setActionError(err instanceof Error ? err.message : String(err));
                   }
                 }}
-              >
-                {t("dashboard.delete")}
-              </Button>
-            </HStack>
-          ))}
-        </VStack>
+                deleteLabel={t("dashboard.delete")}
+              />
+            ))}
+          </VStack>
 
-        <HStack mt={4}>
-          <Input
-            value={secretKey}
-            onChange={(event) => setSecretKey(event.target.value)}
-            placeholder={t("dashboard.key")}
-          />
-          <Input
-            value={secretValue}
-            onChange={(event) => setSecretValue(event.target.value)}
-            placeholder={t("dashboard.value")}
-          />
-          <Button
-            colorScheme="blue"
-            onClick={async () => {
-              if (!secretKey.trim()) {
-                return;
-              }
-              try {
-                await backend.addSecret(secretKey.trim(), secretValue, currentEnvironment);
-                setSecretKey("");
-                setSecretValue("");
-                await refreshWorkspace(currentEnvironment);
-              } catch (err) {
-                setActionError(err instanceof Error ? err.message : String(err));
-              }
-            }}
-          >
-            {t("dashboard.add")}
-          </Button>
-        </HStack>
-      </Box>
-    </VStack>
+          <Separator mt={4} mb={3} borderColor="border.default" />
+
+          {/* Add secret row */}
+          <Box display="grid" gridTemplateColumns="220px minmax(0,1fr) auto" gap={2}>
+            <Input
+              placeholder={t("dashboard.key")}
+              value={secretKey}
+              onChange={(e) => setSecretKey(e.target.value)}
+              h="38px"
+              borderColor="border.default"
+              borderRadius="md"
+            />
+            <Input
+              placeholder={t("dashboard.value")}
+              value={secretValue}
+              onChange={(e) => setSecretValue(e.target.value)}
+              h="38px"
+              borderColor="border.default"
+              borderRadius="md"
+            />
+            <Button
+              bg="accent.default"
+              color="accent.fg"
+              fontWeight="semibold"
+              h="38px"
+              onClick={async () => {
+                if (!secretKey.trim()) return;
+                try {
+                  await backend.addSecret(secretKey.trim(), secretValue, currentEnvironment);
+                  setSecretKey("");
+                  setSecretValue("");
+                  await refreshWorkspace(currentEnvironment);
+                } catch (err) {
+                  setActionError(err instanceof Error ? err.message : String(err));
+                }
+              }}
+            >
+              {t("dashboard.add")}
+            </Button>
+          </Box>
+        </Panel>
+      </VStack>
+    </Box>
+  );
+}
+
+// --- Sub-components ---
+
+function PageCenter({ children }: { children: React.ReactNode }) {
+  return (
+    <Box minH="calc(100vh - 64px)" display="grid" placeItems="center" px={6} py={12}>
+      {children}
+    </Box>
+  );
+}
+
+function Panel({ children }: { children: React.ReactNode }) {
+  return (
+    <Box p="18px" borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface">
+      {children}
+    </Box>
+  );
+}
+
+function ErrorAlert({ message }: { message: string }) {
+  return (
+    <Alert.Root
+      status="error"
+      borderRadius="md"
+      borderWidth="1px"
+      borderColor="red.200"
+      bg="red.50"
+      py={3}
+      px={4}
+    >
+      <Alert.Indicator />
+      <Alert.Content>
+        <Text fontSize="sm">{message}</Text>
+      </Alert.Content>
+    </Alert.Root>
+  );
+}
+
+export function SecretRow({
+  secretKey,
+  secretValue,
+  onEdit,
+  onDelete,
+  deleteLabel,
+}: {
+  secretKey: string;
+  secretValue: string;
+  onEdit: (val: string) => Promise<void>;
+  onDelete: () => Promise<void>;
+  deleteLabel: string;
+}) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <Box display="grid" gridTemplateColumns="220px minmax(0,1fr) 38px auto" gap={2}>
+      <Input
+        readOnly
+        value={secretKey}
+        h="38px"
+        borderColor="border.default"
+        borderRadius="md"
+        bg="bg.muted"
+        color="fg.muted"
+      />
+      <Input
+        defaultValue={secretValue}
+        type={visible ? "text" : "password"}
+        h="38px"
+        borderColor="border.default"
+        borderRadius="md"
+        onBlur={async (e) => {
+          if (e.target.value !== secretValue) await onEdit(e.target.value);
+        }}
+      />
+      <Button
+        variant="ghost"
+        w="38px"
+        h="38px"
+        p={0}
+        color="fg.muted"
+        _hover={{ bg: "bg.muted", color: "fg.default" }}
+        aria-label={visible ? "Hide value" : "Show value"}
+        onClick={() => setVisible((v) => !v)}
+      >
+        {visible ? <EyeOff size={16} /> : <Eye size={16} />}
+      </Button>
+      <Button
+        variant="outline"
+        h="38px"
+        borderColor="border.default"
+        color="fg.default"
+        fontWeight="semibold"
+        onClick={onDelete}
+      >
+        {deleteLabel}
+      </Button>
+    </Box>
   );
 }
 
@@ -491,59 +643,76 @@ function DeviceLoginPanel({
   const terminal = status?.state && status.state !== "pending";
 
   return (
-    <VStack gap={4} align="stretch">
-      <Box textAlign="center" bg="white" borderWidth="1px" p={6}>
-        <Text color="gray.600">{t("auth.userCode")}</Text>
-        <Code fontSize="3xl" p={4} mt={3}>
-          {start.user_code}
-        </Code>
-        <HStack justify="center" mt={3}>
-          <Badge colorPalette={start.copied ? "green" : "orange"}>
-            {start.copied ? t("auth.copied") : t("auth.copyFailed")}
-          </Badge>
-          <Badge colorPalette={start.browser_opened ? "green" : "orange"}>
-            {start.browser_opened ? t("auth.browserOpened") : t("auth.browserNotOpened")}
-          </Badge>
-        </HStack>
+    <VStack gap={5} w="full" maxW="480px" align="stretch">
+      <Heading size="2xl" fontWeight="extrabold" textAlign="center">
+        {t("auth.authorizeTitle")}
+      </Heading>
+
+      {/* Code copy button */}
+      <Box textAlign="center">
+        <Button
+          display="inline-flex"
+          alignItems="center"
+          gap={3}
+          h="auto"
+          py={4}
+          px={5}
+          borderRadius="md"
+          borderWidth="1px"
+          borderColor="border.default"
+          color="fg.default"
+          bg="gray.50"
+          _hover={{ bg: "gray.100" }}
+          onClick={() => void navigator.clipboard.writeText(start.user_code)}
+          aria-label="Copy device code"
+        >
+          <Copy size={18} color="#57606a" />
+          <Text className="device-code">{start.user_code}</Text>
+        </Button>
       </Box>
 
+      {/* Status / expiry */}
       {status?.state === "pending" && (
         <HStack justify="center">
-          <Spinner />
-          <Text>{t("auth.waiting")}</Text>
-          <Text color="gray.600">{t("auth.expiresIn", { seconds: expiresIn })}</Text>
+          <Spinner size="sm" color="accent.default" />
+          <Text fontSize="sm">{t("auth.waiting")}</Text>
+          <Text fontSize="xs" color="fg.muted">
+            {t("auth.expiresIn", { seconds: expiresIn })}
+          </Text>
         </HStack>
       )}
-      {status?.state === "denied" && <AlertText message={t("auth.denied")} />}
-      {status?.state === "expired" && <AlertText message={t("auth.expired")} />}
-      {status?.state === "error" && <AlertText message={status.message ?? t("auth.error")} />}
+      {status?.state === "denied" && <ErrorAlert message={t("auth.denied")} />}
+      {status?.state === "expired" && <ErrorAlert message={t("auth.expired")} />}
+      {status?.state === "error" && <ErrorAlert message={status.message ?? t("auth.error")} />}
 
+      {/* Actions */}
       <HStack justify="center" wrap="wrap">
-        <Button variant="outline" onClick={() => navigator.clipboard.writeText(start.user_code)}>
-          {t("auth.copyCode")}
-        </Button>
-        <Button variant="outline" onClick={() => window.open(start.verification_uri, "_blank")}>
+        <Button
+          variant="outline"
+          h="38px"
+          borderColor="border.default"
+          color="fg.default"
+          fontWeight="semibold"
+          onClick={() => window.open(start.verification_uri, "_blank")}
+        >
           {t("auth.openGitHub")}
         </Button>
         {terminal ? (
-          <Button colorScheme="blue" onClick={onRetry}>
+          <Button
+            bg="accent.default"
+            color="accent.fg"
+            fontWeight="semibold"
+            h="38px"
+            onClick={onRetry}
+          >
             {t("auth.tryAgain")}
           </Button>
         ) : (
-          <Button variant="ghost" onClick={onCancel}>
+          <Button variant="ghost" h="38px" color="fg.muted" onClick={onCancel}>
             {t("auth.cancel")}
           </Button>
         )}
       </HStack>
     </VStack>
-  );
-}
-
-function AlertText({ message }: { message: string }) {
-  return (
-    <Alert.Root status="error">
-      <Alert.Indicator />
-      <Alert.Content>{message}</Alert.Content>
-    </Alert.Root>
   );
 }

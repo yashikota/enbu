@@ -1,19 +1,25 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import {
-  Badge,
-  Box,
-  Button,
-  Container,
-  Heading,
-  Flex,
-  HStack,
-  NativeSelect,
-  Text,
-} from "@chakra-ui/react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { Badge, Box, Button, Flex, NativeSelect, Popover, Separator, Text } from "@chakra-ui/react";
 import type { AuthStatus } from "../lib/api";
 import { backend } from "../lib/backend";
 import { I18nProvider, useI18n, type Locale } from "../lib/i18n";
+
+export type AuthContextValue = {
+  status: AuthStatus | null;
+  loading: boolean;
+  refresh: () => Promise<void>;
+};
+
+export const AuthContext = createContext<AuthContextValue>({
+  status: null,
+  loading: true,
+  refresh: async () => {},
+});
+
+export function useAuth() {
+  return useContext(AuthContext);
+}
 
 export const Route = createRootRoute({
   component: RootWithProviders,
@@ -28,59 +34,19 @@ function RootWithProviders() {
 }
 
 function RootLayout() {
-  const { locale, setLocale, t } = useI18n();
-
-  return (
-    <Box minH="100vh" bg="gray.50">
-      <Flex
-        as="header"
-        bg="white"
-        borderBottomWidth="1px"
-        py={3}
-        px={6}
-        align="center"
-        justify="space-between"
-      >
-        <Heading size="md">{t("app.name")}</Heading>
-        <HStack gap={3}>
-          <AuthStatusChip />
-          <NativeSelect.Root width="140px" size="sm">
-            <NativeSelect.Field
-              aria-label={t("app.language")}
-              value={locale}
-              onChange={(event) => setLocale(event.target.value as Locale)}
-            >
-              <option value="en">English</option>
-              <option value="ja">日本語</option>
-            </NativeSelect.Field>
-            <NativeSelect.Indicator />
-          </NativeSelect.Root>
-        </HStack>
-      </Flex>
-      <Container maxW="container.lg" py={8}>
-        <Outlet />
-      </Container>
-    </Box>
-  );
-}
-
-function AuthStatusChip() {
-  const { t } = useI18n();
   const [status, setStatus] = useState<AuthStatus | null>(null);
-  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   async function refresh() {
     try {
       setStatus(await backend.authStatus());
-      setError(false);
     } catch {
       setStatus(null);
-      setError(true);
     }
   }
 
   useEffect(() => {
-    void refresh();
+    void refresh().finally(() => setLoading(false));
     const timer = window.setInterval(() => void refresh(), 5000);
     const onFocus = () => void refresh();
     const onAuthChanged = () => void refresh();
@@ -93,48 +59,183 @@ function AuthStatusChip() {
     };
   }, []);
 
+  return (
+    <AuthContext.Provider value={{ status, loading, refresh }}>
+      <Flex
+        as="header"
+        h="64px"
+        align="center"
+        justify="space-between"
+        px={6}
+        bg="bg.surface"
+        borderBottomWidth="1px"
+        borderColor="border.default"
+        position="sticky"
+        top={0}
+        zIndex={10}
+      >
+        <Text fontWeight="extrabold" fontSize="2xl">
+          💃 enbu
+        </Text>
+        <AccountMenu status={status} loading={loading} />
+      </Flex>
+      <Outlet />
+    </AuthContext.Provider>
+  );
+}
+
+function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: boolean }) {
+  const { locale, setLocale, t } = useI18n();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
   const authenticated = Boolean(status?.authenticated);
   const username = status?.username ?? "";
-  const initial = username.slice(0, 1).toUpperCase() || "?";
+  const initial = username.slice(0, 1).toUpperCase() || (loading ? "…" : "-");
+
+  const statusLabel = loading
+    ? "Checking..."
+    : authenticated
+      ? t("auth.signedIn")
+      : t("auth.signedOut");
+  const badgeColor = loading ? "gray" : authenticated ? "green" : "gray";
+
+  const repoName = status?.repo?.name;
+  const repoOwner = status?.repo?.owner;
 
   return (
-    <HStack gap={2}>
-      <Box
-        aria-label={authenticated ? t("auth.signedIn") : t("auth.signedOut")}
-        bg={authenticated ? "green.600" : "gray.300"}
-        color={authenticated ? "white" : "gray.700"}
-        w="32px"
-        h="32px"
-        borderRadius="full"
-        display="grid"
-        placeItems="center"
-        fontSize="sm"
-        fontWeight="bold"
-      >
-        {authenticated ? initial : "-"}
-      </Box>
-      <Box minW="92px">
-        <Badge colorPalette={error ? "red" : authenticated ? "green" : "gray"}>
-          {error ? t("auth.checkFailed") : authenticated ? t("auth.signedIn") : t("auth.signedOut")}
-        </Badge>
-        {authenticated && (
-          <Text fontSize="xs" color="gray.600" mt={1} maxW="120px" truncate>
-            {username}
-          </Text>
-        )}
-      </Box>
-      {authenticated && (
+    <Popover.Root>
+      <Popover.Trigger asChild>
         <Button
-          size="xs"
+          ref={triggerRef}
           variant="ghost"
-          onClick={async () => {
-            await backend.logout();
-            window.dispatchEvent(new Event("enbu-auth-changed"));
-          }}
+          w="38px"
+          h="38px"
+          p={0}
+          borderRadius="full"
+          aria-label="Account menu"
+          _hover={{ bg: "bg.muted", borderWidth: "1px", borderColor: "border.default" }}
         >
-          {t("auth.logout")}
+          <Box
+            w="32px"
+            h="32px"
+            borderRadius="full"
+            bg={authenticated ? "green.600" : "gray.300"}
+            color={authenticated ? "white" : "gray.600"}
+            fontSize="sm"
+            fontWeight="extrabold"
+            display="grid"
+            placeItems="center"
+            flexShrink={0}
+          >
+            {initial}
+          </Box>
         </Button>
-      )}
-    </HStack>
+      </Popover.Trigger>
+
+      <Popover.Positioner>
+        <Popover.Content
+          w="248px"
+          p={3}
+          borderWidth="1px"
+          borderColor="border.default"
+          borderRadius="lg"
+          boxShadow="dropdown"
+          bg="bg.surface"
+        >
+          {/* Account name */}
+          <Box pb={2} mb={1} borderBottomWidth="1px" borderColor="border.default">
+            <Text fontWeight="bold" fontSize="sm">
+              {authenticated ? username : "Account"}
+            </Text>
+          </Box>
+
+          {/* Status */}
+          <Flex justify="space-between" align="center" py="10px">
+            <Text fontSize="sm" color="fg.muted">
+              Status
+            </Text>
+            <Badge
+              colorPalette={badgeColor}
+              borderRadius="full"
+              px={2}
+              py="1px"
+              fontSize="xs"
+              fontWeight="semibold"
+            >
+              {statusLabel}
+            </Badge>
+          </Flex>
+
+          <Separator borderColor="border.default" />
+
+          {/* Language */}
+          <Flex justify="space-between" align="center" py="10px">
+            <Text fontSize="sm" color="fg.muted">
+              {t("app.language")}
+            </Text>
+            <NativeSelect.Root size="sm" w="118px">
+              <NativeSelect.Field
+                value={locale}
+                onChange={(e) => setLocale(e.target.value as Locale)}
+                fontSize="sm"
+                h="30px"
+                borderColor="border.default"
+                borderRadius="md"
+              >
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
+          </Flex>
+
+          {/* Repository info */}
+          {authenticated && repoOwner && repoName && (
+            <>
+              <Separator borderColor="border.default" />
+              <Flex justify="space-between" align="center" py="10px">
+                <Text fontSize="sm" color="fg.muted">
+                  Repository
+                </Text>
+                <Text fontSize="sm" truncate maxW="120px">
+                  {repoName}
+                </Text>
+              </Flex>
+            </>
+          )}
+
+          {/* Action button */}
+          <Separator borderColor="border.default" mb={2} />
+          {authenticated ? (
+            <Button
+              size="sm"
+              variant="outline"
+              w="full"
+              borderColor="border.default"
+              color="fg.default"
+              fontWeight="semibold"
+              onClick={async () => {
+                await backend.logout();
+                window.dispatchEvent(new Event("enbu-auth-changed"));
+              }}
+            >
+              {t("auth.logout")}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              w="full"
+              borderColor="border.default"
+              color="fg.default"
+              fontWeight="semibold"
+              onClick={() => window.dispatchEvent(new Event("enbu-connect-github"))}
+            >
+              Connect GitHub
+            </Button>
+          )}
+        </Popover.Content>
+      </Popover.Positioner>
+    </Popover.Root>
   );
 }
