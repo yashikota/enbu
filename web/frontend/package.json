@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:preview": "vite build --config vite.config.preview.ts",
     "typecheck": "tsc -p tsconfig.app.json",
     "lint": "oxlint ./src --ignore-pattern routeTree.gen.ts --ignore-pattern wailsjs",
     "fmt": "oxfmt ./src/lib ./src/routes",

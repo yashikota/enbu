@@ -6,6 +6,11 @@ import {
   type InitResult,
   type SecretsResponse,
 } from "./api";
+import { mockBackend } from "./mock-backend";
+
+const isMock =
+  new URLSearchParams(window.location.search).has("mock") ||
+  import.meta.env.BASE_URL.includes("/enbu/");
 
 export interface DeviceStart {
   session_id: string;
@@ -69,7 +74,7 @@ function service(): DesktopService | undefined {
   return window.go?.main?.DesktopService ?? window.go?.desktop?.Service;
 }
 
-export const backend = {
+const realBackend = {
   async authStatus(): Promise<AuthStatus> {
     const svc = service();
     if (!svc) {
@@ -216,6 +221,8 @@ export const backend = {
     await svc.SyncSecrets(env);
   },
 };
+
+export const backend = isMock ? mockBackend : realBackend;
 
 function normalizeAuthStatus(status: DesktopAuthStatus): AuthStatus {
   if (!status.repo) {
