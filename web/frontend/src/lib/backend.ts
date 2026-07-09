@@ -224,6 +224,15 @@ const realBackend = {
 
 export const backend = isMock ? mockBackend : realBackend;
 
+export function openURL(url: string): void {
+  if (service()) {
+    // Wails: use runtime to open in OS browser instead of spawning a new app window
+    void import("../wailsjs/runtime/runtime").then(({ BrowserOpenURL }) => BrowserOpenURL(url));
+  } else {
+    window.open(url, "_blank");
+  }
+}
+
 function normalizeAuthStatus(status: DesktopAuthStatus): AuthStatus {
   if (!status.repo) {
     return status;

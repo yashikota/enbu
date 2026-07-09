@@ -15,7 +15,7 @@ import {
 } from "@chakra-ui/react";
 import { Copy, Eye, EyeOff } from "lucide-react";
 import { SiGithub } from "@icons-pack/react-simple-icons";
-import { backend, type DeviceStart, type DeviceStatus } from "../lib/backend";
+import { backend, type DeviceStart, type DeviceStatus, openURL } from "../lib/backend";
 import type { Environment, SecretsResponse } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useAuth } from "./__root";
@@ -693,7 +693,7 @@ function DeviceLoginPanel({
           borderColor="border.default"
           color="fg.default"
           fontWeight="semibold"
-          onClick={() => window.open(start.verification_uri, "_blank")}
+          onClick={() => openURL(start.verification_uri)}
         >
           {t("auth.openGitHub")}
         </Button>
