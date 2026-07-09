@@ -21,6 +21,8 @@ coverage.*
 *.coverprofile
 profile.cov
 
+# Misc
+docs/superpowers/
 
 # Frontend
 web/frontend/node_modules/
