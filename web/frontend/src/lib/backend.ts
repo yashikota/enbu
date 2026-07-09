@@ -225,9 +225,12 @@ const realBackend = {
 export const backend = isMock ? mockBackend : realBackend;
 
 export function openURL(url: string): void {
-  if (service()) {
-    // Wails: use runtime to open in OS browser instead of spawning a new app window
-    void import("../wailsjs/runtime/runtime").then(({ BrowserOpenURL }) => BrowserOpenURL(url));
+  // Wails injects window.runtime at startup; use it to open in OS browser
+  // instead of spawning a new app window via window.open
+  const wailsRuntime = (window as unknown as { runtime?: { BrowserOpenURL?: (u: string) => void } })
+    .runtime;
+  if (wailsRuntime?.BrowserOpenURL) {
+    wailsRuntime.BrowserOpenURL(url);
   } else {
     window.open(url, "_blank");
   }
