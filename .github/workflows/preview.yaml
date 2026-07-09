@@ -237,9 +237,7 @@ jobs:
             <!-- enbu-preview -->
             ## Preview
 
-            | | URL |
-            |---|---|
-            | Web UI + TUI | https://yashikota.github.io/enbu/pr-${{ github.event.pull_request.number }}/ |
+            https://yashikota.github.io/enbu/pr-${{ github.event.pull_request.number }}/
 
             > Updated at ${{ github.sha }}
           edit-mode: replace
