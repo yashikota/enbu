@@ -60,6 +60,10 @@ func (s *Service) Startup(ctx context.Context) {
 	s.ctx = ctx
 }
 
+func (s *Service) Context() context.Context {
+	return s.ctx
+}
+
 func (s *Service) SetDirectoryPicker(picker DirectoryPicker) {
 	s.pickDir = picker
 }

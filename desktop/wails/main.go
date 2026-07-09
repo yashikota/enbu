@@ -31,6 +31,10 @@ func main() {
 			Title: "Select Git repository",
 		})
 	})
+	core.SetBrowserOpener(func(url string) error {
+		runtime.BrowserOpenURL(core.Context(), url)
+		return nil
+	})
 
 	if err := wails.Run(&options.App{
 		Title:  "enbu",
