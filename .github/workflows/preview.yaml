@@ -142,20 +142,17 @@ jobs:
             echo "deploy_path=main" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Checkout _preview-store state store
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: _preview-store
-          path: _preview-store
-          persist-credentials: false
-        continue-on-error: true
-
-      - name: Initialize state store if needed
+      - name: Clone or init _preview-store
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ ! -d _preview-store/.git ]; then
-            git init _preview-store
+          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code "$REPO_URL" "refs/heads/_preview-store" > /dev/null 2>&1; then
+            git clone --depth 1 --branch _preview-store "$REPO_URL" _preview-store
+          else
+            git init -b _preview-store _preview-store
             cd _preview-store || exit 1
-            git checkout -b _preview-store
+            git remote add origin "$REPO_URL"
             git commit --allow-empty -m "chore: init _preview-store"
           fi
 
@@ -258,23 +255,17 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout _preview-store
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: _preview-store
-          path: store
-          persist-credentials: false
-        continue-on-error: true
-
       - name: Remove PR directory from store
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if [ ! -d store/.git ]; then
-            echo "No _preview-store found, nothing to clean up."
+          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if ! git ls-remote --exit-code "$REPO_URL" "refs/heads/_preview-store" > /dev/null 2>&1; then
+            echo "No _preview-store branch found, nothing to clean up."
             exit 0
           fi
+          git clone --depth 1 --branch _preview-store "$REPO_URL" store
           cd store || exit 1
           if [ ! -d "pr-${PR_NUMBER}" ]; then
             echo "pr-${PR_NUMBER} not found, nothing to clean up."
@@ -283,11 +274,6 @@ jobs:
           rm -rf "pr-${PR_NUMBER}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git remote get-url origin > /dev/null 2>&1; then
-            git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          else
-            git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          fi
           git add -A
           git commit -m "preview: remove pr-${PR_NUMBER}"
           git push origin _preview-store:_preview-store
