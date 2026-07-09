@@ -440,6 +440,13 @@ func (m model) viewEnvSwitch() string {
 
 func (m model) loadSecrets() tea.Cmd {
 	return func() tea.Msg {
+		if m.app == nil {
+			secrets := make(map[string]string)
+			for _, e := range demoSecretsByEnv[demoCurrent] {
+				secrets[e.key] = e.value
+			}
+			return secretsLoadedMsg{secrets: secrets, current: demoCurrent}
+		}
 		secrets, err := m.app.ListSecrets(context.Background(), "")
 		if err != nil {
 			return errMsg{err}
@@ -451,6 +458,9 @@ func (m model) loadSecrets() tea.Cmd {
 
 func (m model) loadEnvs() tea.Cmd {
 	return func() tea.Msg {
+		if m.app == nil {
+			return envsLoadedMsg{envs: demoEnvs, current: demoCurrent}
+		}
 		envs, err := m.app.ListEnvironments()
 		if err != nil {
 			return errMsg{err}
@@ -469,6 +479,22 @@ func (m model) loadEnvs() tea.Cmd {
 
 func (m model) addSecret(key, value string) tea.Cmd {
 	return func() tea.Msg {
+		if m.app == nil {
+			secrets := demoSecretsByEnv[demoCurrent]
+			found := false
+			for i, s := range secrets {
+				if s.key == key {
+					secrets[i].value = value
+					found = true
+					break
+				}
+			}
+			if !found {
+				secrets = append(secrets, secretEntry{key: key, value: value})
+			}
+			demoSecretsByEnv[demoCurrent] = secrets
+			return operationDoneMsg{message: fmt.Sprintf("Added %s", key)}
+		}
 		if err := m.app.AddSecret(context.Background(), "", key, value); err != nil {
 			return errMsg{err}
 		}
@@ -478,6 +504,17 @@ func (m model) addSecret(key, value string) tea.Cmd {
 
 func (m model) editSecret(key, value string) tea.Cmd {
 	return func() tea.Msg {
+		if m.app == nil {
+			secrets := demoSecretsByEnv[demoCurrent]
+			for i, s := range secrets {
+				if s.key == key {
+					secrets[i].value = value
+					break
+				}
+			}
+			demoSecretsByEnv[demoCurrent] = secrets
+			return operationDoneMsg{message: fmt.Sprintf("Updated %s", key)}
+		}
 		if err := m.app.EditSecret(context.Background(), "", key, value); err != nil {
 			return errMsg{err}
 		}
@@ -487,6 +524,16 @@ func (m model) editSecret(key, value string) tea.Cmd {
 
 func (m model) deleteSecret(key string) tea.Cmd {
 	return func() tea.Msg {
+		if m.app == nil {
+			var updated []secretEntry
+			for _, s := range demoSecretsByEnv[demoCurrent] {
+				if s.key != key {
+					updated = append(updated, s)
+				}
+			}
+			demoSecretsByEnv[demoCurrent] = updated
+			return operationDoneMsg{message: fmt.Sprintf("Deleted %s", key)}
+		}
 		if err := m.app.DeleteSecret(context.Background(), "", key); err != nil {
 			return errMsg{err}
 		}
@@ -496,6 +543,13 @@ func (m model) deleteSecret(key string) tea.Cmd {
 
 func (m model) switchEnv(name string) tea.Cmd {
 	return func() tea.Msg {
+		if m.app == nil {
+			demoCurrent = name
+			for i, env := range demoEnvs {
+				demoEnvs[i].isCurrent = (env.name == name)
+			}
+			return operationDoneMsg{message: fmt.Sprintf("Switched to %s", name)}
+		}
 		if err := m.app.SwitchEnvironment(name); err != nil {
 			return errMsg{err}
 		}

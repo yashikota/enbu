@@ -78,3 +78,20 @@ tasks:
       - task: lint
       - task: fmt
       - task: frontend:check
+
+  preview:web:
+    desc: Build web frontend in mock/preview mode
+    dir: web/frontend
+    cmds:
+      - pnpm install --frozen-lockfile
+      - pnpm run build:preview
+
+  preview:tui:
+    desc: Build TUI demo and run VHS tapes locally
+    cmds:
+      - go build -o tui-demo ./test/preview/tui-demo
+      - mkdir -p test/preview/vhs/out
+      - sh -c 'export PATH="$PWD:$PATH"; for tape in test/preview/vhs/*.tape; do vhs "$tape"; done'
+    preconditions:
+      - sh: command -v vhs
+        msg: "VHS not installed. Install with: go install github.com/charmbracelet/vhs@latest"

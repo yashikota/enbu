@@ -1,0 +1,293 @@
+name: Preview
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions: {}
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number || 'main' }}
+  cancel-in-progress: true
+
+jobs:
+  build-web:
+    name: Build Web Preview
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 11.10.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: web/frontend
+
+      - name: Build preview
+        run: pnpm run build:preview
+        working-directory: web/frontend
+        env:
+          PREVIEW_BASE: ${{ github.event_name == 'pull_request' && format('/enbu/pr-{0}/web/', github.event.pull_request.number) || '/enbu/main/web/' }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-preview
+          path: web/frontend/dist-preview
+
+  build-tui:
+    name: Build TUI Screenshots
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build TUI demo binary
+        run: go build -o tui-demo ./test/preview/tui-demo
+
+      - name: Install VHS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          curl -fsSL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 -o /usr/local/bin/ttyd
+          sudo chmod +x /usr/local/bin/ttyd
+
+      - name: Install VHS
+        run: go install github.com/charmbracelet/vhs@latest
+
+      - name: Generate GIFs
+        run: |
+          mkdir -p test/preview/vhs/out
+          GOPATH="$(go env GOPATH)"
+          export PATH="$PWD:${GOPATH}/bin:$PATH"
+          for tape in test/preview/vhs/*.tape; do
+            vhs "$tape"
+          done
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tui-preview
+          path: test/preview/vhs/out
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event.action != 'closed'
+    needs: [build-web, build-tui]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download web artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: web-preview
+          path: site/web
+
+      - name: Download TUI artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: tui-preview
+          path: site
+
+      - name: Copy preview page
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          sparse-checkout: test/preview/index.html
+          sparse-checkout-cone-mode: false
+          path: src
+          persist-credentials: false
+
+      - run: cp src/test/preview/index.html site/index.html
+
+      - name: Determine deploy path
+        id: path
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "deploy_path=pr-${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy_path=main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Clone or init _preview-store
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code "$REPO_URL" "refs/heads/_preview-store" > /dev/null 2>&1; then
+            git clone --depth 1 --branch _preview-store "$REPO_URL" _preview-store
+          else
+            git init -b _preview-store _preview-store
+            cd _preview-store || exit 1
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git remote add origin "$REPO_URL"
+            git commit --allow-empty -m "chore: init _preview-store"
+          fi
+
+      - name: Update deploy directory in state store
+        env:
+          DEPLOY_PATH: ${{ steps.path.outputs.deploy_path }}
+        run: |
+          rm -rf "_preview-store/${DEPLOY_PATH}"
+          mkdir -p "_preview-store/${DEPLOY_PATH}"
+          cp -r site/. "_preview-store/${DEPLOY_PATH}/"
+
+      - name: Create root index if missing
+        run: |
+          if [ ! -f _preview-store/index.html ]; then
+            cat > _preview-store/index.html <<'HTML'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head><meta charset="UTF-8"><title>enbu Previews</title>
+          <style>body{font-family:system-ui;background:#0d1117;color:#e6edf3;max-width:600px;margin:4rem auto;padding:1rem}a{color:#58a6ff}</style>
+          </head>
+          <body>
+          <h1>enbu Previews</h1>
+          <p><a href="main/">main branch</a></p>
+          </body></html>
+          HTML
+          fi
+
+      - name: Save state store to _preview-store branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_PATH: ${{ steps.path.outputs.deploy_path }}
+        run: |
+          cd _preview-store || exit 1
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git remote get-url origin > /dev/null 2>&1; then
+            git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          else
+            git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          git add -A
+          git diff --staged --quiet || git commit -m "preview: update ${DEPLOY_PATH}"
+          git push origin _preview-store:_preview-store
+
+      - name: Configure Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: _preview-store
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+
+  comment:
+    name: Post Preview URL
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Find existing comment
+        uses: peter-evans/find-comment@3eae4d37986fb5a8592848f6a574fdf654e61f9e # v3.1.0
+        id: find
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: "<!-- enbu-preview -->"
+
+      - name: Post or update comment
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
+        with:
+          comment-id: ${{ steps.find.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            <!-- enbu-preview -->
+            ## Preview
+
+            | | URL |
+            |---|---|
+            | Web UI + TUI | https://yashikota.github.io/enbu/pr-${{ github.event.pull_request.number }}/ |
+
+            > Updated at ${{ github.sha }}
+          edit-mode: replace
+
+  cleanup:
+    name: Remove PR Preview
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Remove PR directory from store
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if ! git ls-remote --exit-code "$REPO_URL" "refs/heads/_preview-store" > /dev/null 2>&1; then
+            echo "No _preview-store branch found, nothing to clean up."
+            exit 0
+          fi
+          git clone --depth 1 --branch _preview-store "$REPO_URL" store
+          cd store || exit 1
+          if [ ! -d "pr-${PR_NUMBER}" ]; then
+            echo "pr-${PR_NUMBER} not found, nothing to clean up."
+            exit 0
+          fi
+          rm -rf "pr-${PR_NUMBER}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "preview: remove pr-${PR_NUMBER}"
+          git push origin _preview-store:_preview-store
+
+      - name: Configure Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: store
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
