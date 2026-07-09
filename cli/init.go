@@ -17,6 +17,7 @@ import (
 	"github.com/yashikota/enbu/utils/age"
 	"github.com/yashikota/enbu/utils/keystore"
 	"github.com/yashikota/enbu/utils/oci"
+	"github.com/yashikota/enbu/utils/process"
 )
 
 func newInitCommand(a *app.App) *cobra.Command {
@@ -299,12 +300,14 @@ func ensureGitignore(repoRoot string, extraEntries ...string) error {
 
 func gitCommitInitFiles(repoRoot string) error {
 	addCmd := exec.Command("git", "add", "enbu.toml", ".gitignore")
+	process.HideWindow(addCmd)
 	addCmd.Dir = repoRoot
 	if out, err := addCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git add: %s: %w", out, err)
 	}
 
 	commitCmd := exec.Command("git", "commit", "-m", "chore: add enbu config")
+	process.HideWindow(commitCmd)
 	commitCmd.Dir = repoRoot
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git commit: %s: %w", out, err)

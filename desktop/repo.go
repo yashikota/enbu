@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/yashikota/enbu/config"
+	"github.com/yashikota/enbu/utils/process"
 )
 
 type SelectedRepo struct {
@@ -56,6 +57,7 @@ func ValidateRepoPath(path string) (*SelectedRepo, error) {
 
 func gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
+	process.HideWindow(cmd)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

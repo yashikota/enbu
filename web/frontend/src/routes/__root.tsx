@@ -1,14 +1,23 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Badge, Box, Button, Flex, NativeSelect, Popover, Separator, Text } from "@chakra-ui/react";
 import type { AuthStatus } from "../lib/api";
 import { backend } from "../lib/backend";
+import { createAuthRefresher, type AuthRefreshOptions } from "../lib/auth-refresh";
 import { I18nProvider, useI18n, type Locale } from "../lib/i18n";
 
 export type AuthContextValue = {
   status: AuthStatus | null;
   loading: boolean;
-  refresh: () => Promise<void>;
+  refresh: (options?: AuthRefreshOptions) => Promise<void> | undefined;
 };
 
 export const AuthContext = createContext<AuthContextValue>({
@@ -37,30 +46,37 @@ function RootLayout() {
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function refresh() {
-    try {
-      setStatus(await backend.authStatus());
-    } catch {
-      setStatus(null);
-    }
-  }
+  const refresher = useRef(
+    createAuthRefresher({
+      fetchStatus: () => backend.authStatus(),
+      setStatus,
+    }),
+  );
+
+  const refresh = useCallback((options?: AuthRefreshOptions) => {
+    return refresher.current.refresh(options);
+  }, []);
+
+  const refreshNow = useCallback(() => {
+    return refresh({ force: true });
+  }, [refresh]);
+
+  const authContext = useMemo(() => ({ status, loading, refresh }), [status, loading, refresh]);
 
   useEffect(() => {
-    void refresh().finally(() => setLoading(false));
-    const timer = window.setInterval(() => void refresh(), 5000);
+    void refreshNow()?.finally(() => setLoading(false));
     const onFocus = () => void refresh();
-    const onAuthChanged = () => void refresh();
+    const onAuthChanged = () => void refreshNow();
     window.addEventListener("focus", onFocus);
     window.addEventListener("enbu-auth-changed", onAuthChanged);
     return () => {
-      window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("enbu-auth-changed", onAuthChanged);
     };
-  }, []);
+  }, [refresh, refreshNow]);
 
   return (
-    <AuthContext.Provider value={{ status, loading, refresh }}>
+    <AuthContext.Provider value={authContext}>
       <Flex
         as="header"
         h="64px"

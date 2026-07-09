@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/yashikota/enbu/utils/process"
 )
 
 type RepoConfig struct {
@@ -293,7 +294,9 @@ func findProjectConfig() (string, error) {
 }
 
 func detectRepo() (string, string, error) {
-	out, err := exec.Command("git", "remote", "get-url", "origin").Output()
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	process.HideWindow(cmd)
+	out, err := cmd.Output()
 	if err != nil {
 		return "", "", fmt.Errorf("git remote not found: %w", err)
 	}
@@ -301,7 +304,9 @@ func detectRepo() (string, string, error) {
 }
 
 func RepoRoot() (string, error) {
-	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	process.HideWindow(cmd)
+	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("not in a git repository: %w", err)
 	}
