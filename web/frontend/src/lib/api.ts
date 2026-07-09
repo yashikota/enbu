@@ -79,6 +79,12 @@ export interface AuthStatus {
   repo?: { owner: string; name: string };
 }
 
+export interface Recipient {
+  username: string;
+  fingerprint: string;
+  public_key: string;
+}
+
 export interface GUIRepoStatus {
   selected: boolean;
   repo?: { path: string; owner: string; repo: string; initialized?: boolean };

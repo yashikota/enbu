@@ -9,7 +9,8 @@ import (
 )
 
 type GUIConfig struct {
-	SelectedRepo string `toml:"selected_repo,omitempty"`
+	SelectedRepo string   `toml:"selected_repo,omitempty"`
+	RepoHistory  []string `toml:"repo_history,omitempty"`
 }
 
 func LoadGUI() (*GUIConfig, error) {

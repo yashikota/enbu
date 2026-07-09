@@ -271,6 +271,11 @@ func ValidEnvironmentName(name string) bool {
 	return true
 }
 
+// ProjectConfigPath returns the path to enbu.toml by traversing up from cwd.
+func ProjectConfigPath() (string, error) {
+	return findProjectConfig()
+}
+
 func findProjectConfig() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {

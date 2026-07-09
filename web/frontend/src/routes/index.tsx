@@ -11,12 +11,13 @@ import {
   Separator,
   Spinner,
   Text,
+  Textarea,
   VStack,
 } from "@chakra-ui/react";
 import { Copy, Eye, EyeOff } from "lucide-react";
 import { SiGithub } from "@icons-pack/react-simple-icons";
 import { backend, type DeviceStart, type DeviceStatus, openURL } from "../lib/backend";
-import type { Environment, SecretsResponse } from "../lib/api";
+import type { Environment, Recipient, SecretsResponse } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useAuth } from "./__root";
 
@@ -41,6 +42,9 @@ function HomePage() {
   const [startingAuth, setStartingAuth] = useState(false);
   const [initializing, setInitializing] = useState(false);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [pullLoading, setPullLoading] = useState(false);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [addLoading, setAddLoading] = useState(false);
   const [actionError, setActionError] = useState("");
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [secrets, setSecrets] = useState<SecretsResponse | null>(null);
@@ -113,7 +117,7 @@ function HomePage() {
     try {
       const envs = await backend.listEnvironments();
       const nextEnv = env || envs.find((item) => item.current)?.name || "";
-      setEnvironments(envs);
+      setEnvironments([...envs].sort((a, b) => a.name.localeCompare(b.name)));
       setSecrets(await backend.listSecrets(nextEnv));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
@@ -317,17 +321,12 @@ function HomePage() {
   return (
     <Box minH="calc(100vh - 64px)" py={8} px={6} display="grid" placeItems="start center">
       <VStack gap={6} w="full" maxW="880px" align="stretch">
-        <Box>
-          <Heading size="xl" fontWeight="extrabold" mb={1}>
-            {t("auth.hello", { username: status?.username ?? "" })}
-          </Heading>
-          <Text color="fg.muted">
-            {t("repo.current", {
-              owner: repoStatus.repo.owner,
-              repo: repoStatus.repo.repo,
-            })}
-          </Text>
-        </Box>
+        <Text color="fg.muted">
+          {t("repo.current", {
+            owner: repoStatus.repo.owner,
+            repo: repoStatus.repo.repo,
+          })}
+        </Text>
 
         {actionError && <ErrorAlert message={actionError} />}
 
@@ -393,6 +392,12 @@ function HomePage() {
           </HStack>
         </Panel>
 
+        {/* Recipients panel */}
+        <RecipientsPanel />
+
+        {/* Config panel */}
+        <ConfigPanel />
+
         {/* Secrets panel */}
         <Panel>
           <Flex justify="space-between" align="center" mb={3}>
@@ -406,13 +411,16 @@ function HomePage() {
                 borderColor="border.default"
                 color="fg.default"
                 fontWeight="semibold"
-                loading={workspaceLoading}
+                loading={pullLoading}
                 onClick={async () => {
+                  setPullLoading(true);
                   try {
                     await backend.pullSecrets(currentEnvironment);
                     await refreshWorkspace(currentEnvironment);
                   } catch (err) {
                     setActionError(err instanceof Error ? err.message : String(err));
+                  } finally {
+                    setPullLoading(false);
                   }
                 }}
               >
@@ -424,13 +432,16 @@ function HomePage() {
                 borderColor="border.default"
                 color="fg.default"
                 fontWeight="semibold"
-                loading={workspaceLoading}
+                loading={syncLoading}
                 onClick={async () => {
+                  setSyncLoading(true);
                   try {
                     await backend.syncSecrets(currentEnvironment);
                     await refreshWorkspace(currentEnvironment);
                   } catch (err) {
                     setActionError(err instanceof Error ? err.message : String(err));
+                  } finally {
+                    setSyncLoading(false);
                   }
                 }}
               >
@@ -506,8 +517,10 @@ function HomePage() {
               color="accent.fg"
               fontWeight="semibold"
               h="38px"
+              loading={addLoading}
               onClick={async () => {
                 if (!secretKey.trim()) return;
+                setAddLoading(true);
                 try {
                   await backend.addSecret(secretKey.trim(), secretValue, currentEnvironment);
                   setSecretKey("");
@@ -515,6 +528,8 @@ function HomePage() {
                   await refreshWorkspace(currentEnvironment);
                 } catch (err) {
                   setActionError(err instanceof Error ? err.message : String(err));
+                } finally {
+                  setAddLoading(false);
                 }
               }}
             >
@@ -578,6 +593,7 @@ export function SecretRow({
   deleteLabel: string;
 }) {
   const [visible, setVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   return (
     <Box display="grid" gridTemplateColumns="220px minmax(0,1fr) 38px auto" gap={2}>
@@ -618,11 +634,244 @@ export function SecretRow({
         borderColor="border.default"
         color="fg.default"
         fontWeight="semibold"
-        onClick={onDelete}
+        loading={deleting}
+        onClick={async () => {
+          setDeleting(true);
+          try {
+            await onDelete();
+          } finally {
+            setDeleting(false);
+          }
+        }}
       >
         {deleteLabel}
       </Button>
     </Box>
+  );
+}
+
+function RecipientsPanel() {
+  const { t } = useI18n();
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await backend.listRecipients();
+      setRecipients((list ?? []).filter((r): r is Recipient => r != null));
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const toggle = useCallback(async () => {
+    if (!open) await load();
+    setOpen((v) => !v);
+  }, [open, load]);
+
+  return (
+    <Panel>
+      <Flex justify="space-between" align="center">
+        <Heading size="md" fontWeight="bold">
+          {t("recipients.title")}
+        </Heading>
+        <Button
+          size="sm"
+          variant="outline"
+          borderColor="border.default"
+          color="fg.default"
+          fontWeight="semibold"
+          loading={loading && !open}
+          onClick={toggle}
+        >
+          {open
+            ? t("config.cancel")
+            : t("config.edit").replace("編集", "表示").replace("Edit", "Show")}
+        </Button>
+      </Flex>
+      {open && (
+        <Box mt={3}>
+          {loading ? (
+            <HStack>
+              <Spinner size="sm" color="accent.default" />
+              <Text fontSize="sm" color="fg.muted">
+                {t("common.loading")}
+              </Text>
+            </HStack>
+          ) : recipients.length === 0 ? (
+            <Text fontSize="sm" color="fg.muted">
+              {t("recipients.empty")}
+            </Text>
+          ) : (
+            <VStack align="stretch" gap={2}>
+              {recipients.map((r) => (
+                <Box
+                  key={r.fingerprint}
+                  p={3}
+                  borderWidth="1px"
+                  borderColor="border.default"
+                  borderRadius="md"
+                  bg="bg.muted"
+                >
+                  <Text fontWeight="semibold" fontSize="sm">
+                    {r.username}
+                  </Text>
+                  <Text fontSize="xs" color="fg.muted" fontFamily="mono" mt="2px">
+                    {r.fingerprint}
+                  </Text>
+                </Box>
+              ))}
+            </VStack>
+          )}
+        </Box>
+      )}
+    </Panel>
+  );
+}
+
+function ConfigPanel() {
+  const { t } = useI18n();
+  const [content, setContent] = useState("");
+  const [draft, setDraft] = useState("");
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [saveError, setSaveError] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const text = await backend.readConfig();
+      setContent(text ?? "");
+      setDraft(text ?? "");
+      setLoadError("");
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  const toggle = useCallback(async () => {
+    if (!open) await load();
+    setOpen((v) => !v);
+    setEditing(false);
+    setSaveError("");
+  }, [open, load]);
+
+  return (
+    <Panel>
+      <Flex justify="space-between" align="center">
+        <Heading size="md" fontWeight="bold">
+          {t("config.title")}
+        </Heading>
+        <HStack gap={2}>
+          {open && !editing && (
+            <Button
+              size="sm"
+              variant="outline"
+              borderColor="border.default"
+              color="fg.default"
+              fontWeight="semibold"
+              onClick={() => {
+                setDraft(content);
+                setEditing(true);
+                setSaveError("");
+              }}
+            >
+              {t("config.edit")}
+            </Button>
+          )}
+          {open && editing && (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                color="fg.muted"
+                onClick={() => {
+                  setEditing(false);
+                  setDraft(content);
+                  setSaveError("");
+                }}
+              >
+                {t("config.cancel")}
+              </Button>
+              <Button
+                size="sm"
+                bg="accent.default"
+                color="accent.fg"
+                fontWeight="semibold"
+                loading={saving}
+                onClick={async () => {
+                  setSaving(true);
+                  setSaveError("");
+                  try {
+                    await backend.writeConfig(draft);
+                    setContent(draft);
+                    setEditing(false);
+                  } catch {
+                    setSaveError(t("config.saveError"));
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+              >
+                {t("config.save")}
+              </Button>
+            </>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            borderColor="border.default"
+            color="fg.default"
+            fontWeight="semibold"
+            onClick={toggle}
+          >
+            {open ? t("config.cancel") : t("config.title")}
+          </Button>
+        </HStack>
+      </Flex>
+      {open && (
+        <Box mt={3}>
+          {loadError && <ErrorAlert message={loadError} />}
+          {saveError && <ErrorAlert message={saveError} />}
+          {editing ? (
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              fontFamily="mono"
+              fontSize="sm"
+              minH="240px"
+              borderColor="border.default"
+              borderRadius="md"
+              bg="bg.canvas"
+            />
+          ) : (
+            <Box
+              as="pre"
+              fontSize="sm"
+              fontFamily="mono"
+              p={3}
+              borderWidth="1px"
+              borderColor="border.default"
+              borderRadius="md"
+              bg="bg.muted"
+              overflowX="auto"
+              whiteSpace="pre-wrap"
+            >
+              {content || (
+                <Text as="span" color="fg.muted">
+                  (empty)
+                </Text>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
+    </Panel>
   );
 }
 

@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/yashikota/enbu/app"
 )
 
 var (
@@ -31,6 +32,18 @@ var (
 		{name: "staging", isCurrent: false},
 	}
 	demoCurrent = "development"
+
+	demoRecipients = []app.RecipientInfo{
+		{Username: "octocat", Fingerprint: "age1abc123def456", PublicKey: "age1qyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+		{Username: "hubot", Fingerprint: "age1xyz789ghi012", PublicKey: "age1qyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"},
+	}
+
+	demoConfigContent = `[enbu]
+environment = "development"
+
+[registry]
+host = "ghcr.io"
+`
 )
 
 func RunDemo() error {
@@ -54,16 +67,21 @@ func newDemoModel() model {
 	vi.Placeholder = "VALUE"
 	vi.CharLimit = 4096
 
+	ci := textinput.New()
+	ci.Placeholder = "toml content"
+	ci.CharLimit = 65536
+
 	return model{
-		app:        nil,
-		view:       viewSecrets,
-		spinner:    sp,
-		keyInput:   ki,
-		valueInput: vi,
-		focusKey:   true,
-		loading:    false,
-		current:    demoCurrent,
-		secrets:    demoSecretsByEnv[demoCurrent],
-		envs:       demoEnvs,
+		app:         nil,
+		view:        viewSecrets,
+		spinner:     sp,
+		keyInput:    ki,
+		valueInput:  vi,
+		configInput: ci,
+		focusKey:    true,
+		loading:     false,
+		current:     demoCurrent,
+		secrets:     demoSecretsByEnv[demoCurrent],
+		envs:        demoEnvs,
 	}
 }

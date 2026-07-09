@@ -57,6 +57,11 @@ beforeEach(() => {
         SyncSecrets: vi.fn(async (env: string) => {
           window.calls?.push(["sync", env]);
         }),
+        ListRepositories: vi.fn(async () => []),
+        RemoveRepository: vi.fn(async () => {}),
+        ListRecipients: vi.fn(async () => []),
+        ReadConfig: vi.fn(async () => ""),
+        WriteConfig: vi.fn(async () => {}),
       },
     },
   };

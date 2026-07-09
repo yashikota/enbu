@@ -4,6 +4,7 @@ import {
   type Environment,
   type GUIRepoStatus,
   type InitResult,
+  type Recipient,
   type SecretsResponse,
 } from "./api";
 import { mockBackend } from "./mock-backend";
@@ -49,6 +50,15 @@ type DesktopService = {
   DeleteSecret: (env: string, key: string) => Promise<void>;
   PullSecrets: (env: string) => Promise<void>;
   SyncSecrets: (env: string) => Promise<void>;
+  ListRepositories: () => Promise<
+    Array<{ path: string; owner: string; repo: string; initialized: boolean }>
+  >;
+  RemoveRepository: (path: string) => Promise<void>;
+  ListRecipients: () => Promise<
+    Array<{ username: string; fingerprint: string; public_key: string }>
+  >;
+  ReadConfig: () => Promise<string>;
+  WriteConfig: (content: string) => Promise<void>;
 };
 
 type DesktopAuthStatus = Omit<AuthStatus, "repo"> & {
@@ -219,6 +229,38 @@ const realBackend = {
       return;
     }
     await svc.SyncSecrets(env);
+  },
+  async listRepositories(): Promise<GUIRepoStatus["repo"][]> {
+    const svc = service();
+    if (!svc) return [];
+    const items = await svc.ListRepositories();
+    return items.map((r) => ({
+      path: r.path,
+      owner: r.owner,
+      repo: r.repo,
+      initialized: r.initialized,
+    }));
+  },
+  async removeRepository(path: string): Promise<void> {
+    await service()?.RemoveRepository(path);
+  },
+  async listRecipients(): Promise<Recipient[]> {
+    const svc = service();
+    if (!svc) return [];
+    const items = await svc.ListRecipients();
+    return items.map((r) => ({
+      username: r.username,
+      fingerprint: r.fingerprint,
+      public_key: r.public_key,
+    }));
+  },
+  async readConfig(): Promise<string> {
+    const svc = service();
+    if (!svc) throw new Error("Not available");
+    return svc.ReadConfig();
+  },
+  async writeConfig(content: string): Promise<void> {
+    await service()?.WriteConfig(content);
   },
 };
 

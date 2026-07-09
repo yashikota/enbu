@@ -22,6 +22,8 @@ const (
 	viewEdit
 	viewConfirmDelete
 	viewEnvSwitch
+	viewRecipients
+	viewConfig
 )
 
 type model struct {
@@ -31,6 +33,13 @@ type model struct {
 	cursor  int
 	envs    []envItem
 	current string
+
+	recipients []app.RecipientInfo
+
+	configContent string
+	configDraft   string
+	configEditing bool
+	configInput   textinput.Model
 
 	keyInput   textinput.Model
 	valueInput textinput.Model
@@ -63,14 +72,19 @@ func newModel(a *app.App) model {
 	vi.Placeholder = "VALUE"
 	vi.CharLimit = 4096
 
+	ci := textinput.New()
+	ci.Placeholder = "toml content"
+	ci.CharLimit = 65536
+
 	return model{
-		app:        a,
-		view:       viewSecrets,
-		spinner:    sp,
-		keyInput:   ki,
-		valueInput: vi,
-		focusKey:   true,
-		loading:    true,
+		app:         a,
+		view:        viewSecrets,
+		spinner:     sp,
+		keyInput:    ki,
+		valueInput:  vi,
+		configInput: ci,
+		focusKey:    true,
+		loading:     true,
 	}
 }
 
@@ -106,6 +120,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.current = msg.current
 		m.cursor = 0
 		m.err = nil
+		return m, nil
+
+	case recipientsLoadedMsg:
+		m.loading = false
+		m.recipients = msg.recipients
+		m.err = nil
+		return m, nil
+
+	case configLoadedMsg:
+		m.loading = false
+		m.configContent = msg.content
+		m.configDraft = msg.content
+		m.configEditing = false
+		m.err = nil
+		return m, nil
+
+	case configSavedMsg:
+		m.loading = false
+		m.configContent = m.configDraft
+		m.configEditing = false
+		m.status = "Config saved."
+		m.view = viewSecrets
 		return m, nil
 
 	case operationDoneMsg:
@@ -154,6 +190,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleDeleteKey(msg)
 	case viewEnvSwitch:
 		return m.handleEnvSwitchKey(msg)
+	case viewRecipients:
+		return m.handleRecipientsKey(msg)
+	case viewConfig:
+		return m.handleConfigKey(msg)
 	}
 	return m, nil
 }
@@ -203,6 +243,19 @@ func (m model) handleSecretsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Refresh):
 		m.loading = true
 		return m, m.loadSecrets()
+	case key.Matches(msg, keys.Recipients):
+		m.view = viewRecipients
+		m.loading = true
+		m.err = nil
+		m.status = ""
+		return m, m.loadRecipients()
+	case key.Matches(msg, keys.Config):
+		m.view = viewConfig
+		m.loading = true
+		m.err = nil
+		m.status = ""
+		m.configEditing = false
+		return m, m.loadConfig()
 	}
 	return m, nil
 }
@@ -289,6 +342,49 @@ func (m model) handleEnvSwitchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m model) handleRecipientsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, keys.Escape) || key.Matches(msg, keys.Quit) {
+		if key.Matches(msg, keys.Quit) {
+			return m, tea.Quit
+		}
+		m.view = viewSecrets
+	}
+	return m, nil
+}
+
+func (m model) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keys.Quit):
+		return m, tea.Quit
+	case key.Matches(msg, keys.Escape):
+		if m.configEditing {
+			m.configEditing = false
+			m.configDraft = m.configContent
+			return m, nil
+		}
+		m.view = viewSecrets
+	case key.Matches(msg, keys.Edit):
+		if !m.configEditing {
+			m.configEditing = true
+			m.configInput.SetValue(m.configContent)
+			m.configInput.Focus()
+			return m, nil
+		}
+	case key.Matches(msg, keys.Enter):
+		if m.configEditing {
+			m.configDraft = m.configInput.Value()
+			m.loading = true
+			return m, m.saveConfig(m.configDraft)
+		}
+	}
+	if m.configEditing {
+		var cmd tea.Cmd
+		m.configInput, cmd = m.configInput.Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
 func (m model) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	var cmd tea.Cmd
@@ -315,6 +411,10 @@ func (m model) View() string {
 		return m.viewConfirmDelete()
 	case viewEnvSwitch:
 		return m.viewEnvSwitch()
+	case viewRecipients:
+		return m.viewRecipientsView()
+	case viewConfig:
+		return m.viewConfigView()
 	}
 	return ""
 }
@@ -363,7 +463,7 @@ func (m model) viewSecrets() string {
 		}
 	}
 
-	b.WriteString(helpStyle.Render("  a:add  e:edit  d:delete  s:switch env  r:refresh  q:quit"))
+	b.WriteString(helpStyle.Render("  a:add  e:edit  d:delete  s:switch env  r:refresh  R:recipients  C:config  q:quit"))
 	return b.String()
 }
 
@@ -435,6 +535,49 @@ func (m model) viewEnvSwitch() string {
 	}
 
 	b.WriteString(helpStyle.Render("  enter:switch  esc:back"))
+	return b.String()
+}
+
+func (m model) viewRecipientsView() string {
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("Recipients"))
+	b.WriteString("\n")
+
+	if len(m.recipients) == 0 {
+		b.WriteString(dimStyle.Render("  No recipients found."))
+		b.WriteString("\n")
+	} else {
+		for _, r := range m.recipients {
+			fmt.Fprintf(&b, "  %s\n", selectedStyle.Render(r.Username))
+			fmt.Fprintf(&b, "    %s\n", dimStyle.Render(r.Fingerprint))
+		}
+	}
+
+	b.WriteString(helpStyle.Render("  esc:back"))
+	return b.String()
+}
+
+func (m model) viewConfigView() string {
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("enbu.toml"))
+	b.WriteString("\n")
+
+	if m.configEditing {
+		b.WriteString(inputLabelStyle.Render("  Content (enter:save  esc:cancel):"))
+		b.WriteString("\n")
+		b.WriteString(m.configInput.View())
+		b.WriteString("\n")
+		b.WriteString(helpStyle.Render("  enter:save  esc:cancel"))
+	} else {
+		if m.configContent == "" {
+			b.WriteString(dimStyle.Render("  (empty)"))
+		} else {
+			for _, line := range strings.Split(m.configContent, "\n") {
+				b.WriteString("  " + line + "\n")
+			}
+		}
+		b.WriteString(helpStyle.Render("  e:edit  esc:back"))
+	}
 	return b.String()
 }
 
@@ -538,6 +681,45 @@ func (m model) deleteSecret(key string) tea.Cmd {
 			return errMsg{err}
 		}
 		return operationDoneMsg{message: fmt.Sprintf("Deleted %s", key)}
+	}
+}
+
+func (m model) loadRecipients() tea.Cmd {
+	return func() tea.Msg {
+		if m.app == nil {
+			return recipientsLoadedMsg{recipients: demoRecipients}
+		}
+		list, err := m.app.ListRecipients(context.Background())
+		if err != nil {
+			return errMsg{err}
+		}
+		return recipientsLoadedMsg{recipients: list}
+	}
+}
+
+func (m model) loadConfig() tea.Cmd {
+	return func() tea.Msg {
+		if m.app == nil {
+			return configLoadedMsg{content: demoConfigContent}
+		}
+		content, err := m.app.ReadConfig()
+		if err != nil {
+			return errMsg{err}
+		}
+		return configLoadedMsg{content: content}
+	}
+}
+
+func (m model) saveConfig(content string) tea.Cmd {
+	return func() tea.Msg {
+		if m.app == nil {
+			demoConfigContent = content
+			return configSavedMsg{}
+		}
+		if err := m.app.WriteConfig(content); err != nil {
+			return errMsg{err}
+		}
+		return configSavedMsg{}
 	}
 }
 

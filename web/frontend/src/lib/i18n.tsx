@@ -63,6 +63,26 @@ const en = {
     loading: "Loading...",
     error: "Error",
   },
+  sidebar: {
+    repositories: "Repositories",
+    addRepository: "Add repository",
+    noRepositories: "No repositories yet.",
+    remove: "Remove",
+    active: "active",
+  },
+  recipients: {
+    title: "Recipients",
+    empty: "No recipients found.",
+    username: "Username",
+    fingerprint: "Fingerprint",
+  },
+  config: {
+    title: "enbu.toml",
+    edit: "Edit",
+    save: "Save",
+    cancel: "Cancel",
+    saveError: "Failed to save.",
+  },
 };
 
 type Messages = typeof en;
@@ -129,6 +149,26 @@ const ja: Messages = {
   common: {
     loading: "読み込み中...",
     error: "エラー",
+  },
+  sidebar: {
+    repositories: "リポジトリ",
+    addRepository: "リポジトリを追加",
+    noRepositories: "まだリポジトリがありません。",
+    remove: "削除",
+    active: "使用中",
+  },
+  recipients: {
+    title: "受信者一覧",
+    empty: "受信者が見つかりません。",
+    username: "ユーザー名",
+    fingerprint: "フィンガープリント",
+  },
+  config: {
+    title: "enbu.toml",
+    edit: "編集",
+    save: "保存",
+    cancel: "キャンセル",
+    saveError: "保存に失敗しました。",
   },
 };
 

@@ -24,7 +24,13 @@ vi.mock("../lib/backend", () => ({
     deleteSecret: vi.fn(),
     pullSecrets: vi.fn(),
     syncSecrets: vi.fn(),
+    listRepositories: vi.fn(async () => []),
+    removeRepository: vi.fn(),
+    listRecipients: vi.fn(async () => []),
+    readConfig: vi.fn(async () => ""),
+    writeConfig: vi.fn(),
   },
+  openURL: vi.fn(),
 }));
 
 let container: HTMLDivElement;

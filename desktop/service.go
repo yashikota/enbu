@@ -128,6 +128,12 @@ type HistoryEntry struct {
 	Tag       string    `json:"tag"`
 }
 
+type Recipient struct {
+	Username    string `json:"username"`
+	Fingerprint string `json:"fingerprint"`
+	PublicKey   string `json:"public_key"`
+}
+
 func (s *Service) GetAuthStatus() (AuthStatus, error) {
 	var status AuthStatus
 	token, err := auth.LoadToken()
@@ -275,13 +281,99 @@ func (s *Service) SelectRepository(path string) (RepoInfo, error) {
 	if err != nil {
 		return RepoInfo{}, err
 	}
-	if err := config.SaveGUI(&config.GUIConfig{SelectedRepo: repo.Path}); err != nil {
+	cfg, err := config.LoadGUI()
+	if err != nil {
+		cfg = &config.GUIConfig{}
+	}
+	cfg.SelectedRepo = repo.Path
+	cfg.RepoHistory = appendUnique(cfg.RepoHistory, repo.Path)
+	if err := config.SaveGUI(cfg); err != nil {
 		return RepoInfo{}, err
 	}
 	s.repoMu.Lock()
 	s.repoPath = repo.Path
 	s.repoMu.Unlock()
 	return s.repoInfo(repo)
+}
+
+func (s *Service) ListRepositories() ([]RepoInfo, error) {
+	cfg, err := config.LoadGUI()
+	if err != nil {
+		return nil, err
+	}
+	var repos []RepoInfo
+	for _, path := range cfg.RepoHistory {
+		repo, err := ValidateRepoPath(path)
+		if err != nil {
+			continue
+		}
+		info, err := s.repoInfo(repo)
+		if err != nil {
+			continue
+		}
+		repos = append(repos, info)
+	}
+	return repos, nil
+}
+
+func (s *Service) RemoveRepository(path string) error {
+	cfg, err := config.LoadGUI()
+	if err != nil {
+		return err
+	}
+	filtered := cfg.RepoHistory[:0]
+	for _, p := range cfg.RepoHistory {
+		if p != path {
+			filtered = append(filtered, p)
+		}
+	}
+	cfg.RepoHistory = filtered
+	if cfg.SelectedRepo == path {
+		cfg.SelectedRepo = ""
+		s.repoMu.Lock()
+		s.repoPath = ""
+		s.repoMu.Unlock()
+	}
+	return config.SaveGUI(cfg)
+}
+
+func (s *Service) ListRecipients() ([]Recipient, error) {
+	return withRepoResult(s, func() ([]Recipient, error) {
+		infos, err := s.app.ListRecipients(s.context())
+		if err != nil {
+			return nil, err
+		}
+		out := make([]Recipient, len(infos))
+		for i, r := range infos {
+			out[i] = Recipient{
+				Username:    r.Username,
+				Fingerprint: r.Fingerprint,
+				PublicKey:   r.PublicKey,
+			}
+		}
+		return out, nil
+	})
+}
+
+func (s *Service) ReadConfig() (string, error) {
+	return withRepoResult(s, func() (string, error) {
+		return s.app.ReadConfig()
+	})
+}
+
+func (s *Service) WriteConfig(content string) error {
+	return s.withRepo(func() error {
+		return s.app.WriteConfig(content)
+	})
+}
+
+func appendUnique(slice []string, val string) []string {
+	for _, v := range slice {
+		if v == val {
+			return slice
+		}
+	}
+	return append(slice, val)
 }
 
 func (s *Service) GetRepoStatus() (RepoInfo, error) {

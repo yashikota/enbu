@@ -1,4 +1,11 @@
-import type { AuthStatus, Environment, GUIRepoStatus, InitResult, SecretsResponse } from "./api";
+import type {
+  AuthStatus,
+  Environment,
+  GUIRepoStatus,
+  InitResult,
+  Recipient,
+  SecretsResponse,
+} from "./api";
 import type { DeviceStart, DeviceStatus } from "./backend";
 
 let mockEnvs: Environment[] = [
@@ -23,6 +30,25 @@ let mockSecretsByEnv: Record<string, { key: string; value: string }[]> = {
     { key: "DATABASE_URL", value: "postgres://staging.example.com:5432/enbu" },
   ],
 };
+
+const mockRecipients: Recipient[] = [
+  {
+    username: "yashikota",
+    fingerprint: "aabbccdd",
+    public_key: "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqysqqp",
+  },
+  {
+    username: "collaborator",
+    fingerprint: "11223344",
+    public_key: "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqysqqa",
+  },
+];
+
+const mockRepoHistory: NonNullable<GUIRepoStatus["repo"]>[] = [
+  { path: "/demo/enbu", owner: "yashikota", repo: "enbu", initialized: true },
+];
+
+let mockConfig = `version = "v1alpha1"\ndefault_env = "default"\n`;
 
 function currentEnvName(): string {
   return mockEnvs.find((e) => e.current)?.name ?? "development";
@@ -138,5 +164,21 @@ export const mockBackend = {
 
   async syncSecrets(_env = ""): Promise<void> {
     // no-op in mock
+  },
+  async listRepositories(): Promise<NonNullable<GUIRepoStatus["repo"]>[]> {
+    return [...mockRepoHistory];
+  },
+  async removeRepository(path: string): Promise<void> {
+    const idx = mockRepoHistory.findIndex((r) => r.path === path);
+    if (idx >= 0) mockRepoHistory.splice(idx, 1);
+  },
+  async listRecipients(): Promise<Recipient[]> {
+    return [...mockRecipients];
+  },
+  async readConfig(): Promise<string> {
+    return mockConfig;
+  },
+  async writeConfig(content: string): Promise<void> {
+    mockConfig = content;
   },
 };
