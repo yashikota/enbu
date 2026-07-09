@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 	"sync"
@@ -57,6 +58,7 @@ func NewService(a *app.App, clientID string) *Service {
 }
 
 func (s *Service) Startup(ctx context.Context) {
+	slog.Info("Service.Startup called")
 	s.ctx = ctx
 }
 
@@ -130,6 +132,7 @@ func (s *Service) GetAuthStatus() (AuthStatus, error) {
 	var status AuthStatus
 	token, err := auth.LoadToken()
 	if err != nil {
+		slog.Debug("GetAuthStatus: not authenticated", "err", err)
 		return status, nil
 	}
 	status.Authenticated = true
@@ -137,10 +140,12 @@ func (s *Service) GetAuthStatus() (AuthStatus, error) {
 	if repo, err := s.GetRepoStatus(); err == nil && repo.Owner != "" {
 		status.Repo = &repo
 	}
+	slog.Info("GetAuthStatus", "authenticated", status.Authenticated, "username", status.Username, "repo", status.Repo)
 	return status, nil
 }
 
 func (s *Service) StartDeviceLogin() (DeviceStart, error) {
+	slog.Info("StartDeviceLogin called")
 	ctx := s.context()
 	resp, err := s.requestDC(ctx, s.clientID)
 	if err != nil {
