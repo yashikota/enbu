@@ -916,7 +916,7 @@ function DeviceLoginPanel({
           aria-label="Copy device code"
         >
           <Copy size={18} color="#57606a" />
-          <Text className="device-code">{start.user_code}</Text>
+          <Text fontFamily="mono" fontSize="3xl" fontWeight="800" letterSpacing="0.08em">{start.user_code}</Text>
         </Button>
       </Box>
 

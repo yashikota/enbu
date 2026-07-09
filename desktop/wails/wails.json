@@ -2,11 +2,11 @@
   "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "enbu-desktop",
   "outputfilename": "enbu-desktop",
-  "frontend:dir": "../../web/frontend",
+  "frontend:dir": "../../web",
   "frontend:install": "pnpm install --frozen-lockfile",
   "frontend:build": "pnpm run build",
   "frontend:dev:watcher": "pnpm run dev",
   "frontend:dev:serverUrl": "http://localhost:5173",
-  "assetdir": "../../web/frontend/dist",
-  "wailsjsdir": "../../web/frontend/src"
+  "assetdir": "../../web/dist",
+  "wailsjsdir": "../../web/src"
 }

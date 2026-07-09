@@ -1,11 +1,13 @@
 package github
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/yashikota/enbu/provider"
 )
@@ -79,4 +81,46 @@ func (c *Client) GetUser(ctx context.Context) (*provider.User, error) {
 
 func (c *Client) SourceRepoURL(owner, repo string) string {
 	return fmt.Sprintf("https://github.com/%s/%s", owner, repo)
+}
+
+type CreateRepoResult struct {
+	Owner    string
+	Name     string
+	SSHURL   string
+	HTTPSURL string
+}
+
+func (c *Client) CreateRepository(ctx context.Context, name string, private bool) (*CreateRepoResult, error) {
+	payload, err := json.Marshal(map[string]any{"name": name, "private": private})
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.do(ctx, http.MethodPost, "/user/repos", bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitHub API %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var r struct {
+		Owner struct {
+			Login string `json:"login"`
+		} `json:"owner"`
+		Name     string `json:"name"`
+		SSHURL   string `json:"ssh_url"`
+		CloneURL string `json:"clone_url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+		return nil, err
+	}
+	return &CreateRepoResult{
+		Owner:    r.Owner.Login,
+		Name:     r.Name,
+		SSHURL:   r.SSHURL,
+		HTTPSURL: r.CloneURL,
+	}, nil
 }

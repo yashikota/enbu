@@ -33,22 +33,22 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: web/frontend/pnpm-lock.yaml
+          cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-        working-directory: web/frontend
+        working-directory: web
 
       - name: Build preview
         run: pnpm run build:preview
-        working-directory: web/frontend
+        working-directory: web
         env:
           PREVIEW_BASE: ${{ github.event_name == 'pull_request' && format('/enbu/pr-{0}/web/', github.event.pull_request.number) || '/enbu/main/web/' }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: web-preview
-          path: web/frontend/dist-preview
+          path: web/dist-preview
 
   build-tui:
     name: Build TUI Screenshots

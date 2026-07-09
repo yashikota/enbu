@@ -89,6 +89,8 @@ type RepoInfo struct {
 	Owner       string `json:"owner,omitempty"`
 	Repo        string `json:"repo,omitempty"`
 	Initialized bool   `json:"initialized"`
+	HasGit      bool   `json:"has_git"`
+	HasRemote   bool   `json:"has_remote"`
 }
 
 type DeviceStart struct {
@@ -337,6 +339,34 @@ func (s *Service) RemoveRepository(path string) error {
 	return config.SaveGUI(cfg)
 }
 
+// GitInit runs `git init` in the given path and re-selects it.
+func (s *Service) GitInit(path string) (RepoInfo, error) {
+	if _, err := gitOutput(s.context(), path, "init"); err != nil {
+		return RepoInfo{}, fmt.Errorf("git init: %w", err)
+	}
+	return s.SelectRepository(path)
+}
+
+// GitCreateRemote creates a GitHub repository and sets it as origin, then re-selects.
+func (s *Service) GitCreateRemote(path, repoName string, private bool) (RepoInfo, error) {
+	token, err := auth.LoadToken()
+	if err != nil {
+		return RepoInfo{}, fmt.Errorf("not authenticated: %w", err)
+	}
+	client := gh.NewClient(token.AccessToken)
+	result, err := client.CreateRepository(s.context(), repoName, private)
+	if err != nil {
+		return RepoInfo{}, err
+	}
+	if _, err := gitOutput(s.context(), path, "remote", "add", "origin", result.SSHURL); err != nil {
+		// SSH失敗ならHTTPSにフォールバック
+		if _, err2 := gitOutput(s.context(), path, "remote", "add", "origin", result.HTTPSURL); err2 != nil {
+			return RepoInfo{}, fmt.Errorf("git remote add: %w", err)
+		}
+	}
+	return s.SelectRepository(path)
+}
+
 func (s *Service) ListRecipients() ([]Recipient, error) {
 	return withRepoResult(s, func() ([]Recipient, error) {
 		infos, err := s.app.ListRecipients(s.context())
@@ -514,7 +544,13 @@ func (s *Service) loadSelectedRepo() {
 }
 
 func (s *Service) repoInfo(repo *SelectedRepo) (RepoInfo, error) {
-	info := RepoInfo{Path: repo.Path, Owner: repo.Owner, Repo: repo.Repo}
+	info := RepoInfo{
+		Path:      repo.Path,
+		Owner:     repo.Owner,
+		Repo:      repo.Repo,
+		HasGit:    repo.HasGit,
+		HasRemote: repo.HasRemote,
+	}
 	return withRepoPathResult(s, repo.Path, func() (RepoInfo, error) {
 		if _, err := config.LoadProject(); err == nil {
 			info.Initialized = true

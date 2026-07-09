@@ -29,30 +29,30 @@ tasks:
       - sh -c "go list ./... | grep -v '/desktop/wails$' | sed 's#^github.com/yashikota/enbu#.#' | xargs golangci-lint fmt"
 
   frontend:lint:
-    dir: web/frontend
+    dir: web
     cmds:
       - pnpm run typecheck
       - pnpm run lint
 
   frontend:fmt:
-    dir: web/frontend
+    dir: web
     cmds:
       - pnpm run fmt
 
   frontend:test:
-    dir: web/frontend
+    dir: web
     cmds:
       - pnpm run test
 
   frontend:check:
-    dir: web/frontend
+    dir: web
     cmds:
       - pnpm install --frozen-lockfile
       - pnpm run build
       - pnpm run check
 
   build:frontend:
-    dir: web/frontend
+    dir: web
     cmds:
       - pnpm install --frozen-lockfile
       - pnpm run build
@@ -81,7 +81,7 @@ tasks:
 
   preview:web:
     desc: Build web frontend in mock/preview mode
-    dir: web/frontend
+    dir: web
     cmds:
       - pnpm install --frozen-lockfile
       - pnpm run build:preview

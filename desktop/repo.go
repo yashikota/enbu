@@ -13,9 +13,11 @@ import (
 )
 
 type SelectedRepo struct {
-	Path  string `json:"path,omitempty"`
-	Owner string `json:"owner,omitempty"`
-	Repo  string `json:"repo,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Owner     string `json:"owner,omitempty"`
+	Repo      string `json:"repo,omitempty"`
+	HasGit    bool   `json:"has_git"`
+	HasRemote bool   `json:"has_remote"`
 }
 
 func ValidateRepoPath(path string) (*SelectedRepo, error) {
@@ -38,21 +40,21 @@ func ValidateRepoPath(path string) (*SelectedRepo, error) {
 	}
 
 	root, err := gitOutput(context.Background(), abs, "rev-parse", "--show-toplevel")
-	if err != nil {
-		return nil, fmt.Errorf("not a Git repository: %w", err)
+	hasGit := err == nil
+	if !hasGit {
+		root = abs
 	}
 
-	remote, err := gitOutput(context.Background(), root, "remote", "get-url", "origin")
-	if err != nil {
-		return nil, fmt.Errorf("origin remote not found: %w", err)
+	var owner, repo string
+	hasRemote := false
+	if hasGit {
+		if remote, err := gitOutput(context.Background(), root, "remote", "get-url", "origin"); err == nil {
+			owner, repo, _ = config.ParseGitRemote(remote)
+			hasRemote = true
+		}
 	}
 
-	owner, repo, err := config.ParseGitRemote(remote)
-	if err != nil {
-		return nil, err
-	}
-
-	return &SelectedRepo{Path: root, Owner: owner, Repo: repo}, nil
+	return &SelectedRepo{Path: root, Owner: owner, Repo: repo, HasGit: hasGit, HasRemote: hasRemote}, nil
 }
 
 func gitOutput(ctx context.Context, dir string, args ...string) (string, error) {

@@ -5,11 +5,11 @@ import (
 	"io/fs"
 )
 
-//go:embed frontend/dist/*
+//go:embed dist/*
 var frontendFS embed.FS
 
 func FrontendFS() fs.FS {
-	sub, err := fs.Sub(frontendFS, "frontend/dist")
+	sub, err := fs.Sub(frontendFS, "dist")
 	if err != nil {
 		panic(err)
 	}
