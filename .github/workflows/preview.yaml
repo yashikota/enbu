@@ -152,6 +152,8 @@ jobs:
           else
             git init -b _preview-store _preview-store
             cd _preview-store || exit 1
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
             git remote add origin "$REPO_URL"
             git commit --allow-empty -m "chore: init _preview-store"
           fi
