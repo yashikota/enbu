@@ -69,7 +69,7 @@ tasks:
     cmds:
       - mkdir -p build
       - cp ../../assets/icon.png build/appicon.png
-      - go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build -nosyncgomod -m -o enbu-desktop
+      - go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build -nosyncgomod -m
 
   check:
     deps:
