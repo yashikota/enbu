@@ -8,17 +8,9 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  Badge,
-  Box,
-  Button,
-  Flex,
-  NativeSelect,
-  Popover,
-  Separator,
-  Text,
-  VStack,
-} from "@chakra-ui/react";
+import { Box, Flex, VStack, styled } from "styled-system/jsx";
+import { Badge, Button, Popover, Separator, Text } from "../components/ui";
+import { NativeSelect } from "../components/ui/native-select";
 import { Trash2 } from "lucide-react";
 import type { AuthStatus } from "../lib/api";
 import { backend, openURL } from "../lib/backend";
@@ -104,27 +96,27 @@ function RootLayout() {
 
   return (
     <AuthContext.Provider value={authContext}>
-      <Flex
-        as="header"
+      <styled.header
+        display="flex"
         h="64px"
-        align="center"
-        justify="space-between"
-        px={6}
+        alignItems="center"
+        justifyContent="space-between"
+        px="6"
         bg="bg.surface"
         borderBottomWidth="1px"
         borderColor="border.default"
         position="sticky"
-        top={0}
-        zIndex={10}
+        top="0"
+        zIndex="10"
       >
         <Text fontWeight="extrabold" fontSize="2xl">
           💃 enbu
         </Text>
         <AccountMenu status={status} loading={loading} />
-      </Flex>
+      </styled.header>
       <Flex minH="calc(100vh - 64px)">
         {status?.authenticated && <Sidebar activePath={repoPath} />}
-        <Box flex={1} minW={0}>
+        <Box flex="1" minW="0">
           <Outlet />
         </Box>
       </Flex>
@@ -158,20 +150,19 @@ function Sidebar({ activePath }: { activePath: string }) {
   }, [loadRepos]);
 
   return (
-    <Box
-      as="nav"
+    <styled.nav
       w="240px"
       minH="calc(100vh - 64px)"
       borderRightWidth="1px"
       borderColor="border.default"
       bg="bg.surface"
-      p={3}
-      flexShrink={0}
+      p="3"
+      flexShrink="0"
     >
-      <Text fontWeight="bold" fontSize="xs" color="fg.muted" textTransform="uppercase" mb={2}>
+      <Text fontWeight="bold" fontSize="xs" color="fg.muted" textTransform="uppercase" mb="2">
         {t("sidebar.repositories")}
       </Text>
-      <VStack align="stretch" gap={1} mb={3}>
+      <VStack alignItems="stretch" gap="1" mb="3">
         {repos.length === 0 && (
           <Text fontSize="sm" color="fg.muted">
             {t("sidebar.noRepositories")}
@@ -182,9 +173,9 @@ function Sidebar({ activePath }: { activePath: string }) {
           return (
             <Flex
               key={repo.path}
-              align="center"
-              justify="space-between"
-              px={2}
+              alignItems="center"
+              justifyContent="space-between"
+              px="2"
               py="6px"
               borderRadius="md"
               bg={isActive ? "accent.subtle" : undefined}
@@ -201,7 +192,7 @@ function Sidebar({ activePath }: { activePath: string }) {
                 }
               }}
             >
-              <Box minW={0} flex={1}>
+              <Box minW="0" flex="1">
                 <Text fontSize="sm" fontWeight={isActive ? "semibold" : "normal"} truncate>
                   {repo.owner}/{repo.repo}
                 </Text>
@@ -216,7 +207,7 @@ function Sidebar({ activePath }: { activePath: string }) {
                 variant="ghost"
                 size="xs"
                 color="fg.muted"
-                p={1}
+                p="1"
                 minW="auto"
                 h="auto"
                 _hover={{ color: "red.500", bg: "red.50" }}
@@ -258,7 +249,7 @@ function Sidebar({ activePath }: { activePath: string }) {
       >
         {t("sidebar.addRepository")}
       </Button>
-    </Box>
+    </styled.nav>
   );
 }
 
@@ -288,12 +279,12 @@ function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: 
           variant="ghost"
           w="38px"
           h="38px"
-          p={0}
+          p="0"
           borderRadius="full"
           aria-label="Account menu"
           _hover={{ bg: "bg.muted", borderWidth: "1px", borderColor: "border.default" }}
         >
-          <Box position="relative" w="32px" h="32px" flexShrink={0}>
+          <Box position="relative" w="32px" h="32px" flexShrink="0">
             {authenticated && username ? (
               <img
                 src={`https://avatars.githubusercontent.com/${username}?size=64`}
@@ -319,8 +310,8 @@ function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: 
               display={authenticated && username ? "none" : "grid"}
               placeItems="center"
               position="absolute"
-              top={0}
-              left={0}
+              top="0"
+              left="0"
             >
               {initial}
             </Box>
@@ -331,7 +322,7 @@ function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: 
       <Popover.Positioner>
         <Popover.Content
           w="248px"
-          p={3}
+          p="3"
           borderWidth="1px"
           borderColor="border.default"
           borderRadius="lg"
@@ -339,7 +330,7 @@ function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: 
           bg="bg.surface"
         >
           {/* Account name */}
-          <Box pb={2} mb={1} borderBottomWidth="1px" borderColor="border.default">
+          <Box pb="2" mb="1" borderBottomWidth="1px" borderColor="border.default">
             {authenticated ? (
               <Text
                 fontWeight="bold"
@@ -358,14 +349,14 @@ function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: 
           </Box>
 
           {/* Status */}
-          <Flex justify="space-between" align="center" py="10px">
+          <Flex justifyContent="space-between" alignItems="center" py="10px">
             <Text fontSize="sm" color="fg.muted">
               Status
             </Text>
             <Badge
               colorPalette={badgeColor}
               borderRadius="full"
-              px={2}
+              px="2"
               py="1px"
               fontSize="xs"
               fontWeight="semibold"
@@ -374,34 +365,28 @@ function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: 
             </Badge>
           </Flex>
 
-          <Separator borderColor="border.default" />
+          <Separator />
 
           {/* Language */}
-          <Flex justify="space-between" align="center" py="10px">
+          <Flex justifyContent="space-between" alignItems="center" py="10px">
             <Text fontSize="sm" color="fg.muted">
               {t("app.language")}
             </Text>
-            <NativeSelect.Root size="sm" w="118px">
-              <NativeSelect.Field
-                value={locale}
-                onChange={(e) => setLocale(e.target.value as Locale)}
-                fontSize="sm"
-                h="30px"
-                borderColor="border.default"
-                borderRadius="md"
-              >
-                <option value="en">English</option>
-                <option value="ja">日本語</option>
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
+            <NativeSelect
+              value={locale}
+              onChange={(e) => setLocale(e.target.value as Locale)}
+              style={{ width: "118px" }}
+            >
+              <option value="en">English</option>
+              <option value="ja">日本語</option>
+            </NativeSelect>
           </Flex>
 
           {/* Repository info */}
           {authenticated && repoOwner && repoName && (
             <>
-              <Separator borderColor="border.default" />
-              <Flex justify="space-between" align="center" py="10px">
+              <Separator />
+              <Flex justifyContent="space-between" alignItems="center" py="10px">
                 <Text fontSize="sm" color="fg.muted">
                   Repository
                 </Text>
@@ -420,7 +405,7 @@ function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: 
           )}
 
           {/* Action button */}
-          <Separator borderColor="border.default" mb={2} />
+          <Separator mb="2" />
           {authenticated ? (
             <Button
               size="sm"

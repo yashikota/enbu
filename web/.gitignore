@@ -26,3 +26,7 @@ dist-preview
 
 # Generated
 src/routeTree.gen.ts
+
+## Panda
+styled-system
+styled-system-studio

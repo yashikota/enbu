@@ -1,4 +1,10 @@
 {
+  "compilerOptions": {
+    "paths": {
+      "styled-system/*": ["./styled-system/*"],
+      "~/components/*": ["./src/components/*"]
+    }
+  },
   "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },

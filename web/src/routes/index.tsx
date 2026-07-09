@@ -1,19 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Box,
-  Button,
-  Flex,
-  HStack,
-  Heading,
-  Input,
-  Separator,
-  Spinner,
-  Text,
-  Textarea,
-  VStack,
-} from "@chakra-ui/react";
+import { Box, Flex, HStack, VStack, styled } from "styled-system/jsx";
+import { Alert, Button, Heading, Input, Separator, Spinner, Text, Textarea } from "../components/ui";
 import { Copy, Eye, EyeOff } from "lucide-react";
 import { SiGithub } from "@icons-pack/react-simple-icons";
 import { backend, type DeviceStart, type DeviceStatus, openURL } from "../lib/backend";
@@ -211,7 +199,7 @@ function HomePage() {
   if (!repoStatus?.selected) {
     return (
       <PageCenter>
-        <VStack gap={5} w="full" maxW="540px" align="stretch">
+        <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
           <Box>
             <Heading size="2xl" fontWeight="extrabold" mb={2}>
               {t("repo.selectTitle")}
@@ -278,7 +266,7 @@ function HomePage() {
   if (!repoStatus.repo?.initialized) {
     return (
       <PageCenter>
-        <VStack gap={5} w="full" maxW="540px" align="stretch">
+        <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
           <Box>
             <Heading size="2xl" fontWeight="extrabold" mb={2}>
               {t("init.title")}
@@ -320,7 +308,7 @@ function HomePage() {
   // Screen 06/07: Dashboard
   return (
     <Box minH="calc(100vh - 64px)" py={8} px={6} display="grid" placeItems="start center">
-      <VStack gap={6} w="full" maxW="880px" align="stretch">
+      <VStack gap={6} w="full" maxW="880px" alignItems="stretch">
         <Text color="fg.muted">
           {t("repo.current", {
             owner: repoStatus.repo.owner,
@@ -335,7 +323,7 @@ function HomePage() {
           <Heading size="md" fontWeight="bold" mb={3}>
             {t("dashboard.environments")}
           </Heading>
-          <HStack wrap="wrap" gap={2}>
+          <HStack flexWrap="wrap" gap={2}>
             {environments.map((env) => (
               <Button
                 key={env.name}
@@ -465,7 +453,7 @@ function HomePage() {
             </Text>
           )}
 
-          <VStack align="stretch" gap={2}>
+          <VStack alignItems="stretch" gap={2}>
             {secrets?.secrets.map((secret) => (
               <SecretRow
                 key={secret.key}
@@ -563,7 +551,6 @@ function Panel({ children }: { children: React.ReactNode }) {
 function ErrorAlert({ message }: { message: string }) {
   return (
     <Alert.Root
-      status="error"
       borderRadius="md"
       borderWidth="1px"
       borderColor="red.200"
@@ -707,7 +694,7 @@ function RecipientsPanel() {
               {t("recipients.empty")}
             </Text>
           ) : (
-            <VStack align="stretch" gap={2}>
+            <VStack alignItems="stretch" gap={2}>
               {recipients.map((r) => (
                 <Box
                   key={r.fingerprint}
@@ -850,11 +837,10 @@ function ConfigPanel() {
               bg="bg.canvas"
             />
           ) : (
-            <Box
-              as="pre"
+            <styled.pre
               fontSize="sm"
               fontFamily="mono"
-              p={3}
+              p="3"
               borderWidth="1px"
               borderColor="border.default"
               borderRadius="md"
@@ -863,11 +849,11 @@ function ConfigPanel() {
               whiteSpace="pre-wrap"
             >
               {content || (
-                <Text as="span" color="fg.muted">
+                <styled.span color="fg.muted">
                   (empty)
-                </Text>
+                </styled.span>
               )}
-            </Box>
+            </styled.pre>
           )}
         </Box>
       )}
@@ -892,7 +878,7 @@ function DeviceLoginPanel({
   const terminal = status?.state && status.state !== "pending";
 
   return (
-    <VStack gap={5} w="full" maxW="480px" align="stretch">
+    <VStack gap={5} w="full" maxW="480px" alignItems="stretch">
       <Heading size="2xl" fontWeight="extrabold" textAlign="center">
         {t("auth.authorizeTitle")}
       </Heading>
@@ -922,7 +908,7 @@ function DeviceLoginPanel({
 
       {/* Status / expiry */}
       {status?.state === "pending" && (
-        <HStack justify="center">
+        <HStack justifyContent="center">
           <Spinner size="sm" color="accent.default" />
           <Text fontSize="sm">{t("auth.waiting")}</Text>
           <Text fontSize="xs" color="fg.muted">
@@ -935,7 +921,7 @@ function DeviceLoginPanel({
       {status?.state === "error" && <ErrorAlert message={status.message ?? t("auth.error")} />}
 
       {/* Actions */}
-      <HStack justify="center" wrap="wrap">
+      <HStack justifyContent="center" flexWrap="wrap">
         <Button
           variant="outline"
           h="38px"

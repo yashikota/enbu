@@ -1,8 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { createRoot } from "react-dom/client";
 import { act } from "react-dom/test-utils";
-import { ChakraProvider } from "@chakra-ui/react";
-import { system } from "../theme";
 import { I18nProvider } from "../lib/i18n";
 import { SecretRow } from "./index";
 
@@ -58,17 +56,15 @@ function renderSecretRow(props: {
 }) {
   act(() => {
     root.render(
-      <ChakraProvider value={system}>
-        <I18nProvider>
-          <SecretRow
-            secretKey={props.secretKey}
-            secretValue={props.secretValue}
-            onEdit={props.onEdit ?? (async () => {})}
-            onDelete={props.onDelete ?? (async () => {})}
-            deleteLabel={props.deleteLabel ?? "Delete"}
-          />
-        </I18nProvider>
-      </ChakraProvider>,
+      <I18nProvider>
+        <SecretRow
+          secretKey={props.secretKey}
+          secretValue={props.secretValue}
+          onEdit={props.onEdit ?? (async () => {})}
+          onDelete={props.onDelete ?? (async () => {})}
+          deleteLabel={props.deleteLabel ?? "Delete"}
+        />
+      </I18nProvider>,
     );
   });
 }

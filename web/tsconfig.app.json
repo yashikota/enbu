@@ -20,8 +20,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "styled-system/*": ["./styled-system/*"],
+      "~/components/*": ["./src/components/*"]
+    }
   },
-  "include": ["src"],
+  "include": ["src", "styled-system"],
   "exclude": ["src/wailsjs"]
 }

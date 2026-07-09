@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "prepare": "panda codegen --clean",
+    "dev": "panda codegen --watch & vite",
+    "build": "panda codegen --clean && vite build",
     "build:preview": "vite build --config vite.config.preview.ts",
     "typecheck": "tsc -p tsconfig.app.json",
     "lint": "oxlint ./src --ignore-pattern routeTree.gen.ts --ignore-pattern wailsjs",
@@ -16,17 +17,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@chakra-ui/react": "^3.36.0",
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
+    "@ark-ui/react": "^5.37.2",
     "@icons-pack/react-simple-icons": "^13.13.0",
+    "@park-ui/panda-preset": "^0.43.1",
     "@tanstack/react-router": "^1.170.17",
-    "framer-motion": "^12.42.2",
     "lucide-react": "^1.23.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@pandacss/dev": "^1.11.4",
+    "@pandacss/preset-base": "^1.11.4",
+    "@park-ui/cli": "^1.0.1",
     "@tanstack/router-devtools": "^1.167.0",
     "@tanstack/router-plugin": "^1.168.19",
     "@types/node": "^24.13.2",
