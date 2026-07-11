@@ -22,7 +22,6 @@ archives:
       - goos: windows
         formats:
           - zip
-          - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 release:
