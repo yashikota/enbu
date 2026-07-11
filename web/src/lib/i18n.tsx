@@ -14,9 +14,9 @@ const en = {
     current: "Repository: {owner}/{repo}",
   },
   init: {
-    title: "Initialize repository",
-    description: "Create enbu.toml and register your age recipient on GHCR.",
-    action: "Initialize",
+    title: "Set up enbu",
+    description: "This repository hasn't been set up with enbu yet.",
+    action: "Set up",
     success: "Initialized {environment}.",
   },
   dashboard: {
@@ -103,9 +103,9 @@ const ja: Messages = {
     current: "リポジトリ: {owner}/{repo}",
   },
   init: {
-    title: "リポジトリを初期化",
-    description: "enbu.tomlを作成し、age recipientをGHCRへ登録します。",
-    action: "初期化",
+    title: "enbuのセットアップ",
+    description: "このリポジトリはまだenbuのセットアップが完了していません。",
+    action: "セットアップ",
     success: "{environment} を初期化しました。",
   },
   dashboard: {

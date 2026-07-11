@@ -874,17 +874,18 @@ function DeviceLoginPanel({
 }) {
   const { t } = useI18n();
   const terminal = status?.state && status.state !== "pending";
-  const [countdown, setCountdown] = useState(5);
+  const [countdown, setCountdown] = useState(start.browser_opened ? 0 : 5);
 
   useEffect(() => {
-    if (terminal) return;
+    // Go 側が既にブラウザを開いていた場合は自動 open しない
+    if (terminal || start.browser_opened) return;
     if (countdown <= 0) {
       openURL(start.verification_uri);
       return;
     }
     const timer = window.setTimeout(() => setCountdown((c) => c - 1), 1000);
     return () => window.clearTimeout(timer);
-  }, [countdown, terminal, start.verification_uri]);
+  }, [countdown, terminal, start.browser_opened, start.verification_uri]);
 
   return (
     <VStack gap={5} w="full" maxW="480px" alignItems="stretch">
@@ -920,8 +921,8 @@ function DeviceLoginPanel({
         </Button>
       </VStack>
 
-      {/* Auto-redirect countdown / status */}
-      {!terminal && countdown > 0 && (
+      {/* カウントダウン / 待機ステータス */}
+      {!terminal && !start.browser_opened && countdown > 0 && (
         <HStack justifyContent="center">
           <Spinner size="sm" color="accent.default" />
           <Text fontSize="sm" color="fg.muted">
@@ -929,7 +930,7 @@ function DeviceLoginPanel({
           </Text>
         </HStack>
       )}
-      {!terminal && countdown <= 0 && status?.state === "pending" && (
+      {!terminal && status?.state === "pending" && (start.browser_opened || countdown <= 0) && (
         <HStack justifyContent="center">
           <Spinner size="sm" color="accent.default" />
           <Text fontSize="sm">{t("auth.waiting")}</Text>
