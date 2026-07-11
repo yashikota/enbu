@@ -874,6 +874,17 @@ function DeviceLoginPanel({
 }) {
   const { t } = useI18n();
   const terminal = status?.state && status.state !== "pending";
+  const [countdown, setCountdown] = useState(5);
+
+  useEffect(() => {
+    if (terminal) return;
+    if (countdown <= 0) {
+      openURL(start.verification_uri);
+      return;
+    }
+    const timer = window.setTimeout(() => setCountdown((c) => c - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [countdown, terminal, start.verification_uri]);
 
   return (
     <VStack gap={5} w="full" maxW="480px" alignItems="stretch">
@@ -882,7 +893,10 @@ function DeviceLoginPanel({
       </Heading>
 
       {/* Code copy button */}
-      <Box textAlign="center">
+      <VStack gap={2} alignItems="center">
+        <Text fontSize="sm" color="fg.muted">
+          {t("auth.codeInstruction")}
+        </Text>
         <Button
           display="inline-flex"
           alignItems="center"
@@ -904,10 +918,18 @@ function DeviceLoginPanel({
             {start.user_code}
           </Text>
         </Button>
-      </Box>
+      </VStack>
 
-      {/* Status / expiry */}
-      {status?.state === "pending" && (
+      {/* Auto-redirect countdown / status */}
+      {!terminal && countdown > 0 && (
+        <HStack justifyContent="center">
+          <Spinner size="sm" color="accent.default" />
+          <Text fontSize="sm" color="fg.muted">
+            {t("auth.autoRedirect", { seconds: countdown })}
+          </Text>
+        </HStack>
+      )}
+      {!terminal && countdown <= 0 && status?.state === "pending" && (
         <HStack justifyContent="center">
           <Spinner size="sm" color="accent.default" />
           <Text fontSize="sm">{t("auth.waiting")}</Text>

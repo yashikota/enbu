@@ -36,7 +36,7 @@ const en = {
   },
   auth: {
     welcome: "Sign in to GitHub",
-    tagline: "Authorize enbu to access your repositories.",
+    tagline: "Log in to GitHub.",
     connect: "Connect with GitHub",
     waiting: "Waiting for GitHub authorization...",
     userCode: "Enter this code on GitHub",
@@ -57,7 +57,9 @@ const en = {
     signedOut: "Not signed in",
     checkFailed: "Auth status unavailable",
     logout: "Log out",
-    authorizeTitle: "Authorize GitHub",
+    authorizeTitle: "GitHub Login",
+    autoRedirect: "Opening GitHub in {seconds}s...",
+    codeInstruction: "Copy this code and paste it on GitHub.",
   },
   common: {
     loading: "Loading...",
@@ -123,7 +125,7 @@ const ja: Messages = {
   },
   auth: {
     welcome: "GitHubにサインイン",
-    tagline: "enbuがリポジトリにアクセスすることを許可してください。",
+    tagline: "GitHubにログインしてください。",
     connect: "GitHubで接続",
     waiting: "GitHubでの承認を待っています...",
     userCode: "GitHubでこのコードを入力してください",
@@ -144,7 +146,9 @@ const ja: Messages = {
     signedOut: "未ログイン",
     checkFailed: "認証状態を確認できません",
     logout: "ログアウト",
-    authorizeTitle: "GitHubを認証",
+    authorizeTitle: "GitHub 認証",
+    autoRedirect: "{seconds}秒後にGitHubを開きます...",
+    codeInstruction: "このコードをコピーして、GitHubに貼り付けてください。",
   },
   common: {
     loading: "読み込み中...",
