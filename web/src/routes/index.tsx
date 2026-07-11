@@ -1,7 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Flex, HStack, VStack, styled } from "styled-system/jsx";
-import { Alert, Button, Heading, Input, Separator, Spinner, Text, Textarea } from "../components/ui";
+import {
+  Alert,
+  Button,
+  Heading,
+  Input,
+  Separator,
+  Spinner,
+  Text,
+  Textarea,
+} from "../components/ui";
 import { Copy, Eye, EyeOff } from "lucide-react";
 import { SiGithub } from "@icons-pack/react-simple-icons";
 import { backend, type DeviceStart, type DeviceStatus, openURL } from "../lib/backend";
@@ -550,14 +559,7 @@ function Panel({ children }: { children: React.ReactNode }) {
 
 function ErrorAlert({ message }: { message: string }) {
   return (
-    <Alert.Root
-      borderRadius="md"
-      borderWidth="1px"
-      borderColor="red.200"
-      bg="red.50"
-      py={3}
-      px={4}
-    >
+    <Alert.Root borderRadius="md" borderWidth="1px" borderColor="red.200" bg="red.50" py={3} px={4}>
       <Alert.Indicator />
       <Alert.Content>
         <Text fontSize="sm">{message}</Text>
@@ -848,11 +850,7 @@ function ConfigPanel() {
               overflowX="auto"
               whiteSpace="pre-wrap"
             >
-              {content || (
-                <styled.span color="fg.muted">
-                  (empty)
-                </styled.span>
-              )}
+              {content || <styled.span color="fg.muted">(empty)</styled.span>}
             </styled.pre>
           )}
         </Box>
@@ -902,7 +900,9 @@ function DeviceLoginPanel({
           aria-label="Copy device code"
         >
           <Copy size={18} color="#57606a" />
-          <Text fontFamily="mono" fontSize="3xl" fontWeight="800" letterSpacing="0.08em">{start.user_code}</Text>
+          <Text fontFamily="mono" fontSize="3xl" fontWeight="800" letterSpacing="0.08em">
+            {start.user_code}
+          </Text>
         </Button>
       </Box>
 
