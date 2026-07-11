@@ -129,7 +129,7 @@ jobs:
         run: |
           mkdir -p release
           tar -C desktop/wails/build/bin \
-            -czf "release/enbu-desktop_${GITHUB_REF_NAME}_${DESKTOP_SUFFIX}.tar.gz" \
+            -czf "release/enbu_${GITHUB_REF_NAME}_${DESKTOP_SUFFIX}-desktop.tar.gz" \
             .
 
       - name: Package desktop app
@@ -141,7 +141,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path release | Out-Null
           Compress-Archive `
             -Path desktop/wails/build/bin/* `
-            -DestinationPath "release/enbu-desktop_${env:GITHUB_REF_NAME}_${env:DESKTOP_SUFFIX}.zip"
+            -DestinationPath "release/enbu_${env:GITHUB_REF_NAME}_${env:DESKTOP_SUFFIX}-desktop.zip"
 
       - name: Upload desktop artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -229,7 +229,7 @@ jobs:
           set -euo pipefail
           test -s release-assets/checksums.txt
           test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*' | wc -l)" -gt 0
-          test "$(find release-assets -maxdepth 1 -type f -name 'enbu-desktop_*' | wc -l)" -gt 0
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*-desktop*' | wc -l)" -gt 0
           test "$(find release-assets -maxdepth 1 -type f -name '*.sbom.spdx.json' | wc -l)" -gt 0
           test "$(find release-assets -maxdepth 1 -type f -name '*.sigstore.json' | wc -l)" -gt 0
           (cd release-assets && sha256sum -c checksums.txt)
