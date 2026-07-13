@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { detectLocale, translate } from "./i18n";
 
 const storage = new Map<string, string>();

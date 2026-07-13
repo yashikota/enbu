@@ -31,31 +31,31 @@ tasks:
   frontend:lint:
     dir: web
     cmds:
-      - pnpm run typecheck
-      - pnpm run lint
+      - vp lint
 
   frontend:fmt:
     dir: web
     cmds:
-      - pnpm run fmt
+      - vp fmt
 
   frontend:test:
     dir: web
     cmds:
-      - pnpm run test
+      - vp test
 
   frontend:check:
     dir: web
     cmds:
-      - pnpm install --frozen-lockfile
-      - pnpm run build
-      - pnpm run check
+      - vp install --frozen-lockfile
+      - vp run build
+      - vp check
+      - vp test
 
   build:frontend:
     dir: web
     cmds:
-      - pnpm install --frozen-lockfile
-      - pnpm run build
+      - vp install --frozen-lockfile
+      - vp run build
 
   build:
     cmds:
@@ -83,8 +83,8 @@ tasks:
     desc: Build web frontend in mock/preview mode
     dir: web
     cmds:
-      - pnpm install --frozen-lockfile
-      - pnpm run build:preview
+      - vp install --frozen-lockfile
+      - vp run build:preview
 
   preview:tui:
     desc: Build TUI demo and run VHS tapes locally

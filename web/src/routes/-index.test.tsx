@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vite-plus/test";
 import { createRoot } from "react-dom/client";
 import { act } from "react-dom/test-utils";
 import { I18nProvider } from "../lib/i18n";
