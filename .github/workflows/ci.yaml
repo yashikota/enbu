@@ -28,6 +28,8 @@ jobs:
         with:
           aqua_version: v2.60.1
 
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
+
       - name: Check
         run: task check
 
@@ -62,6 +64,8 @@ jobs:
         with:
           aqua_version: v2.60.1
 
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
+
       - name: Unit test
         run: task test
 
@@ -86,6 +90,8 @@ jobs:
       - uses: aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e # v4.0.5
         with:
           aqua_version: v2.60.1
+
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
 
       - name: Scenario tests
         run: task test:scenario
