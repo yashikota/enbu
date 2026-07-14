@@ -15,6 +15,17 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body ? JSON.stringify(body) : undefined,
   });
 
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    try {
+      const errJson = JSON.parse(text) as { error?: { message?: string } };
+      if (errJson.error?.message) throw new Error(errJson.error.message);
+    } catch {
+      // ignore JSON parse errors
+    }
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+
   const json = (await res.json()) as { data: T; error?: { message: string } };
   if (json.error) {
     throw new Error(json.error.message);

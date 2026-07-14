@@ -82,7 +82,7 @@ function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!deviceStart || deviceStatus?.state === "success") return;
+    if (!deviceStart || deviceStatus?.state !== "pending") return;
     const poll = window.setInterval(
       async () => {
         const next = await backend.deviceStatus(deviceStart.session_id);
@@ -583,6 +583,11 @@ export function SecretRow({
 }) {
   const [visible, setVisible] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editValue, setEditValue] = useState(secretValue);
+
+  useEffect(() => {
+    setEditValue(secretValue);
+  }, [secretValue]);
 
   return (
     <Box display="grid" gridTemplateColumns="220px minmax(0,1fr) 38px auto" gap={2}>
@@ -596,11 +601,12 @@ export function SecretRow({
         color="fg.muted"
       />
       <Input
-        defaultValue={secretValue}
+        value={editValue}
         type={visible ? "text" : "password"}
         h="38px"
         borderColor="border.default"
         borderRadius="md"
+        onChange={(e) => setEditValue(e.target.value)}
         onBlur={async (e) => {
           if (e.target.value !== secretValue) await onEdit(e.target.value);
         }}

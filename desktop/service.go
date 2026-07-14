@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -283,18 +285,21 @@ func (s *Service) SelectRepository(path string) (RepoInfo, error) {
 	if err != nil {
 		return RepoInfo{}, err
 	}
+	s.repoMu.Lock()
 	cfg, err := config.LoadGUI()
 	if err != nil {
 		cfg = &config.GUIConfig{}
 	}
 	cfg.SelectedRepo = repo.Path
 	cfg.RepoHistory = appendUnique(cfg.RepoHistory, repo.Path)
-	if err := config.SaveGUI(cfg); err != nil {
-		return RepoInfo{}, err
+	saveErr := config.SaveGUI(cfg)
+	if saveErr == nil {
+		s.repoPath = repo.Path
 	}
-	s.repoMu.Lock()
-	s.repoPath = repo.Path
 	s.repoMu.Unlock()
+	if saveErr != nil {
+		return RepoInfo{}, saveErr
+	}
 	return s.repoInfo(repo)
 }
 
@@ -319,6 +324,8 @@ func (s *Service) ListRepositories() ([]RepoInfo, error) {
 }
 
 func (s *Service) RemoveRepository(path string) error {
+	s.repoMu.Lock()
+	defer s.repoMu.Unlock()
 	cfg, err := config.LoadGUI()
 	if err != nil {
 		return err
@@ -332,9 +339,7 @@ func (s *Service) RemoveRepository(path string) error {
 	cfg.RepoHistory = filtered
 	if cfg.SelectedRepo == path {
 		cfg.SelectedRepo = ""
-		s.repoMu.Lock()
 		s.repoPath = ""
-		s.repoMu.Unlock()
 	}
 	return config.SaveGUI(cfg)
 }
@@ -425,6 +430,12 @@ func (s *Service) Initialize() (map[string]any, error) {
 		result, err := s.app.InitializeRepository(s.context())
 		if err != nil {
 			return nil, err
+		}
+		repoRoot, err := os.Getwd()
+		if err == nil {
+			if err := ensureGitignore(repoRoot); err != nil {
+				slog.Warn("failed to update .gitignore", "err", err)
+			}
 		}
 		return map[string]any{
 			"public_key":  result.PublicKey,
@@ -597,6 +608,49 @@ func (s *Service) context() context.Context {
 		return s.ctx
 	}
 	return context.Background()
+}
+
+var desktopGitignoreEntries = []string{
+	".env",
+	".env.*",
+	"!.env.example",
+	".enbu.local",
+}
+
+func ensureGitignore(repoRoot string) error {
+	path := filepath.Join(repoRoot, ".gitignore")
+	existing := ""
+	if data, err := os.ReadFile(path); err == nil {
+		existing = string(data)
+	}
+	lines := strings.Split(existing, "\n")
+	lineSet := make(map[string]bool)
+	for _, l := range lines {
+		lineSet[strings.TrimSpace(l)] = true
+	}
+	var toAdd []string
+	for _, entry := range desktopGitignoreEntries {
+		entry = strings.TrimSpace(entry)
+		if entry != "" && !lineSet[entry] {
+			toAdd = append(toAdd, entry)
+			lineSet[entry] = true
+		}
+	}
+	if len(toAdd) == 0 {
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	if existing != "" && !strings.HasSuffix(existing, "\n") {
+		if _, err := f.WriteString("\n"); err != nil {
+			return err
+		}
+	}
+	_, err = f.WriteString("\n# enbu - exclude .env files\n" + strings.Join(toAdd, "\n") + "\n")
+	return err
 }
 
 func randomSessionID() string {

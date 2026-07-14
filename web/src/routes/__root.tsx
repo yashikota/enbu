@@ -73,7 +73,16 @@ function RootLayout() {
   );
 
   useEffect(() => {
-    void refreshNow()?.finally(() => setLoading(false));
+    const init = async () => {
+      try {
+        const rs = await backend.repoStatus();
+        setRepoPath(rs.repo?.path ?? "");
+      } catch {
+        // ignore
+      }
+      await refreshNow()?.finally(() => setLoading(false));
+    };
+    void init();
     const onFocus = () => void refresh();
     const onAuthChanged = () => void refreshNow();
     const onRepoChanged = async () => {

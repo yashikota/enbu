@@ -100,3 +100,23 @@ func (s *DesktopService) DiffHistory(env string, from, to int) (*app.Diff, error
 func (s *DesktopService) RestoreHistory(env string, index int) error {
 	return s.service.RestoreHistory(env, index)
 }
+
+func (s *DesktopService) ListRepositories() ([]desktop.RepoInfo, error) {
+	return s.service.ListRepositories()
+}
+
+func (s *DesktopService) RemoveRepository(path string) error {
+	return s.service.RemoveRepository(path)
+}
+
+func (s *DesktopService) ListRecipients() ([]desktop.Recipient, error) {
+	return s.service.ListRecipients()
+}
+
+func (s *DesktopService) ReadConfig() (string, error) {
+	return s.service.ReadConfig()
+}
+
+func (s *DesktopService) WriteConfig(content string) error {
+	return s.service.WriteConfig(content)
+}
