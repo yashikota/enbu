@@ -21,7 +21,7 @@ export function createAuthRefresher({
   let inFlight: Promise<void> | null = null;
 
   async function refresh(options: AuthRefreshOptions = {}) {
-    if (inFlight && !options.force) {
+    if (inFlight) {
       return inFlight;
     }
 
