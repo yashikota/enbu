@@ -29,6 +29,8 @@ jobs:
           aqua_version: v2.60.1
 
       - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
+        with:
+          run-install: false
 
       - name: Check
         run: task check
@@ -65,6 +67,8 @@ jobs:
           aqua_version: v2.60.1
 
       - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
+        with:
+          run-install: false
 
       - name: Unit test
         run: task test
@@ -92,6 +96,8 @@ jobs:
           aqua_version: v2.60.1
 
       - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
+        with:
+          run-install: false
 
       - name: Scenario tests
         run: task test:scenario
