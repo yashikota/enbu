@@ -36,6 +36,8 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
 
       - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
+        with:
+          run-install: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
