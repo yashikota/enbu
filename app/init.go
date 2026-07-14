@@ -70,6 +70,10 @@ func (a *App) InitializeRepository(ctx context.Context) (*InitResult, error) {
 
 	projectCfg, err := config.LoadProject()
 	if err != nil {
+		var notFound config.ErrConfigNotFound
+		if !errors.As(err, &notFound) {
+			return nil, fmt.Errorf("loading enbu.toml: %w", err)
+		}
 		projectCfg = config.NewProjectWithEnvironment(DefaultEnvironment)
 		if err := config.SaveProject(projectCfg); err != nil {
 			return nil, fmt.Errorf("creating enbu.toml: %w", err)

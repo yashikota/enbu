@@ -353,34 +353,30 @@ func (m model) handleRecipientsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, keys.Quit):
-		return m, tea.Quit
-	case key.Matches(msg, keys.Escape):
-		if m.configEditing {
+	if m.configEditing {
+		switch {
+		case key.Matches(msg, keys.Escape):
 			m.configEditing = false
 			m.configDraft = m.configContent
 			return m, nil
-		}
-		m.view = viewSecrets
-	case key.Matches(msg, keys.Edit):
-		if !m.configEditing {
-			m.configEditing = true
-			m.configInput.SetValue(m.configContent)
-			m.configInput.Focus()
-			return m, nil
-		}
-	case key.Matches(msg, keys.Enter):
-		if m.configEditing {
+		case key.Matches(msg, keys.Enter):
 			m.configDraft = m.configInput.Value()
 			m.loading = true
 			return m, m.saveConfig(m.configDraft)
 		}
-	}
-	if m.configEditing {
 		var cmd tea.Cmd
 		m.configInput, cmd = m.configInput.Update(msg)
 		return m, cmd
+	}
+	switch {
+	case key.Matches(msg, keys.Quit):
+		return m, tea.Quit
+	case key.Matches(msg, keys.Escape):
+		m.view = viewSecrets
+	case key.Matches(msg, keys.Edit):
+		m.configEditing = true
+		m.configInput.SetValue(m.configContent)
+		m.configInput.Focus()
 	}
 	return m, nil
 }
