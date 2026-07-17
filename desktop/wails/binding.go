@@ -120,3 +120,11 @@ func (s *DesktopService) ReadConfig() (string, error) {
 func (s *DesktopService) WriteConfig(content string) error {
 	return s.service.WriteConfig(content)
 }
+
+func (s *DesktopService) GitInit(path string) (desktop.RepoInfo, error) {
+	return s.service.GitInit(path)
+}
+
+func (s *DesktopService) GitCreateRemote(path, repoName string, private bool) (desktop.RepoInfo, error) {
+	return s.service.GitCreateRemote(path, repoName, private)
+}

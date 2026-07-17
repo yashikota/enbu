@@ -59,6 +59,12 @@ type DesktopService = {
   >;
   ReadConfig: () => Promise<string>;
   WriteConfig: (content: string) => Promise<void>;
+  GitInit: (path: string) => Promise<GUIRepoStatus["repo"]>;
+  GitCreateRemote: (
+    path: string,
+    repoName: string,
+    privateRepository: boolean,
+  ) => Promise<GUIRepoStatus["repo"]>;
 };
 
 type DesktopAuthStatus = Omit<AuthStatus, "repo"> & {
@@ -147,6 +153,26 @@ const realBackend = {
       return api.init();
     }
     return svc.Initialize();
+  },
+  async gitInit(path: string): Promise<GUIRepoStatus> {
+    const svc = service();
+    if (!svc) {
+      throw new Error("Desktop Git initialization is not available");
+    }
+    const repo = await svc.GitInit(path);
+    return { selected: Boolean(repo?.path), repo };
+  },
+  async gitCreateRemote(
+    path: string,
+    repoName: string,
+    privateRepository: boolean,
+  ): Promise<GUIRepoStatus> {
+    const svc = service();
+    if (!svc) {
+      throw new Error("Desktop GitHub repository creation is not available");
+    }
+    const repo = await svc.GitCreateRemote(path, repoName, privateRepository);
+    return { selected: Boolean(repo?.path), repo };
   },
   async listEnvironments(): Promise<Environment[]> {
     const svc = service();

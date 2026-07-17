@@ -7,6 +7,7 @@ import (
 
 	"github.com/yashikota/enbu/auth"
 	"github.com/yashikota/enbu/config"
+	gitprovider "github.com/yashikota/enbu/provider/git"
 	"github.com/yashikota/enbu/utils/keystore"
 	"github.com/yashikota/enbu/utils/oci"
 )
@@ -16,6 +17,7 @@ type App struct {
 	TokenProvider TokenProvider
 	KeyStore      KeyStore
 	RepoDetector  RepoDetector
+	Git           gitprovider.Client
 	Platform      PlatformClient
 	Events        EventHandler
 	RegistryHost  string
@@ -49,6 +51,7 @@ func (a *App) emitRetry(attempt, max int) {
 }
 
 func New() *App {
+	gitClient := gitprovider.NewCLIClient()
 	ks, err := keystore.New()
 	var keystoreImpl KeyStore
 	if err != nil {
@@ -60,7 +63,8 @@ func New() *App {
 		Registry:      &defaultRegistry{},
 		TokenProvider: &defaultTokenProvider{},
 		KeyStore:      keystoreImpl,
-		RepoDetector:  &defaultRepoDetector{},
+		RepoDetector:  &defaultRepoDetector{git: gitClient},
+		Git:           gitClient,
 	}
 }
 
@@ -92,14 +96,19 @@ func (d *defaultTokenProvider) LoadToken() (string, string, error) {
 	return token.AccessToken, token.Username, nil
 }
 
-type defaultRepoDetector struct{}
+type defaultRepoDetector struct {
+	git gitprovider.Client
+}
 
 func (d *defaultRepoDetector) LoadRepo() (string, string, error) {
-	cfg, err := config.LoadRepo()
+	repository, err := d.git.Inspect(context.Background(), ".")
 	if err != nil {
 		return "", "", err
 	}
-	return cfg.Owner, cfg.Repo, nil
+	if !repository.HasRemote {
+		return "", "", fmt.Errorf("git remote not found")
+	}
+	return config.ParseGitRemote(repository.OriginURL)
 }
 
 type defaultKeyStore struct {

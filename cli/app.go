@@ -3,6 +3,7 @@ package cli
 import (
 	"github.com/spf13/cobra"
 	"github.com/yashikota/enbu/app"
+	gitprovider "github.com/yashikota/enbu/provider/git"
 	"github.com/yashikota/enbu/tui"
 )
 
@@ -22,7 +23,7 @@ func NewWithApp(version string, a *app.App) *cobra.Command {
 	}
 
 	rootCmd.AddCommand(
-		newAuthCommand(),
+		newAuthCommand(a),
 		newInitCommand(a),
 		newSwitchCommand(a),
 		newAddCommand(a),
@@ -34,4 +35,11 @@ func NewWithApp(version string, a *app.App) *cobra.Command {
 	)
 
 	return rootCmd
+}
+
+func gitClient(a *app.App) gitprovider.Client {
+	if a.Git != nil {
+		return a.Git
+	}
+	return gitprovider.NewCLIClient()
 }

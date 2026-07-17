@@ -87,7 +87,14 @@ export const mockBackend = {
   async repoStatus(): Promise<GUIRepoStatus> {
     return {
       selected: true,
-      repo: { path: "/demo/enbu", owner: "yashikota", repo: "enbu", initialized: true },
+      repo: {
+        path: "/demo/enbu",
+        owner: "yashikota",
+        repo: "enbu",
+        initialized: true,
+        has_git: true,
+        has_remote: true,
+      },
     };
   },
 
@@ -101,6 +108,18 @@ export const mockBackend = {
 
   async initialize(): Promise<InitResult> {
     return { public_key: "age1demo...", username: "yashikota", environment: "development" };
+  },
+
+  async gitInit(_path: string): Promise<GUIRepoStatus> {
+    return mockBackend.repoStatus();
+  },
+
+  async gitCreateRemote(
+    _path: string,
+    _repoName: string,
+    _privateRepository: boolean,
+  ): Promise<GUIRepoStatus> {
+    return mockBackend.repoStatus();
   },
 
   async listEnvironments(): Promise<Environment[]> {

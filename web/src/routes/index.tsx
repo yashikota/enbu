@@ -28,7 +28,14 @@ function HomePage() {
 
   const [repoStatus, setRepoStatus] = useState<{
     selected: boolean;
-    repo?: { path?: string; owner: string; repo: string; initialized?: boolean };
+    repo?: {
+      path?: string;
+      owner: string;
+      repo: string;
+      initialized?: boolean;
+      has_git?: boolean;
+      has_remote?: boolean;
+    };
   } | null>(null);
   const [repoPath, setRepoPath] = useState("");
   const [repoError, setRepoError] = useState("");
@@ -38,6 +45,9 @@ function HomePage() {
   const [authError, setAuthError] = useState("");
   const [startingAuth, setStartingAuth] = useState(false);
   const [initializing, setInitializing] = useState(false);
+  const [repositorySetupLoading, setRepositorySetupLoading] = useState(false);
+  const [remoteRepoName, setRemoteRepoName] = useState("");
+  const [privateRepository, setPrivateRepository] = useState(true);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [pullLoading, setPullLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
@@ -126,6 +136,11 @@ function HomePage() {
   useEffect(() => {
     if (repoStatus?.selected && repoStatus.repo?.initialized) void refreshWorkspace();
   }, [repoStatus?.selected, repoStatus?.repo?.initialized]);
+
+  useEffect(() => {
+    const path = repoStatus?.repo?.path?.replace(/[\\/]+$/, "");
+    setRemoteRepoName(path?.split(/[\\/]/).pop() ?? "");
+  }, [repoStatus?.repo?.path]);
 
   async function handleStartAuth() {
     setStartingAuth(true);
@@ -271,7 +286,105 @@ function HomePage() {
     );
   }
 
-  // Screen 05: Initialize
+  // Screen 05a: Initialize the selected folder as a Git repository.
+  if (!repoStatus.repo?.has_git) {
+    return (
+      <PageCenter>
+        <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
+          <Box>
+            <Heading size="2xl" fontWeight="extrabold" mb={2}>
+              {t("init.gitTitle")}
+            </Heading>
+            <Text color="fg.muted">{t("init.gitDescription")}</Text>
+          </Box>
+          {actionError && <ErrorAlert message={actionError} />}
+          <Button
+            bg="accent.default"
+            color="accent.fg"
+            fontWeight="semibold"
+            loading={repositorySetupLoading}
+            onClick={async () => {
+              setRepositorySetupLoading(true);
+              setActionError("");
+              try {
+                setRepoStatus(await backend.gitInit(repoStatus.repo?.path ?? ""));
+              } catch (err) {
+                setActionError(err instanceof Error ? err.message : String(err));
+              } finally {
+                setRepositorySetupLoading(false);
+              }
+            }}
+          >
+            {t("init.gitAction")}
+          </Button>
+        </VStack>
+      </PageCenter>
+    );
+  }
+
+  // Screen 05b: Create and attach an origin remote before enbu setup.
+  if (!repoStatus.repo.has_remote) {
+    return (
+      <PageCenter>
+        <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
+          <Box>
+            <Heading size="2xl" fontWeight="extrabold" mb={2}>
+              {t("init.remoteTitle")}
+            </Heading>
+            <Text color="fg.muted">{t("init.remoteDescription")}</Text>
+          </Box>
+          {actionError && <ErrorAlert message={actionError} />}
+          <Input
+            value={remoteRepoName}
+            onChange={(event) => setRemoteRepoName(event.target.value)}
+            placeholder={t("init.repositoryName")}
+            h="38px"
+            borderColor="border.default"
+            borderRadius="md"
+          />
+          <HStack>
+            <input
+              id="private-repository"
+              type="checkbox"
+              checked={privateRepository}
+              onChange={(event) => setPrivateRepository(event.target.checked)}
+            />
+            <styled.label htmlFor="private-repository" fontSize="sm">
+              {t("init.privateRepository")}
+            </styled.label>
+          </HStack>
+          <Button
+            bg="accent.default"
+            color="accent.fg"
+            fontWeight="semibold"
+            loading={repositorySetupLoading}
+            disabled={!remoteRepoName.trim()}
+            onClick={async () => {
+              setRepositorySetupLoading(true);
+              setActionError("");
+              try {
+                setRepoStatus(
+                  await backend.gitCreateRemote(
+                    repoStatus.repo?.path ?? "",
+                    remoteRepoName.trim(),
+                    privateRepository,
+                  ),
+                );
+              } catch (err) {
+                setActionError(err instanceof Error ? err.message : String(err));
+              } finally {
+                setRepositorySetupLoading(false);
+              }
+            }}
+          >
+            {t("init.createRemote")}
+          </Button>
+        </VStack>
+      </PageCenter>
+    );
+  }
+
+  // Screen 05c: Initialize enbu after Git and origin are ready.
   if (!repoStatus.repo?.initialized) {
     return (
       <PageCenter>

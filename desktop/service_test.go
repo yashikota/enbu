@@ -33,6 +33,27 @@ func TestValidateRepoPathRejectsMissingPath(t *testing.T) {
 	}
 }
 
+func TestGitInitInitializesSelectedDirectory(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := t.TempDir()
+	s := NewService(app.New(), "client")
+	s.ctx = context.Background()
+
+	repo, err := s.GitInit(dir)
+	if err != nil {
+		t.Fatalf("GitInit: %v", err)
+	}
+	if !repo.HasGit {
+		t.Fatal("GitInit returned HasGit=false")
+	}
+	if repo.HasRemote {
+		t.Fatal("GitInit returned HasRemote=true without origin")
+	}
+	if repo.Path != runGit(t, dir, "rev-parse", "--show-toplevel") {
+		t.Fatalf("repo path = %q, want initialized directory", repo.Path)
+	}
+}
+
 func TestStartDeviceLoginDoesNotExposeDeviceCode(t *testing.T) {
 	s := NewService(app.New(), "client")
 	s.SetClipboardCopier(func(text string) error {

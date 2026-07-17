@@ -98,7 +98,14 @@ export interface Recipient {
 
 export interface GUIRepoStatus {
   selected: boolean;
-  repo?: { path: string; owner: string; repo: string; initialized?: boolean };
+  repo?: {
+    path: string;
+    owner: string;
+    repo: string;
+    initialized?: boolean;
+    has_git?: boolean;
+    has_remote?: boolean;
+  };
 }
 
 export interface RepoStatus {

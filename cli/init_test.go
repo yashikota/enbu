@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/yashikota/enbu/app"
+	gitprovider "github.com/yashikota/enbu/provider/git"
 )
 
 func TestEnsureGitignore_CreatesNewFile(t *testing.T) {
@@ -168,10 +171,48 @@ func TestIsUserRecipientTag(t *testing.T) {
 	}
 }
 
-func TestGitCommitInitFiles_NoGitRepo(t *testing.T) {
-	dir := t.TempDir()
-	err := gitCommitInitFiles(dir)
-	if err == nil {
-		t.Fatal("expected error for non-git directory")
+func TestGitCommitInitFiles(t *testing.T) {
+	client := &initTestGitClient{}
+	err := gitCommitInitFiles(context.Background(), client, "C:/repo")
+	if err != nil {
+		t.Fatalf("gitCommitInitFiles: %v", err)
 	}
+	if client.commitPath != "C:/repo" || client.commitMessage != "chore: add enbu config" {
+		t.Fatalf("commit = %q, %q", client.commitPath, client.commitMessage)
+	}
+	if strings.Join(client.commitFiles, ",") != "enbu.toml,.gitignore" {
+		t.Fatalf("files = %v", client.commitFiles)
+	}
+
+	client.commitErr = errors.New("commit failed")
+	if err := gitCommitInitFiles(context.Background(), client, "C:/repo"); err == nil {
+		t.Fatal("expected commit error")
+	}
+}
+
+type initTestGitClient struct {
+	commitPath    string
+	commitFiles   []string
+	commitMessage string
+	commitErr     error
+}
+
+func (*initTestGitClient) Inspect(context.Context, string) (gitprovider.Repository, error) {
+	return gitprovider.Repository{}, nil
+}
+
+func (*initTestGitClient) Init(context.Context, string) error { return nil }
+
+func (*initTestGitClient) AddRemote(context.Context, string, string, string) error { return nil }
+
+func (c *initTestGitClient) CommitFiles(
+	_ context.Context,
+	path string,
+	files []string,
+	message string,
+) error {
+	c.commitPath = path
+	c.commitFiles = append([]string(nil), files...)
+	c.commitMessage = message
+	return c.commitErr
 }

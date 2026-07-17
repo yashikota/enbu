@@ -3,9 +3,9 @@
   "name": "enbu-desktop",
   "outputfilename": "enbu-desktop",
   "frontend:dir": "../../web",
-  "frontend:install": "./node_modules/.bin/vp install --frozen-lockfile",
-  "frontend:build": "./node_modules/.bin/vp run build",
-  "frontend:dev:watcher": "./node_modules/.bin/vp run dev",
+  "frontend:install": "vp install --frozen-lockfile",
+  "frontend:build": "vp run build",
+  "frontend:dev:watcher": "vp run dev",
   "frontend:dev:serverUrl": "http://localhost:5173",
   "assetdir": "../../web/dist",
   "wailsjsdir": "../../web/src"

@@ -19,7 +19,7 @@ func DefaultClientID() string {
 	return defaultClientID
 }
 
-func newAuthCommand() *cobra.Command {
+func newAuthCommand(a *app.App) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Manage authentication with GitHub",
@@ -28,7 +28,7 @@ func newAuthCommand() *cobra.Command {
 	cmd.AddCommand(
 		newAuthLoginCommand(),
 		newAuthLogoutCommand(),
-		newAuthStatusCommand(),
+		newAuthStatusCommand(a),
 	)
 
 	return cmd
@@ -110,7 +110,7 @@ func newAuthLogoutCommand() *cobra.Command {
 	}
 }
 
-func newAuthStatusCommand() *cobra.Command {
+func newAuthStatusCommand(a *app.App) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Show authentication and environment status",
@@ -123,12 +123,12 @@ func newAuthStatusCommand() *cobra.Command {
 			}
 			fmt.Printf("Auth: logged in as %s\n", token.Username)
 
-			cfg, err := config.LoadRepo()
+			owner, repo, err := a.RepoDetector.LoadRepo()
 			if err != nil {
 				fmt.Println("Repo: not in a git repository")
 				return nil
 			}
-			fmt.Printf("Repo: %s/%s\n", cfg.Owner, cfg.Repo)
+			fmt.Printf("Repo: %s/%s\n", owner, repo)
 
 			backend, err := keystore.New()
 			if err != nil {
@@ -136,7 +136,7 @@ func newAuthStatusCommand() *cobra.Command {
 				return nil
 			}
 
-			repoKey := app.RepoKeystoreKey(cfg.Owner, cfg.Repo)
+			repoKey := app.RepoKeystoreKey(owner, repo)
 			privBytes, err := backend.Load(app.KeystoreService, repoKey)
 			if err == nil && len(privBytes) > 0 {
 				id, err := agecrypto.ParseX25519Identity(string(privBytes))

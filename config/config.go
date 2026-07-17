@@ -3,19 +3,12 @@ package config
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/yashikota/enbu/utils/process"
 )
-
-type RepoConfig struct {
-	Owner string
-	Repo  string
-}
 
 // ErrConfigNotFound is returned when enbu.toml does not exist.
 // Callers that need to distinguish "file missing" from "file invalid"
@@ -38,14 +31,6 @@ type EnvironmentConfig struct {
 
 type LocalConfig struct {
 	Previous string `toml:"previous,omitempty"`
-}
-
-func LoadRepo() (*RepoConfig, error) {
-	owner, repo, err := detectRepo()
-	if err != nil {
-		return nil, fmt.Errorf("detecting repository: %w", err)
-	}
-	return &RepoConfig{Owner: owner, Repo: repo}, nil
 }
 
 func LoadProject() (*ProjectConfig, error) {
@@ -296,26 +281,6 @@ func findProjectConfig() (string, error) {
 	}
 
 	return "", fmt.Errorf("enbu.toml not found (run 'enbu init' first)")
-}
-
-func detectRepo() (string, string, error) {
-	cmd := exec.Command("git", "remote", "get-url", "origin")
-	process.HideWindow(cmd)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", "", fmt.Errorf("git remote not found: %w", err)
-	}
-	return ParseGitRemote(strings.TrimSpace(string(out)))
-}
-
-func RepoRoot() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	process.HideWindow(cmd)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("not in a git repository: %w", err)
-	}
-	return strings.TrimSpace(string(out)), nil
 }
 
 func ParseGitRemote(url string) (string, string, error) {

@@ -17,6 +17,7 @@ import (
 	"github.com/yashikota/enbu/app"
 	"github.com/yashikota/enbu/auth"
 	"github.com/yashikota/enbu/config"
+	gitprovider "github.com/yashikota/enbu/provider/git"
 	gh "github.com/yashikota/enbu/provider/github"
 )
 
@@ -31,6 +32,7 @@ type Service struct {
 	pickDir   DirectoryPicker
 	openURL   BrowserOpener
 	copyText  ClipboardCopier
+	git       gitprovider.Client
 	repoMu    sync.Mutex
 	authMu    sync.Mutex
 	repoPath  string
@@ -51,9 +53,13 @@ func NewService(a *app.App, clientID string) *Service {
 		clientID:  clientID,
 		openURL:   auth.OpenBrowser,
 		copyText:  auth.CopyToClipboard,
+		git:       a.Git,
 		sessions:  make(map[string]*deviceSession),
 		requestDC: auth.RequestDeviceCode,
 		pollToken: auth.PollForToken,
+	}
+	if s.git == nil {
+		s.git = gitprovider.NewCLIClient()
 	}
 	s.loadSelectedRepo()
 	return s
@@ -281,7 +287,7 @@ func (s *Service) BrowseRepository() (RepoInfo, error) {
 }
 
 func (s *Service) SelectRepository(path string) (RepoInfo, error) {
-	repo, err := ValidateRepoPath(path)
+	repo, err := validateRepoPath(s.context(), s.git, path)
 	if err != nil {
 		return RepoInfo{}, err
 	}
@@ -310,7 +316,7 @@ func (s *Service) ListRepositories() ([]RepoInfo, error) {
 	}
 	var repos []RepoInfo
 	for _, path := range cfg.RepoHistory {
-		repo, err := ValidateRepoPath(path)
+		repo, err := validateRepoPath(s.context(), s.git, path)
 		if err != nil {
 			continue
 		}
@@ -346,8 +352,8 @@ func (s *Service) RemoveRepository(path string) error {
 
 // GitInit runs `git init` in the given path and re-selects it.
 func (s *Service) GitInit(path string) (RepoInfo, error) {
-	if _, err := gitOutput(s.context(), path, "init"); err != nil {
-		return RepoInfo{}, fmt.Errorf("git init: %w", err)
+	if err := s.git.Init(s.context(), path); err != nil {
+		return RepoInfo{}, err
 	}
 	return s.SelectRepository(path)
 }
@@ -363,9 +369,9 @@ func (s *Service) GitCreateRemote(path, repoName string, private bool) (RepoInfo
 	if err != nil {
 		return RepoInfo{}, err
 	}
-	if _, err := gitOutput(s.context(), path, "remote", "add", "origin", result.SSHURL); err != nil {
+	if err := s.git.AddRemote(s.context(), path, "origin", result.SSHURL); err != nil {
 		// SSH失敗ならHTTPSにフォールバック
-		if _, err2 := gitOutput(s.context(), path, "remote", "add", "origin", result.HTTPSURL); err2 != nil {
+		if err2 := s.git.AddRemote(s.context(), path, "origin", result.HTTPSURL); err2 != nil {
 			return RepoInfo{}, fmt.Errorf("git remote add: %w", err)
 		}
 	}
@@ -418,7 +424,7 @@ func (s *Service) GetRepoStatus() (RepoInfo, error) {
 	if path == "" {
 		return RepoInfo{}, nil
 	}
-	repo, err := ValidateRepoPath(path)
+	repo, err := validateRepoPath(s.context(), s.git, path)
 	if err != nil {
 		return RepoInfo{}, err
 	}
@@ -547,7 +553,7 @@ func (s *Service) loadSelectedRepo() {
 	if err != nil || cfg.SelectedRepo == "" {
 		return
 	}
-	repo, err := ValidateRepoPath(cfg.SelectedRepo)
+	repo, err := validateRepoPath(s.context(), s.git, cfg.SelectedRepo)
 	if err != nil {
 		return
 	}

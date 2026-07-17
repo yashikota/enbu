@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/yashikota/enbu/config"
-	"github.com/yashikota/enbu/utils/process"
+	gitprovider "github.com/yashikota/enbu/provider/git"
 )
 
 type SelectedRepo struct {
@@ -21,6 +20,14 @@ type SelectedRepo struct {
 }
 
 func ValidateRepoPath(path string) (*SelectedRepo, error) {
+	return validateRepoPath(context.Background(), gitprovider.NewCLIClient(), path)
+}
+
+func validateRepoPath(
+	ctx context.Context,
+	gitClient gitprovider.Client,
+	path string,
+) (*SelectedRepo, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil, fmt.Errorf("path is required")
@@ -39,31 +46,21 @@ func ValidateRepoPath(path string) (*SelectedRepo, error) {
 		return nil, fmt.Errorf("path must be a directory")
 	}
 
-	root, err := gitOutput(context.Background(), abs, "rev-parse", "--show-toplevel")
-	hasGit := err == nil
-	if !hasGit {
-		root = abs
+	repository, err := gitClient.Inspect(ctx, abs)
+	if err != nil {
+		return nil, fmt.Errorf("inspecting git repository: %w", err)
 	}
 
 	var owner, repo string
-	hasRemote := false
-	if hasGit {
-		if remote, err := gitOutput(context.Background(), root, "remote", "get-url", "origin"); err == nil {
-			owner, repo, _ = config.ParseGitRemote(remote)
-			hasRemote = true
-		}
+	if repository.HasRemote {
+		owner, repo, _ = config.ParseGitRemote(repository.OriginURL)
 	}
 
-	return &SelectedRepo{Path: root, Owner: owner, Repo: repo, HasGit: hasGit, HasRemote: hasRemote}, nil
-}
-
-func gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
-	process.HideWindow(cmd)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", strings.TrimSpace(string(out)), err)
-	}
-	return strings.TrimSpace(string(out)), nil
+	return &SelectedRepo{
+		Path:      repository.Root,
+		Owner:     owner,
+		Repo:      repo,
+		HasGit:    repository.HasGit,
+		HasRemote: repository.HasRemote,
+	}, nil
 }
