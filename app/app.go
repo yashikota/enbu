@@ -21,6 +21,30 @@ type App struct {
 	Platform      PlatformClient
 	Events        EventHandler
 	RegistryHost  string
+	RepositoryDir string
+}
+
+func (a *App) SetRepositoryDir(dir string) {
+	a.RepositoryDir = dir
+	if detector, ok := a.RepoDetector.(*defaultRepoDetector); ok {
+		detector.dir = dir
+	}
+}
+
+func (a *App) loadProject() (*config.ProjectConfig, error) {
+	return config.LoadProjectFrom(a.RepositoryDir)
+}
+
+func (a *App) saveProject(cfg *config.ProjectConfig) error {
+	return config.SaveProjectTo(a.RepositoryDir, cfg)
+}
+
+func (a *App) loadLocal() (*config.LocalConfig, error) {
+	return config.LoadLocalFrom(a.RepositoryDir)
+}
+
+func (a *App) saveLocal(cfg *config.LocalConfig) error {
+	return config.SaveLocalTo(a.RepositoryDir, cfg)
 }
 
 func (a *App) registryHost() string {
@@ -98,10 +122,15 @@ func (d *defaultTokenProvider) LoadToken() (string, string, error) {
 
 type defaultRepoDetector struct {
 	git gitprovider.Client
+	dir string
 }
 
 func (d *defaultRepoDetector) LoadRepo() (string, string, error) {
-	repository, err := d.git.Inspect(context.Background(), ".")
+	dir := d.dir
+	if dir == "" {
+		dir = "."
+	}
+	repository, err := d.git.Inspect(context.Background(), dir)
 	if err != nil {
 		return "", "", err
 	}

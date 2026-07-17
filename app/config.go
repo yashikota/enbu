@@ -3,12 +3,13 @@ package app
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/yashikota/enbu/config"
 )
 
 func (a *App) ReadConfig() (string, error) {
-	path, err := config.ProjectConfigPath()
+	path, err := config.ProjectConfigPathFrom(a.RepositoryDir)
 	if err != nil {
 		return "", fmt.Errorf("enbu.toml not found: %w", err)
 	}
@@ -20,9 +21,16 @@ func (a *App) ReadConfig() (string, error) {
 }
 
 func (a *App) WriteConfig(content string) error {
-	path, err := config.ProjectConfigPath()
+	cfg, err := config.ParseProject(content)
 	if err != nil {
-		path = "enbu.toml"
+		return err
+	}
+	if err := config.ValidateProjectOutputs(cfg); err != nil {
+		return err
+	}
+	path, err := config.ProjectConfigPathFrom(a.RepositoryDir)
+	if err != nil {
+		path = filepath.Join(a.RepositoryDir, "enbu.toml")
 	}
 	return os.WriteFile(path, []byte(content), 0o644)
 }

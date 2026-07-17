@@ -68,14 +68,14 @@ func (a *App) InitializeRepository(ctx context.Context) (*InitResult, error) {
 		return nil, fmt.Errorf("pushing public key to GHCR: %w", err)
 	}
 
-	projectCfg, err := config.LoadProject()
+	projectCfg, err := a.loadProject()
 	if err != nil {
 		var notFound config.ErrConfigNotFound
 		if !errors.As(err, &notFound) {
 			return nil, fmt.Errorf("loading enbu.toml: %w", err)
 		}
 		projectCfg = config.NewProjectWithEnvironment(DefaultEnvironment)
-		if err := config.SaveProject(projectCfg); err != nil {
+		if err := a.saveProject(projectCfg); err != nil {
 			return nil, fmt.Errorf("creating enbu.toml: %w", err)
 		}
 	}

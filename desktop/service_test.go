@@ -3,11 +3,15 @@ package desktop
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
+	agecrypto "filippo.io/age"
 	"github.com/yashikota/enbu/app"
 	"github.com/yashikota/enbu/auth"
 	"github.com/yashikota/enbu/config"
@@ -66,6 +70,21 @@ func (f *fakeServiceGit) AddRemote(_ context.Context, _, _, url string) error {
 }
 
 func (*fakeServiceGit) CommitFiles(context.Context, string, []string, string) error { return nil }
+
+type desktopKeyStore struct{ values map[string][]byte }
+
+func (s *desktopKeyStore) Store(_, key string, value []byte) error {
+	s.values[key] = value
+	return nil
+}
+
+func (s *desktopKeyStore) Load(_, key string) ([]byte, error) {
+	value, ok := s.values[key]
+	if !ok {
+		return nil, fmt.Errorf("key not found")
+	}
+	return value, nil
+}
 
 func TestValidateRepoPath(t *testing.T) {
 	repoDir := newGitRepo(t)
@@ -172,7 +191,9 @@ func TestGitCreateRemoteSelectsPersonalOrOrganizationOwner(t *testing.T) {
 }
 
 func TestStartDeviceLoginDoesNotExposeDeviceCode(t *testing.T) {
-	s := NewService(app.New(), "client")
+	a := app.New()
+	a.KeyStore = &desktopKeyStore{values: make(map[string][]byte)}
+	s := NewService(a, "client")
 	s.SetClipboardCopier(func(text string) error {
 		if text != "ABCD-1234" {
 			t.Fatalf("copied text = %q, want user code", text)
@@ -216,7 +237,9 @@ func TestStartDeviceLoginDoesNotExposeDeviceCode(t *testing.T) {
 func TestSelectRepositoryUpdatesHistory(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	repoDir := newGitRepo(t)
-	s := NewService(app.New(), "client")
+	a := app.New()
+	a.KeyStore = &desktopKeyStore{values: make(map[string][]byte)}
+	s := NewService(a, "client")
 	s.ctx = context.Background()
 
 	if _, err := s.SelectRepository(repoDir); err != nil {
@@ -253,6 +276,101 @@ func TestListRepositoriesRemovesLegacyDuplicates(t *testing.T) {
 	}
 	if len(repos) != 1 {
 		t.Fatalf("got %d repositories, want one deduplicated repository", len(repos))
+	}
+}
+
+func TestRepositoryOperationsDoNotChangeWorkingDirectory(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	repoDir := newGitRepo(t)
+	if err := os.WriteFile(filepath.Join(repoDir, "enbu.toml"), []byte("version = \"v1alpha1\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a := app.New()
+	a.KeyStore = &desktopKeyStore{values: make(map[string][]byte)}
+	s := NewService(a, "client")
+	if _, err := s.SelectRepository(repoDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ListEnvironments(); err != nil {
+		t.Fatal(err)
+	}
+	current, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current != original {
+		t.Fatalf("working directory changed to %q, want %q", current, original)
+	}
+}
+
+func TestRepoInfoRequiresPrivateKeyForInitialized(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	repoDir := newGitRepo(t)
+	if err := os.WriteFile(filepath.Join(repoDir, "enbu.toml"), []byte("version = \"v1alpha1\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	keyStore := &desktopKeyStore{values: make(map[string][]byte)}
+	a := app.New()
+	a.KeyStore = keyStore
+	s := NewService(a, "client")
+
+	info, err := s.SelectRepository(repoDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Initialized {
+		t.Fatal("repository reported initialized without a private key")
+	}
+
+	identity, err := agecrypto.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyStore.values[app.RepoKeystoreKey("octo", "hello")] = []byte(identity.String())
+	info, err = s.GetRepoStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Initialized {
+		t.Fatal("repository not initialized after private key was stored")
+	}
+}
+
+func TestWriteConfigAddsCustomOutputToGitignore(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	repoDir := newGitRepo(t)
+	if err := os.WriteFile(filepath.Join(repoDir, "enbu.toml"), []byte("version = \"v1alpha1\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := app.New()
+	a.KeyStore = &desktopKeyStore{values: make(map[string][]byte)}
+	s := NewService(a, "client")
+	if _, err := s.SelectRepository(repoDir); err != nil {
+		t.Fatal(err)
+	}
+
+	content := "version = \"v1alpha1\"\n[env.dev]\noutput = \"secrets.local\"\n"
+	if err := s.WriteConfig(content); err != nil {
+		t.Fatal(err)
+	}
+	gitignore, err := os.ReadFile(filepath.Join(repoDir, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(gitignore), "secrets.local") {
+		t.Fatalf(".gitignore does not contain custom output: %q", gitignore)
+	}
+}
+
+func TestPreferredRemoteURLUsesHTTPS(t *testing.T) {
+	result := &gh.CreateRepoResult{SSHURL: "git@github.com:octo/hello.git", HTTPSURL: "https://github.com/octo/hello.git"}
+	if got := preferredRemoteURL(result); got != result.HTTPSURL {
+		t.Fatalf("preferredRemoteURL = %q, want %q", got, result.HTTPSURL)
 	}
 }
 
