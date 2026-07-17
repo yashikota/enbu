@@ -38,5 +38,8 @@ describe("i18n", () => {
     expect(translate("ja", "init.gitAction")).toBe("Gitを初期化");
     expect(translate("en", "init.createRemote")).toBe("Create repository");
     expect(translate("ja", "init.repositoryOwner")).toBe("作成先アカウント");
+    expect(translate("ja", "dashboard.key")).toBe("名前");
+    expect(translate("ja", "dashboard.copyKey")).toBe("名前をコピー");
+    expect(translate("ja", "dashboard.keyCopied")).toBe("名前をコピー済み");
   });
 });
