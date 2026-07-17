@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { backend } from "./backend";
+import { backend, type GitHubAccount } from "./backend";
 
 declare global {
   interface Window {
@@ -17,6 +17,36 @@ beforeEach(() => {
         GetDeviceLoginStatus: vi.fn(),
         CancelDeviceLogin: vi.fn(),
         Logout: vi.fn(),
+        ListAccounts: vi.fn(
+          async (): Promise<GitHubAccount[]> => [
+            {
+              id: "stored:octo",
+              username: "octo",
+              active: true,
+              source: "stored",
+              storage: "keychain",
+            },
+            {
+              id: "stored:hubot",
+              username: "hubot",
+              active: false,
+              source: "stored",
+              storage: "file",
+            },
+          ],
+        ),
+        SwitchAccount: vi.fn(async (identifier: string) => {
+          window.calls?.push(["switchAccount", identifier]);
+        }),
+        UseEnvironmentAccount: vi.fn(async () => {
+          window.calls?.push(["useEnvironmentAccount"]);
+        }),
+        RemoveAccount: vi.fn(async (identifier: string) => {
+          window.calls?.push(["removeAccount", identifier]);
+        }),
+        RemoveAllAccounts: vi.fn(async () => {
+          window.calls?.push(["removeAllAccounts"]);
+        }),
         BrowseRepository: vi.fn(),
         SelectRepository: vi.fn(),
         GetRepoStatus: vi.fn(),
@@ -93,6 +123,29 @@ beforeEach(() => {
 });
 
 describe("backend desktop adapter", () => {
+  it("lists and switches GitHub accounts", async () => {
+    await expect(backend.listAccounts()).resolves.toEqual([
+      {
+        id: "stored:octo",
+        username: "octo",
+        active: true,
+        source: "stored" as const,
+        storage: "keychain" as const,
+      },
+      {
+        id: "stored:hubot",
+        username: "hubot",
+        active: false,
+        source: "stored" as const,
+        storage: "file" as const,
+      },
+    ]);
+    await backend.switchAccount("stored:hubot");
+    expect(window.calls).toContainEqual(["switchAccount", "stored:hubot"]);
+    await backend.removeAccount("stored:hubot");
+    expect(window.calls).toContainEqual(["removeAccount", "stored:hubot"]);
+  });
+
   it("delegates initialization and workspace reads to Wails", async () => {
     await expect(backend.initialize()).resolves.toMatchObject({
       environment: "default",

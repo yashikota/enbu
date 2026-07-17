@@ -27,11 +27,20 @@ export interface DeviceStatus {
   state: "pending" | "success" | "expired" | "denied" | "error";
   message?: string;
   username?: string;
+  storage?: "keychain" | "file";
 }
 
 export interface RepositoryOwner {
   login: string;
   organization: boolean;
+}
+
+export interface GitHubAccount {
+  id: string;
+  username: string;
+  active: boolean;
+  source: "stored" | "environment";
+  storage: "keychain" | "file" | "environment";
 }
 
 type DesktopService = {
@@ -40,6 +49,11 @@ type DesktopService = {
   GetDeviceLoginStatus: (sessionID: string) => Promise<DeviceStatus>;
   CancelDeviceLogin: (sessionID: string) => Promise<void>;
   Logout: () => Promise<void>;
+  ListAccounts: () => Promise<GitHubAccount[]>;
+  SwitchAccount: (identifier: string) => Promise<void>;
+  UseEnvironmentAccount: () => Promise<void>;
+  RemoveAccount: (identifier: string) => Promise<void>;
+  RemoveAllAccounts: () => Promise<void>;
   BrowseRepository: () => Promise<GUIRepoStatus["repo"]>;
   SelectRepository: (path: string) => Promise<GUIRepoStatus["repo"]>;
   GetRepoStatus: () => Promise<GUIRepoStatus["repo"]>;
@@ -129,6 +143,44 @@ const realBackend = {
       return;
     }
     await svc.Logout();
+  },
+  async listAccounts(): Promise<GitHubAccount[]> {
+    const svc = service();
+    if (!svc) {
+      const status = await api.auth.status();
+      return status.authenticated && status.username
+        ? [
+            {
+              id: `stored:${status.username.toLowerCase()}`,
+              username: status.username,
+              active: true,
+              source: "stored" as const,
+              storage: "file" as const,
+            },
+          ]
+        : [];
+    }
+    return svc.ListAccounts();
+  },
+  async switchAccount(identifier: string): Promise<void> {
+    const svc = service();
+    if (!svc) throw new Error("Desktop account switching is not available");
+    await svc.SwitchAccount(identifier);
+  },
+  async useEnvironmentAccount(): Promise<void> {
+    const svc = service();
+    if (!svc) throw new Error("Desktop environment account selection is not available");
+    await svc.UseEnvironmentAccount();
+  },
+  async removeAccount(identifier: string): Promise<void> {
+    const svc = service();
+    if (!svc) throw new Error("Desktop account removal is not available");
+    await svc.RemoveAccount(identifier);
+  },
+  async removeAllAccounts(): Promise<void> {
+    const svc = service();
+    if (!svc) throw new Error("Desktop account removal is not available");
+    await svc.RemoveAllAccounts();
   },
   async repoStatus(): Promise<GUIRepoStatus> {
     const svc = service();

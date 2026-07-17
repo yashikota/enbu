@@ -47,6 +47,18 @@ enbu auth login
 
 GitHubにログインします  
 
+`auth login` をもう一度実行すると、複数のGitHubアカウントを追加できます。
+
+```bash
+enbu auth status
+enbu auth switch --user octocat
+enbu auth logout --user octocat
+```
+
+`gh` と同様に、`auth switch` をフラグなしで実行すると、保存済みアカウントが2つなら非アクティブ側へ自動で切り替え、3つ以上なら選択画面を表示します。`auth logout` も対象を特定できない場合は選択画面を表示します。
+
+認証の優先順位は `GH_TOKEN`、`GITHUB_TOKEN`、選択済みの保存アカウントの順です。`auth login`、`auth switch`、`auth logout` で保存済み認証を変更する場合は環境変数を解除してください。OAuthトークンは利用可能ならOSキーリングへ保存し、利用できない場合はユーザー専用のトークンファイルへフォールバックしてCLIとデスクトップのアカウントメニューに警告を表示します。
+
 ### 2. リポジトリの初期化
 
 ```bash

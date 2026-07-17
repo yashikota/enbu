@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/yashikota/enbu/app"
+	"github.com/yashikota/enbu/auth"
 	"github.com/yashikota/enbu/desktop"
 	gh "github.com/yashikota/enbu/provider/github"
 )
@@ -28,6 +29,26 @@ func (s *DesktopService) CancelDeviceLogin(sessionID string) error {
 
 func (s *DesktopService) Logout() error {
 	return s.service.Logout()
+}
+
+func (s *DesktopService) ListAccounts() ([]auth.Account, error) {
+	return s.service.ListAccounts()
+}
+
+func (s *DesktopService) SwitchAccount(identifier string) error {
+	return s.service.SwitchAccount(identifier)
+}
+
+func (s *DesktopService) UseEnvironmentAccount() error {
+	return s.service.UseEnvironmentAccount()
+}
+
+func (s *DesktopService) RemoveAccount(identifier string) error {
+	return s.service.RemoveAccount(identifier)
+}
+
+func (s *DesktopService) RemoveAllAccounts() error {
+	return s.service.RemoveAllAccounts()
 }
 
 func (s *DesktopService) BrowseRepository() (desktop.RepoInfo, error) {

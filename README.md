@@ -46,6 +46,18 @@ enbu auth login
 
 Log in to GitHub.
 
+You can add more than one GitHub account by running `auth login` again. Manage the saved accounts with:
+
+```bash
+enbu auth status
+enbu auth switch --user octocat
+enbu auth logout --user octocat
+```
+
+Like `gh`, running `auth switch` without flags automatically switches when two accounts are stored and prompts when more accounts are available. `auth logout` prompts when the account is ambiguous.
+
+`GH_TOKEN` and `GITHUB_TOKEN`, in that order, take precedence over stored credentials. Clear them before using `auth login`, `auth switch`, or `auth logout`. OAuth tokens are stored in the OS keychain when available. If the keychain cannot be used, enbu falls back to its user-only token file and reports the fallback in the CLI and desktop account menu.
+
 ### 2. Initialize the repository
 
 ```bash
