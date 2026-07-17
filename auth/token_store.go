@@ -51,6 +51,9 @@ func LoadToken() (*StoredToken, error) {
 	if err := json.Unmarshal(data, &token); err != nil {
 		return nil, fmt.Errorf("parsing token: %w", err)
 	}
+	if token.AccessToken == "" || token.Username == "" {
+		return nil, fmt.Errorf("stored credentials are invalid or use an unsupported format; run 'enbu auth logout' and then 'enbu auth login'")
+	}
 
 	return &token, nil
 }
