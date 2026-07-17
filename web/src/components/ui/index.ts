@@ -10,6 +10,7 @@ export * from './textarea'
 // Named namespace exports to avoid conflicts with Alert and Popover compound components
 export * as Alert from './alert'
 export * as Popover from './popover'
+export * as Tabs from './tabs'
 
 // Heading exported directly (simple component)
 export { Heading } from './heading-simple'

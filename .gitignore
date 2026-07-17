@@ -22,6 +22,7 @@ coverage.*
 profile.cov
 
 # Misc
+plans/
 docs/superpowers/
 
 # Frontend
@@ -32,9 +33,3 @@ web/package.json.md5
 web/src/routeTree.gen.ts
 web/src/wailsjs/
 desktop/wails/build/
-# Legacy frontend generated files
-web/frontend/node_modules/
-web/frontend/dist/
-web/frontend/package.json.md5
-web/frontend/src/routeTree.gen.ts
-web/frontend/src/wailsjs/

@@ -2,7 +2,19 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vite-plus/test"
 import { createRoot } from "react-dom/client";
 import { act } from "react-dom/test-utils";
 import { I18nProvider } from "../lib/i18n";
-import { SecretRow } from "./index";
+import { backend, openURL } from "../lib/backend";
+import { RepositoryContextMenu, Sidebar } from "./__root";
+import {
+  parseConfigDraft,
+  CreateEnvironmentModal,
+  EnvironmentSelector,
+  MemberAvatar,
+  MemberRow,
+  RepositoryOwnerSelect,
+  resolveWorkspaceEnvironment,
+  SecretRow,
+  serializeConfigDraft,
+} from "./index";
 
 vi.mock("../lib/backend", () => ({
   backend: {
@@ -33,8 +45,23 @@ vi.mock("../lib/backend", () => ({
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
+let clipboardWrite: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  class ResizeObserverMock {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  Object.defineProperty(globalThis, "ResizeObserver", {
+    configurable: true,
+    value: ResizeObserverMock,
+  });
+  clipboardWrite = vi.fn(async () => {});
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: clipboardWrite },
+  });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -111,17 +138,302 @@ describe("SecretRow", () => {
     expect(queryInput("super-secret")?.type).toBe("password");
   });
 
-  it("calls onDelete when delete button is clicked", () => {
+  it("asks for confirmation before deleting", async () => {
     const onDelete = vi.fn(async () => {});
     renderSecretRow({ secretKey: "API_KEY", secretValue: "super-secret", onDelete });
     act(() => {
       queryButton("Delete")?.click();
     });
+    expect(onDelete).not.toHaveBeenCalled();
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain("Delete API_KEY?");
+    await act(async () => {
+      dialog?.querySelector<HTMLButtonElement>('button[aria-label^="Delete:"]')?.click();
+      await Promise.resolve();
+    });
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
-  it("renders key input as readonly", () => {
+  it("copies the secret key and value independently", async () => {
     renderSecretRow({ secretKey: "API_KEY", secretValue: "super-secret" });
-    expect(queryInput("API_KEY")?.readOnly).toBe(true);
+    await act(async () => {
+      queryButton("Copy key")?.click();
+      await Promise.resolve();
+    });
+    expect(clipboardWrite).toHaveBeenCalledWith("API_KEY");
+    expect(queryButton("Key copied")).toBeTruthy();
+
+    await act(async () => {
+      queryButton("Copy value")?.click();
+      await Promise.resolve();
+    });
+    expect(clipboardWrite).toHaveBeenCalledWith("super-secret");
+    expect(queryButton("Value copied")).toBeTruthy();
+  });
+
+  it("renders the secret key as a monospace label", () => {
+    renderSecretRow({ secretKey: "API_KEY", secretValue: "super-secret" });
+    expect(container.textContent).toContain("API_KEY");
+  });
+});
+
+describe("RepositoryContextMenu", () => {
+  it("removes a repository from the right-click menu", () => {
+    const onRemove = vi.fn();
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <RepositoryContextMenu x={20} y={30} removing={false} onRemove={onRemove} />
+        </I18nProvider>,
+      );
+    });
+    const menu = container.querySelector<HTMLElement>('[role="menu"]');
+    expect(menu).toBeTruthy();
+    expect(menu?.style.left).toBe("20px");
+    expect(menu?.style.top).toBe("30px");
+    act(() => {
+      queryButton("Remove")?.click();
+    });
+    expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes the final repository after confirmation", async () => {
+    let repositories = [{ path: "C:\\repo", owner: "yashikota", repo: "test", initialized: true }];
+    const backendMock = vi.mocked(backend);
+    backendMock.listRepositories.mockImplementation(async () => repositories);
+    backendMock.removeRepository.mockImplementation(async () => {
+      repositories = [];
+    });
+    await act(async () => {
+      root.render(
+        <I18nProvider>
+          <Sidebar activePath="C:\\repo" />
+        </I18nProvider>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const repositoryRow = container.querySelector<HTMLElement>("[data-repository-path]");
+    expect(repositoryRow).toBeTruthy();
+    expect(repositoryRow?.dataset.repositoryPath).toBe("C:\\repo");
+    act(() => {
+      repositoryRow?.dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, clientX: 20, clientY: 20 }),
+      );
+    });
+    const menu = container.querySelector<HTMLElement>('[role="menu"]');
+    expect(menu).toBeTruthy();
+    expect(menu?.style.left).toBe("20px");
+    expect(menu?.style.top).toBe("20px");
+    act(() => {
+      queryButton("Remove")?.click();
+    });
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog).toBeTruthy();
+    expect(dialog?.textContent).toContain("Remove yashikota/test from enbu?");
+    await act(async () => {
+      dialog?.querySelector<HTMLButtonElement>('button[aria-label^="Remove:"]')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).not.toContain("yashikota/test");
+    expect(container.textContent).toContain("No repositories yet.");
+  });
+});
+
+describe("enbu config editor", () => {
+  it("hydrates missing environment output defaults for the GUI", () => {
+    expect(
+      parseConfigDraft('version = "v1alpha1"\ndefault_env = "development"\n', [
+        { name: "development", current: true },
+        { name: "production", current: false },
+      ]),
+    ).toEqual({
+      version: "v1alpha1",
+      default_env: "development",
+      env: {
+        development: { output: ".env.development" },
+        production: { output: ".env.production" },
+      },
+    });
+  });
+
+  it("serializes GUI edits as valid canonical TOML", () => {
+    const text = serializeConfigDraft({
+      version: "v1alpha1",
+      default_env: "staging",
+      env: { staging: { output: ".env.staging" } },
+    });
+    expect(text).toBe(
+      'version = "v1alpha1"\ndefault_env = "staging"\n\n[env.staging]\noutput = ".env.staging"\n',
+    );
+    expect(text).not.toContain("[env]\n");
+    expect(parseConfigDraft(text, [])).toMatchObject({ default_env: "staging" });
+  });
+
+  it("rejects invalid TOML before entering the GUI", () => {
+    expect(() => parseConfigDraft('version = "v1alpha1', [])).toThrow();
+  });
+});
+
+describe("MemberAvatar", () => {
+  it("uses the GitHub avatar and keeps initials as a fallback", () => {
+    act(() => {
+      root.render(<MemberAvatar username="octo cat" />);
+    });
+    const image = container.querySelector("img");
+    expect(image?.src).toContain("avatars.githubusercontent.com/octo%20cat?size=76");
+    expect(container.textContent).toContain("OC");
+    act(() => {
+      image?.dispatchEvent(new Event("error"));
+    });
+    expect(image?.style.display).toBe("none");
+  });
+});
+
+describe("MemberRow", () => {
+  it("opens the member's GitHub profile", () => {
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <MemberRow
+            recipient={{ username: "octo cat", fingerprint: "fingerprint", public_key: "age1" }}
+          />
+        </I18nProvider>,
+      );
+    });
+    act(() => {
+      container.querySelector("button")?.click();
+    });
+    expect(vi.mocked(openURL)).toHaveBeenCalledWith("https://github.com/octo%20cat");
+  });
+});
+
+describe("repository setup", () => {
+  it("renders personal and organization owners and reports the selection", async () => {
+    const onChange = vi.fn();
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <RepositoryOwnerSelect
+            owners={[
+              { login: "octo", organization: false },
+              { login: "octo-org", organization: true },
+            ]}
+            value="octo"
+            loading={false}
+            onChange={onChange}
+          />
+        </I18nProvider>,
+      );
+    });
+
+    const trigger = container.querySelector<HTMLButtonElement>("#repository-owner");
+    expect(trigger?.textContent).toContain("octo");
+    expect(trigger?.textContent).toContain("Personal account");
+    await act(async () => {
+      trigger?.click();
+      await Promise.resolve();
+    });
+    const organizationOption = Array.from(
+      document.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent?.includes("octo-org"));
+    expect(organizationOption?.textContent).toContain("Organization");
+    await act(async () => {
+      organizationOption?.click();
+      await Promise.resolve();
+    });
+    expect(onChange).toHaveBeenCalledWith("octo-org");
+  });
+
+  it("falls back to the new repository's current environment", () => {
+    expect(
+      resolveWorkspaceEnvironment("dev", [
+        { name: "staging", current: true },
+        { name: "production", current: false },
+      ]),
+    ).toBe("staging");
+    expect(
+      resolveWorkspaceEnvironment("production", [
+        { name: "staging", current: true },
+        { name: "production", current: false },
+      ]),
+    ).toBe("production");
+  });
+});
+
+describe("environment selector", () => {
+  it("switches environments and exposes environment creation as the last action", async () => {
+    const onSelect = vi.fn();
+    const onAdd = vi.fn();
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <EnvironmentSelector
+            environments={[
+              { name: "default", current: true },
+              { name: "staging", current: false },
+            ]}
+            value="default"
+            onSelect={onSelect}
+            onAdd={onAdd}
+          />
+        </I18nProvider>,
+      );
+    });
+
+    const trigger = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Current environment"]',
+    );
+    await act(async () => {
+      trigger?.click();
+      await Promise.resolve();
+    });
+    const menuButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("button"));
+    const staging = menuButtons.find((button) => button.textContent?.includes("staging"));
+    expect(menuButtons.at(-1)?.textContent).toContain("Add environment");
+    await act(async () => {
+      staging?.click();
+      await Promise.resolve();
+    });
+    expect(onSelect).toHaveBeenCalledWith("staging");
+
+    await act(async () => {
+      trigger?.click();
+      await Promise.resolve();
+    });
+    const reopenedAdd = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("Add environment"),
+    );
+    await act(async () => {
+      reopenedAdd?.click();
+      await Promise.resolve();
+    });
+    expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates an environment from the modal", () => {
+    const onCreate = vi.fn();
+    const onClose = vi.fn();
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <CreateEnvironmentModal
+            open
+            value="staging"
+            loading={false}
+            onValueChange={() => {}}
+            onClose={onClose}
+            onCreate={onCreate}
+          />
+        </I18nProvider>,
+      );
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeTruthy();
+    act(() => {
+      queryButton("Create")?.click();
+    });
+    expect(onCreate).toHaveBeenCalledTimes(1);
   });
 });

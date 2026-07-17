@@ -29,6 +29,11 @@ export interface DeviceStatus {
   username?: string;
 }
 
+export interface RepositoryOwner {
+  login: string;
+  organization: boolean;
+}
+
 type DesktopService = {
   GetAuthStatus: () => Promise<DesktopAuthStatus>;
   StartDeviceLogin: () => Promise<DeviceStart>;
@@ -60,8 +65,10 @@ type DesktopService = {
   ReadConfig: () => Promise<string>;
   WriteConfig: (content: string) => Promise<void>;
   GitInit: (path: string) => Promise<GUIRepoStatus["repo"]>;
+  ListRepositoryOwners: () => Promise<RepositoryOwner[]>;
   GitCreateRemote: (
     path: string,
+    owner: string,
     repoName: string,
     privateRepository: boolean,
   ) => Promise<GUIRepoStatus["repo"]>;
@@ -164,6 +171,7 @@ const realBackend = {
   },
   async gitCreateRemote(
     path: string,
+    owner: string,
     repoName: string,
     privateRepository: boolean,
   ): Promise<GUIRepoStatus> {
@@ -171,8 +179,15 @@ const realBackend = {
     if (!svc) {
       throw new Error("Desktop GitHub repository creation is not available");
     }
-    const repo = await svc.GitCreateRemote(path, repoName, privateRepository);
+    const repo = await svc.GitCreateRemote(path, owner, repoName, privateRepository);
     return { selected: Boolean(repo?.path), repo };
+  },
+  async listRepositoryOwners(): Promise<RepositoryOwner[]> {
+    const svc = service();
+    if (!svc) {
+      throw new Error("Desktop GitHub account selection is not available");
+    }
+    return svc.ListRepositoryOwners();
   },
   async listEnvironments(): Promise<Environment[]> {
     const svc = service();

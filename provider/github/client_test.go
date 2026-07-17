@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -85,12 +86,64 @@ func TestCreateRepository(t *testing.T) {
 		})
 	})
 
-	repository, err := client.CreateRepository(context.Background(), "example", true)
+	repository, err := client.CreateRepository(context.Background(), "", "example", true)
 	if err != nil {
 		t.Fatalf("CreateRepository: %v", err)
 	}
 	if repository.Owner != "octo" || repository.Name != "example" {
 		t.Fatalf("repository = %#v", repository)
+	}
+}
+
+func TestListRepositoryOwners(t *testing.T) {
+	client := newTestClient(t, "test-token", func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/user":
+			_ = json.NewEncoder(w).Encode(map[string]string{"login": "octo", "type": "User"})
+		case "/user/orgs":
+			_ = json.NewEncoder(w).Encode([]map[string]string{
+				{"login": "octo-org"},
+				{"login": "another-org"},
+			})
+		default:
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	owners, err := client.ListRepositoryOwners(context.Background())
+	if err != nil {
+		t.Fatalf("ListRepositoryOwners: %v", err)
+	}
+	want := []RepositoryOwner{
+		{Login: "octo"},
+		{Login: "octo-org", Organization: true},
+		{Login: "another-org", Organization: true},
+	}
+	if !reflect.DeepEqual(owners, want) {
+		t.Fatalf("owners = %#v, want %#v", owners, want)
+	}
+}
+
+func TestCreateOrganizationRepository(t *testing.T) {
+	client := newTestClient(t, "test-token", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/orgs/octo-org/repos" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"name":      "example",
+			"ssh_url":   "git@github.com:octo-org/example.git",
+			"clone_url": "https://github.com/octo-org/example.git",
+			"owner":     map[string]string{"login": "octo-org"},
+		})
+	})
+
+	repository, err := client.CreateRepository(context.Background(), "octo-org", "example", true)
+	if err != nil {
+		t.Fatalf("CreateRepository: %v", err)
+	}
+	if repository.Owner != "octo-org" {
+		t.Fatalf("owner = %q, want octo-org", repository.Owner)
 	}
 }
 

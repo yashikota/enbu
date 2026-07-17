@@ -70,17 +70,23 @@ beforeEach(() => {
           has_git: true,
           has_remote: false,
         })),
-        GitCreateRemote: vi.fn(async (path: string, repo: string, privateRepository: boolean) => {
-          window.calls?.push(["createRemote", path, repo, privateRepository]);
-          return {
-            path,
-            owner: "octo",
-            repo,
-            initialized: false,
-            has_git: true,
-            has_remote: true,
-          };
-        }),
+        ListRepositoryOwners: vi.fn(async () => [
+          { login: "octo", organization: false },
+          { login: "octo-org", organization: true },
+        ]),
+        GitCreateRemote: vi.fn(
+          async (path: string, owner: string, repo: string, privateRepository: boolean) => {
+            window.calls?.push(["createRemote", path, owner, repo, privateRepository]);
+            return {
+              path,
+              owner,
+              repo,
+              initialized: false,
+              has_git: true,
+              has_remote: true,
+            };
+          },
+        ),
       },
     },
   };
@@ -127,9 +133,15 @@ describe("backend desktop adapter", () => {
     await expect(backend.gitInit("C:/repo")).resolves.toMatchObject({
       repo: { has_git: true, has_remote: false },
     });
-    await expect(backend.gitCreateRemote("C:/repo", "example", true)).resolves.toMatchObject({
-      repo: { owner: "octo", repo: "example", has_remote: true },
+    await expect(backend.listRepositoryOwners()).resolves.toEqual([
+      { login: "octo", organization: false },
+      { login: "octo-org", organization: true },
+    ]);
+    await expect(
+      backend.gitCreateRemote("C:/repo", "octo-org", "example", true),
+    ).resolves.toMatchObject({
+      repo: { owner: "octo-org", repo: "example", has_remote: true },
     });
-    expect(window.calls).toContainEqual(["createRemote", "C:/repo", "example", true]);
+    expect(window.calls).toContainEqual(["createRemote", "C:/repo", "octo-org", "example", true]);
   });
 });

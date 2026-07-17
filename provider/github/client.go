@@ -64,15 +64,48 @@ type CreateRepoResult struct {
 	HTTPSURL string
 }
 
+type RepositoryOwner struct {
+	Login        string `json:"login"`
+	Organization bool   `json:"organization"`
+}
+
+func (c *Client) ListRepositoryOwners(ctx context.Context) ([]RepositoryOwner, error) {
+	user, err := c.GetUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	owners := []RepositoryOwner{{Login: user.Login}}
+	options := &githubsdk.ListOptions{PerPage: 100}
+	for {
+		organizations, response, err := c.sdk.Organizations.List(ctx, "", options)
+		if err != nil {
+			return nil, err
+		}
+		for _, organization := range organizations {
+			owners = append(owners, RepositoryOwner{
+				Login:        organization.GetLogin(),
+				Organization: true,
+			})
+		}
+		if response.NextPage == 0 {
+			break
+		}
+		options.Page = response.NextPage
+	}
+	return owners, nil
+}
+
 func (c *Client) CreateRepository(
 	ctx context.Context,
+	organization string,
 	name string,
 	private bool,
 ) (*CreateRepoResult, error) {
 	if c.initErr != nil {
 		return nil, c.initErr
 	}
-	repository, _, err := c.sdk.Repositories.Create(ctx, "", &githubsdk.Repository{
+	repository, _, err := c.sdk.Repositories.Create(ctx, organization, &githubsdk.Repository{
 		Name:    githubsdk.Ptr(name),
 		Private: githubsdk.Ptr(private),
 	})

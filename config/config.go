@@ -1,10 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -55,17 +57,38 @@ func SaveProject(cfg *ProjectConfig) error {
 		path = "enbu.toml"
 	}
 
-	f, err := os.Create(path)
+	content, err := MarshalProject(cfg)
 	if err != nil {
-		return fmt.Errorf("creating enbu.toml: %w", err)
+		return fmt.Errorf("encoding enbu.toml: %w", err)
+	}
+	return os.WriteFile(path, content, 0o644)
+}
+
+// MarshalProject emits the compact, canonical enbu.toml layout. Encoding the
+// environment map directly would add a redundant [env] parent table and indent
+// every [env.<name>] section.
+func MarshalProject(cfg *ProjectConfig) ([]byte, error) {
+	var buf bytes.Buffer
+	header := struct {
+		Version    string `toml:"version"`
+		DefaultEnv string `toml:"default_env,omitempty"`
+	}{Version: cfg.Version, DefaultEnv: cfg.DefaultEnv}
+	if err := toml.NewEncoder(&buf).Encode(header); err != nil {
+		return nil, err
 	}
 
-	encoder := toml.NewEncoder(f)
-	if err := encoder.Encode(cfg); err != nil {
-		_ = f.Close()
-		return err
+	names := make([]string, 0, len(cfg.Environments))
+	for name := range cfg.Environments {
+		names = append(names, name)
 	}
-	return f.Close()
+	sort.Strings(names)
+	for _, name := range names {
+		_, _ = fmt.Fprintf(&buf, "\n[%s]\n", toml.Key{"env", name}.String())
+		if err := toml.NewEncoder(&buf).Encode(cfg.Environments[name]); err != nil {
+			return nil, err
+		}
+	}
+	return buf.Bytes(), nil
 }
 
 func LoadLocal() (*LocalConfig, error) {

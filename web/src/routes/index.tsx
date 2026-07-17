@@ -1,26 +1,177 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Flex, HStack, VStack, styled } from "styled-system/jsx";
+import { Alert, Button, Heading, Input, Popover, Spinner, Tabs, Text } from "../components/ui";
 import {
-  Alert,
-  Button,
-  Heading,
-  Input,
-  Separator,
-  Spinner,
-  Text,
-  Textarea,
-} from "../components/ui";
-import { Copy, Eye, EyeOff } from "lucide-react";
+  Building2,
+  Check,
+  ChevronDown,
+  Code2,
+  Copy,
+  Download,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Layers3,
+  ListTree,
+  Plus,
+  RefreshCw,
+  SlidersHorizontal,
+  Trash2,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
 import { SiGithub } from "@icons-pack/react-simple-icons";
-import { backend, type DeviceStart, type DeviceStatus, openURL } from "../lib/backend";
+import {
+  backend,
+  type DeviceStart,
+  type DeviceStatus,
+  type RepositoryOwner,
+  openURL,
+} from "../lib/backend";
 import type { Environment, Recipient, SecretsResponse } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useAuth } from "./__root";
+import { TomlCodeEditor } from "../components/toml-code-editor";
+import { ConfirmDeleteDialog } from "../components/confirm-delete-dialog";
+import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 
 export const Route = createFileRoute("/")({
   component: HomePage,
 });
+
+export function resolveWorkspaceEnvironment(requested: string, environments: Environment[]) {
+  if (requested && environments.some((environment) => environment.name === requested)) {
+    return requested;
+  }
+  return (
+    environments.find((environment) => environment.current)?.name ?? environments[0]?.name ?? ""
+  );
+}
+
+export function RepositoryOwnerSelect({
+  owners,
+  value,
+  loading,
+  onChange,
+}: {
+  owners: RepositoryOwner[];
+  value: string;
+  loading: boolean;
+  onChange: (owner: string) => void;
+}) {
+  const { t } = useI18n();
+  const selected = owners.find((owner) => owner.login === value);
+  const SelectedIcon = selected?.organization ? Building2 : UserRound;
+  return (
+    <Box>
+      <styled.label htmlFor="repository-owner" display="block" fontSize="sm" mb={1.5}>
+        {t("init.repositoryOwner")}
+      </styled.label>
+      <Popover.Root positioning={{ placement: "bottom-start", sameWidth: true, gutter: 6 }}>
+        <Popover.Trigger asChild>
+          <Button
+            id="repository-owner"
+            type="button"
+            variant="outline"
+            w="full"
+            h="52px"
+            px="3"
+            justifyContent="space-between"
+            borderColor="border.default"
+            borderRadius="lg"
+            bg="bg.surface"
+            boxShadow="xs"
+            disabled={loading || owners.length === 0}
+            aria-label={t("init.repositoryOwner")}
+            _hover={{ borderColor: "accent.default", bg: "bg.muted" }}
+          >
+            <HStack gap="3" minW="0">
+              <Box
+                w="34px"
+                h="34px"
+                display="grid"
+                placeItems="center"
+                borderRadius="md"
+                bg="accent.subtle"
+                color="accent.default"
+                flexShrink="0"
+              >
+                {loading ? <Spinner size="sm" /> : <SelectedIcon size={17} />}
+              </Box>
+              <VStack gap="0" alignItems="start" minW="0">
+                <Text fontWeight="semibold" fontSize="sm" truncate>
+                  {selected?.login ?? t("common.loading")}
+                </Text>
+                {selected && (
+                  <Text color="fg.muted" fontSize="xs">
+                    {t(selected.organization ? "init.organization" : "init.personalAccount")}
+                  </Text>
+                )}
+              </VStack>
+            </HStack>
+            <ChevronDown size={16} color="currentColor" />
+          </Button>
+        </Popover.Trigger>
+        <Popover.Positioner>
+          <Popover.Content
+            p="1.5"
+            borderWidth="1px"
+            borderColor="border.default"
+            borderRadius="lg"
+            boxShadow="dropdown"
+            bg="bg.surface"
+          >
+            <VStack gap="1" alignItems="stretch">
+              {owners.map((owner) => {
+                const OwnerIcon = owner.organization ? Building2 : UserRound;
+                const active = owner.login === value;
+                return (
+                  <Popover.CloseTrigger key={owner.login} asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      h="48px"
+                      px="2.5"
+                      justifyContent="space-between"
+                      borderRadius="md"
+                      bg={active ? "accent.subtle" : undefined}
+                      onClick={() => onChange(owner.login)}
+                    >
+                      <HStack gap="3">
+                        <Box
+                          w="30px"
+                          h="30px"
+                          display="grid"
+                          placeItems="center"
+                          borderRadius="md"
+                          bg={owner.organization ? "accent.subtle" : "bg.muted"}
+                          color={owner.organization ? "accent.default" : "fg.muted"}
+                        >
+                          <OwnerIcon size={15} />
+                        </Box>
+                        <Box textAlign="left">
+                          <Text fontSize="sm" fontWeight="semibold">
+                            {owner.login}
+                          </Text>
+                          <Text fontSize="xs" color="fg.muted">
+                            {t(owner.organization ? "init.organization" : "init.personalAccount")}
+                          </Text>
+                        </Box>
+                      </HStack>
+                      {active && <Check size={16} />}
+                    </Button>
+                  </Popover.CloseTrigger>
+                );
+              })}
+            </VStack>
+          </Popover.Content>
+        </Popover.Positioner>
+      </Popover.Root>
+    </Box>
+  );
+}
 
 function HomePage() {
   const { t } = useI18n();
@@ -47,10 +198,12 @@ function HomePage() {
   const [initializing, setInitializing] = useState(false);
   const [repositorySetupLoading, setRepositorySetupLoading] = useState(false);
   const [remoteRepoName, setRemoteRepoName] = useState("");
+  const [repositoryOwners, setRepositoryOwners] = useState<RepositoryOwner[]>([]);
+  const [selectedRepositoryOwner, setSelectedRepositoryOwner] = useState("");
+  const [repositoryOwnersLoading, setRepositoryOwnersLoading] = useState(false);
   const [privateRepository, setPrivateRepository] = useState(true);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [pullLoading, setPullLoading] = useState(false);
-  const [syncLoading, setSyncLoading] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
   const [actionError, setActionError] = useState("");
   const [environments, setEnvironments] = useState<Environment[]>([]);
@@ -58,6 +211,8 @@ function HomePage() {
   const [secretKey, setSecretKey] = useState("");
   const [secretValue, setSecretValue] = useState("");
   const [newEnv, setNewEnv] = useState("");
+  const [environmentModalOpen, setEnvironmentModalOpen] = useState(false);
+  const [environmentCreateLoading, setEnvironmentCreateLoading] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   const fetchRepoStatus = useCallback(async () => {
@@ -80,7 +235,7 @@ function HomePage() {
 
   useEffect(() => {
     const onConnect = () => {
-      if (!status?.authenticated && !deviceStart) void handleStartAuth();
+      if (!deviceStart) void handleStartAuth();
     };
     window.addEventListener("enbu-connect-github", onConnect);
     return () => window.removeEventListener("enbu-connect-github", onConnect);
@@ -101,6 +256,8 @@ function HomePage() {
           window.clearInterval(poll);
           window.dispatchEvent(new Event("enbu-auth-changed"));
           setRepoStatus(await backend.repoStatus());
+          setDeviceStart(null);
+          setDeviceStatus(null);
         }
       },
       Math.max(deviceStart.interval, 2) * 1000,
@@ -123,7 +280,7 @@ function HomePage() {
     setActionError("");
     try {
       const envs = await backend.listEnvironments();
-      const nextEnv = env || envs.find((item) => item.current)?.name || "";
+      const nextEnv = resolveWorkspaceEnvironment(env, envs);
       setEnvironments([...envs].sort((a, b) => a.name.localeCompare(b.name)));
       setSecrets(await backend.listSecrets(nextEnv));
     } catch (err) {
@@ -141,6 +298,37 @@ function HomePage() {
     const path = repoStatus?.repo?.path?.replace(/[\\/]+$/, "");
     setRemoteRepoName(path?.split(/[\\/]/).pop() ?? "");
   }, [repoStatus?.repo?.path]);
+
+  useEffect(() => {
+    if (!repoStatus?.repo?.has_git || repoStatus.repo.has_remote) return;
+
+    let cancelled = false;
+    setRepositoryOwnersLoading(true);
+    setActionError("");
+    backend
+      .listRepositoryOwners()
+      .then((owners) => {
+        if (cancelled) return;
+        setRepositoryOwners(owners);
+        setSelectedRepositoryOwner((current) => {
+          if (owners.some((owner) => owner.login === current)) return current;
+          return (
+            owners.find((owner) => owner.login === status?.username)?.login ??
+            owners[0]?.login ??
+            ""
+          );
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) setActionError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setRepositoryOwnersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [repoStatus?.repo?.has_git, repoStatus?.repo?.has_remote, status?.username]);
 
   async function handleStartAuth() {
     setStartingAuth(true);
@@ -219,6 +407,28 @@ function HomePage() {
     );
   }
 
+  if (status?.authenticated && deviceStart) {
+    return (
+      <PageCenter>
+        <DeviceLoginPanel
+          start={deviceStart}
+          status={deviceStatus}
+          expiresIn={expiresIn}
+          onCancel={async () => {
+            await backend.cancelDeviceLogin(deviceStart.session_id);
+            setDeviceStart(null);
+            setDeviceStatus(null);
+          }}
+          onRetry={() => {
+            setDeviceStart(null);
+            setDeviceStatus(null);
+            setAuthError("");
+          }}
+        />
+      </PageCenter>
+    );
+  }
+
   // Screen 04: Repository selection
   if (!repoStatus?.selected) {
     return (
@@ -251,7 +461,10 @@ function HomePage() {
                 setSelectingRepo(true);
                 setRepoError("");
                 try {
-                  setRepoStatus(await backend.browseRepository());
+                  const nextRepoStatus = await backend.browseRepository();
+                  setRepoStatus(nextRepoStatus);
+                  window.dispatchEvent(new Event("enbu-repo-changed"));
+                  window.dispatchEvent(new Event("enbu-auth-changed"));
                 } catch (err) {
                   setRepoError(err instanceof Error ? err.message : String(err));
                 } finally {
@@ -271,7 +484,10 @@ function HomePage() {
               setSelectingRepo(true);
               setRepoError("");
               try {
-                setRepoStatus(await backend.selectRepository(repoPath));
+                const nextRepoStatus = await backend.selectRepository(repoPath);
+                setRepoStatus(nextRepoStatus);
+                window.dispatchEvent(new Event("enbu-repo-changed"));
+                window.dispatchEvent(new Event("enbu-auth-changed"));
               } catch (err) {
                 setRepoError(err instanceof Error ? err.message : String(err));
               } finally {
@@ -327,13 +543,16 @@ function HomePage() {
     return (
       <PageCenter>
         <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
-          <Box>
-            <Heading size="2xl" fontWeight="extrabold" mb={2}>
-              {t("init.remoteTitle")}
-            </Heading>
-            <Text color="fg.muted">{t("init.remoteDescription")}</Text>
-          </Box>
+          <Heading size="2xl" fontWeight="extrabold">
+            {t("init.remoteTitle")}
+          </Heading>
           {actionError && <ErrorAlert message={actionError} />}
+          <RepositoryOwnerSelect
+            owners={repositoryOwners}
+            value={selectedRepositoryOwner}
+            loading={repositoryOwnersLoading}
+            onChange={setSelectedRepositoryOwner}
+          />
           <Input
             value={remoteRepoName}
             onChange={(event) => setRemoteRepoName(event.target.value)}
@@ -358,18 +577,20 @@ function HomePage() {
             color="accent.fg"
             fontWeight="semibold"
             loading={repositorySetupLoading}
-            disabled={!remoteRepoName.trim()}
+            disabled={!remoteRepoName.trim() || !selectedRepositoryOwner}
             onClick={async () => {
               setRepositorySetupLoading(true);
               setActionError("");
               try {
-                setRepoStatus(
-                  await backend.gitCreateRemote(
-                    repoStatus.repo?.path ?? "",
-                    remoteRepoName.trim(),
-                    privateRepository,
-                  ),
+                const nextRepoStatus = await backend.gitCreateRemote(
+                  repoStatus.repo?.path ?? "",
+                  selectedRepositoryOwner,
+                  remoteRepoName.trim(),
+                  privateRepository,
                 );
+                setRepoStatus(nextRepoStatus);
+                window.dispatchEvent(new Event("enbu-repo-changed"));
+                window.dispatchEvent(new Event("enbu-auth-changed"));
               } catch (err) {
                 setActionError(err instanceof Error ? err.message : String(err));
               } finally {
@@ -394,12 +615,6 @@ function HomePage() {
               {t("init.title")}
             </Heading>
             <Text color="fg.muted">{t("init.description")}</Text>
-            <Text color="fg.muted" mt={1}>
-              {t("repo.current", {
-                owner: repoStatus.repo?.owner ?? "",
-                repo: repoStatus.repo?.repo ?? "",
-              })}
-            </Text>
           </Box>
           {actionError && <ErrorAlert message={actionError} />}
           <Button
@@ -429,242 +644,529 @@ function HomePage() {
 
   // Screen 06/07: Dashboard
   return (
-    <Box minH="calc(100vh - 64px)" py={8} px={6} display="grid" placeItems="start center">
-      <VStack gap={6} w="full" maxW="880px" alignItems="stretch">
-        <Text color="fg.muted">
-          {t("repo.current", {
-            owner: repoStatus.repo.owner,
-            repo: repoStatus.repo.repo,
-          })}
-        </Text>
-
-        {actionError && <ErrorAlert message={actionError} />}
-
-        {/* Environments panel */}
-        <Panel>
-          <Heading size="md" fontWeight="bold" mb={3}>
-            {t("dashboard.environments")}
-          </Heading>
-          <HStack flexWrap="wrap" gap={2}>
-            {environments.map((env) => (
-              <Button
-                key={env.name}
-                size="sm"
-                variant={env.current ? "solid" : "outline"}
-                bg={env.current ? "accent.default" : undefined}
-                color={env.current ? "accent.fg" : "fg.default"}
-                borderColor={env.current ? undefined : "border.default"}
-                fontWeight="semibold"
-                onClick={async () => {
-                  setActionError("");
-                  try {
-                    await backend.switchEnvironment(env.name);
-                    await refreshWorkspace(env.name);
-                  } catch (err) {
-                    setActionError(err instanceof Error ? err.message : String(err));
-                  }
-                }}
-              >
-                {env.name}
-              </Button>
-            ))}
-          </HStack>
-          <HStack mt={3}>
-            <Input
-              value={newEnv}
-              onChange={(e) => setNewEnv(e.target.value)}
-              placeholder={t("dashboard.newEnvironment")}
-              h="38px"
-              borderColor="border.default"
-              borderRadius="md"
-            />
+    <Box
+      minH="calc(100vh - 72px)"
+      px={{ base: "4", md: "7", lg: "12" }}
+      py={{ base: "7", lg: "10" }}
+      bg="bg.muted"
+    >
+      <Box maxW="1120px" mx="auto">
+        <Flex align={{ base: "start", sm: "center" }} justify="space-between" gap="4" mb="7">
+          <Box>
             <Button
-              variant="outline"
-              h="38px"
-              borderColor="border.default"
+              variant="ghost"
+              p="0"
+              h="auto"
               color="fg.default"
-              fontWeight="semibold"
-              flexShrink={0}
-              onClick={async () => {
-                if (!newEnv.trim()) return;
-                setActionError("");
-                try {
-                  await backend.createEnvironment(newEnv.trim());
-                  setNewEnv("");
-                  await refreshWorkspace(newEnv.trim());
-                } catch (err) {
-                  setActionError(err instanceof Error ? err.message : String(err));
-                }
-              }}
+              fontSize="3xl"
+              fontWeight="extrabold"
+              letterSpacing="tight"
+              onClick={() =>
+                openURL(`https://github.com/${repoStatus.repo?.owner}/${repoStatus.repo?.repo}`)
+              }
             >
-              {t("dashboard.createEnvironment")}
-            </Button>
-          </HStack>
-        </Panel>
-
-        {/* Recipients panel */}
-        <RecipientsPanel />
-
-        {/* Config panel */}
-        <ConfigPanel />
-
-        {/* Secrets panel */}
-        <Panel>
-          <Flex justify="space-between" align="center" mb={3}>
-            <Heading size="md" fontWeight="bold">
-              {t("dashboard.secrets")}
-            </Heading>
-            <HStack>
-              <Button
-                size="sm"
-                variant="outline"
-                borderColor="border.default"
-                color="fg.default"
-                fontWeight="semibold"
-                loading={pullLoading}
-                onClick={async () => {
-                  setPullLoading(true);
-                  try {
-                    await backend.pullSecrets(currentEnvironment);
-                    await refreshWorkspace(currentEnvironment);
-                  } catch (err) {
-                    setActionError(err instanceof Error ? err.message : String(err));
-                  } finally {
-                    setPullLoading(false);
-                  }
-                }}
-              >
-                {t("dashboard.pull")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                borderColor="border.default"
-                color="fg.default"
-                fontWeight="semibold"
-                loading={syncLoading}
-                onClick={async () => {
-                  setSyncLoading(true);
-                  try {
-                    await backend.syncSecrets(currentEnvironment);
-                    await refreshWorkspace(currentEnvironment);
-                  } catch (err) {
-                    setActionError(err instanceof Error ? err.message : String(err));
-                  } finally {
-                    setSyncLoading(false);
-                  }
-                }}
-              >
-                {t("dashboard.sync")}
-              </Button>
-            </HStack>
-          </Flex>
-
-          {workspaceLoading && (
-            <HStack mb={3}>
-              <Spinner size="sm" color="accent.default" />
-              <Text fontSize="sm" color="fg.muted">
-                {t("common.loading")}
-              </Text>
-            </HStack>
-          )}
-
-          {!workspaceLoading && (secrets?.secrets.length ?? 0) === 0 && (
-            <Text color="fg.muted" fontSize="sm" py={2}>
-              {t("dashboard.empty")}
-            </Text>
-          )}
-
-          <VStack alignItems="stretch" gap={2}>
-            {secrets?.secrets.map((secret) => (
-              <SecretRow
-                key={secret.key}
-                secretKey={secret.key}
-                secretValue={secret.value}
-                onEdit={async (val) => {
-                  try {
-                    await backend.editSecret(secret.key, val, currentEnvironment);
-                    await refreshWorkspace(currentEnvironment);
-                  } catch (err) {
-                    setActionError(err instanceof Error ? err.message : String(err));
-                  }
-                }}
-                onDelete={async () => {
-                  try {
-                    await backend.deleteSecret(secret.key, currentEnvironment);
-                    await refreshWorkspace(currentEnvironment);
-                  } catch (err) {
-                    setActionError(err instanceof Error ? err.message : String(err));
-                  }
-                }}
-                deleteLabel={t("dashboard.delete")}
-              />
-            ))}
-          </VStack>
-
-          <Separator mt={4} mb={3} borderColor="border.default" />
-
-          {/* Add secret row */}
-          <Box display="grid" gridTemplateColumns="220px minmax(0,1fr) auto" gap={2}>
-            <Input
-              placeholder={t("dashboard.key")}
-              value={secretKey}
-              onChange={(e) => setSecretKey(e.target.value)}
-              h="38px"
-              borderColor="border.default"
-              borderRadius="md"
-            />
-            <Input
-              placeholder={t("dashboard.value")}
-              value={secretValue}
-              onChange={(e) => setSecretValue(e.target.value)}
-              h="38px"
-              borderColor="border.default"
-              borderRadius="md"
-            />
-            <Button
-              bg="accent.default"
-              color="accent.fg"
-              fontWeight="semibold"
-              h="38px"
-              loading={addLoading}
-              onClick={async () => {
-                if (!secretKey.trim()) return;
-                setAddLoading(true);
-                try {
-                  await backend.addSecret(secretKey.trim(), secretValue, currentEnvironment);
-                  setSecretKey("");
-                  setSecretValue("");
-                  await refreshWorkspace(currentEnvironment);
-                } catch (err) {
-                  setActionError(err instanceof Error ? err.message : String(err));
-                } finally {
-                  setAddLoading(false);
-                }
-              }}
-            >
-              {t("dashboard.add")}
+              <SiGithub size={24} />
+              {repoStatus.repo?.owner}/{repoStatus.repo?.repo}
             </Button>
           </Box>
-        </Panel>
-      </VStack>
+        </Flex>
+
+        {actionError && (
+          <Box mb="4">
+            <ErrorAlert message={actionError} />
+          </Box>
+        )}
+
+        <Tabs.Root defaultValue="secrets" lazyMount unmountOnExit variant="line">
+          <Tabs.List w="full" maxW="650px" h="auto" display="flex" gap="0" overflow="hidden">
+            <DashboardTab
+              value="secrets"
+              icon={<KeyRound size={16} />}
+              label={t("dashboard.secrets")}
+            />
+            <DashboardTab
+              value="members"
+              icon={<Users size={16} />}
+              label={t("recipients.members")}
+            />
+            <DashboardTab
+              value="settings"
+              icon={<SlidersHorizontal size={16} />}
+              label={t("config.settings")}
+            />
+          </Tabs.List>
+
+          <DashboardTabContent value="secrets">
+            <SectionHeader
+              title={
+                <EnvironmentSelector
+                  environments={environments}
+                  value={currentEnvironment}
+                  onSelect={async (environment) => {
+                    if (environment === currentEnvironment) return;
+                    try {
+                      await backend.switchEnvironment(environment);
+                      await refreshWorkspace(environment);
+                    } catch (err) {
+                      setActionError(err instanceof Error ? err.message : String(err));
+                    }
+                  }}
+                  onAdd={() => setEnvironmentModalOpen(true)}
+                />
+              }
+            >
+              <HStack gap="2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  loading={pullLoading}
+                  title={t("dashboard.pullDescription")}
+                  onClick={async () => {
+                    setPullLoading(true);
+                    try {
+                      await backend.pullSecrets(currentEnvironment);
+                      await refreshWorkspace(currentEnvironment);
+                    } catch (err) {
+                      setActionError(err instanceof Error ? err.message : String(err));
+                    } finally {
+                      setPullLoading(false);
+                    }
+                  }}
+                >
+                  <Download size={14} />
+                  {t("dashboard.pull")}
+                </Button>
+              </HStack>
+            </SectionHeader>
+            {workspaceLoading ? (
+              <HStack py="8" justify="center">
+                <Spinner size="sm" />
+                <Text color="fg.muted">{t("common.loading")}</Text>
+              </HStack>
+            ) : (
+              <Box
+                overflow="hidden"
+                borderWidth="1px"
+                borderColor="border.default"
+                borderRadius="xl"
+              >
+                {secrets?.secrets.map((secret) => (
+                  <SecretRow
+                    key={secret.key}
+                    secretKey={secret.key}
+                    secretValue={secret.value}
+                    onEdit={async (value) => {
+                      try {
+                        await backend.editSecret(secret.key, value, currentEnvironment);
+                        await refreshWorkspace(currentEnvironment);
+                      } catch (err) {
+                        setActionError(err instanceof Error ? err.message : String(err));
+                      }
+                    }}
+                    onDelete={async () => {
+                      try {
+                        await backend.deleteSecret(secret.key, currentEnvironment);
+                        await refreshWorkspace(currentEnvironment);
+                      } catch (err) {
+                        setActionError(err instanceof Error ? err.message : String(err));
+                      }
+                    }}
+                    deleteLabel={t("dashboard.delete")}
+                  />
+                ))}
+                {(secrets?.secrets.length ?? 0) === 0 && (
+                  <Text color="fg.muted" textAlign="center" py="8">
+                    {t("dashboard.empty")}
+                  </Text>
+                )}
+              </Box>
+            )}
+            <Box
+              mt="4"
+              p="3"
+              display="grid"
+              gridTemplateColumns={{
+                base: "1fr",
+                md: "minmax(160px,.8fr) minmax(220px,1.2fr) auto",
+              }}
+              gap="2"
+              bg="bg.muted"
+              borderRadius="lg"
+            >
+              <Input
+                placeholder={t("dashboard.key")}
+                value={secretKey}
+                onChange={(event) => setSecretKey(event.target.value)}
+              />
+              <Input
+                placeholder={t("dashboard.value")}
+                value={secretValue}
+                onChange={(event) => setSecretValue(event.target.value)}
+              />
+              <Button
+                colorPalette="accent"
+                loading={addLoading}
+                disabled={!secretKey.trim()}
+                onClick={async () => {
+                  if (!secretKey.trim()) return;
+                  setAddLoading(true);
+                  try {
+                    await backend.addSecret(secretKey.trim(), secretValue, currentEnvironment);
+                    setSecretKey("");
+                    setSecretValue("");
+                    await refreshWorkspace(currentEnvironment);
+                  } catch (err) {
+                    setActionError(err instanceof Error ? err.message : String(err));
+                  } finally {
+                    setAddLoading(false);
+                  }
+                }}
+              >
+                <Plus size={15} />
+                {t("dashboard.add")}
+              </Button>
+            </Box>
+          </DashboardTabContent>
+
+          <DashboardTabContent value="members">
+            <RecipientsPanel />
+          </DashboardTabContent>
+          <DashboardTabContent value="settings">
+            <ConfigPanel environments={environments} />
+          </DashboardTabContent>
+        </Tabs.Root>
+        <CreateEnvironmentModal
+          open={environmentModalOpen}
+          value={newEnv}
+          loading={environmentCreateLoading}
+          onValueChange={setNewEnv}
+          onClose={() => {
+            if (environmentCreateLoading) return;
+            setEnvironmentModalOpen(false);
+            setNewEnv("");
+          }}
+          onCreate={async () => {
+            const created = newEnv.trim();
+            if (!created) return;
+            setEnvironmentCreateLoading(true);
+            setActionError("");
+            try {
+              await backend.createEnvironment(created);
+              await backend.switchEnvironment(created);
+              await refreshWorkspace(created);
+              setEnvironmentModalOpen(false);
+              setNewEnv("");
+            } catch (err) {
+              setActionError(err instanceof Error ? err.message : String(err));
+            } finally {
+              setEnvironmentCreateLoading(false);
+            }
+          }}
+        />
+      </Box>
     </Box>
   );
 }
 
 // --- Sub-components ---
 
-function PageCenter({ children }: { children: React.ReactNode }) {
+export function EnvironmentSelector({
+  environments,
+  value,
+  onSelect,
+  onAdd,
+}: {
+  environments: Environment[];
+  value: string;
+  onSelect: (environment: string) => void | Promise<void>;
+  onAdd: () => void;
+}) {
+  const { t } = useI18n();
   return (
-    <Box minH="calc(100vh - 64px)" display="grid" placeItems="center" px={6} py={12}>
-      {children}
+    <HStack gap="2" flexWrap="wrap">
+      <Popover.Root positioning={{ placement: "bottom-start", gutter: 6 }}>
+        <Popover.Trigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            h="40px"
+            px="3"
+            color="fg.default"
+            bg="bg.surface"
+            borderColor="border.default"
+            borderRadius="lg"
+            fontSize="lg"
+            fontWeight="extrabold"
+            aria-label={t("dashboard.currentEnvironment")}
+          >
+            <Layers3 size={16} />
+            {value}
+            <ChevronDown size={15} />
+          </Button>
+        </Popover.Trigger>
+        <Popover.Positioner>
+          <Popover.Content
+            minW="240px"
+            p="1.5"
+            bg="bg.surface"
+            borderWidth="1px"
+            borderColor="border.default"
+            borderRadius="lg"
+            boxShadow="dropdown"
+          >
+            <VStack alignItems="stretch" gap="1">
+              {environments.map((environment) => {
+                const selected = environment.name === value;
+                return (
+                  <Popover.CloseTrigger key={environment.name} asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      w="full"
+                      justifyContent="space-between"
+                      color="fg.default"
+                      bg={selected ? "accent.subtle" : undefined}
+                      onClick={() => void onSelect(environment.name)}
+                    >
+                      <HStack gap="2">
+                        <Layers3 size={15} />
+                        {environment.name}
+                      </HStack>
+                      {selected && <Check size={15} color="currentColor" />}
+                    </Button>
+                  </Popover.CloseTrigger>
+                );
+              })}
+              <Box h="1px" my="1" bg="border.default" />
+              <Popover.CloseTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  w="full"
+                  justifyContent="start"
+                  color="accent.default"
+                  onClick={onAdd}
+                >
+                  <Plus size={15} />
+                  {t("dashboard.addEnvironment")}
+                </Button>
+              </Popover.CloseTrigger>
+            </VStack>
+          </Popover.Content>
+        </Popover.Positioner>
+      </Popover.Root>
+      <Text as="span" fontSize="xl" fontWeight="extrabold">
+        {t("dashboard.secretHeadingSuffix")}
+      </Text>
+    </HStack>
+  );
+}
+
+export function CreateEnvironmentModal({
+  open,
+  value,
+  loading,
+  onValueChange,
+  onClose,
+  onCreate,
+}: {
+  open: boolean;
+  value: string;
+  loading: boolean;
+  onValueChange: (value: string) => void;
+  onClose: () => void;
+  onCreate: () => void | Promise<void>;
+}) {
+  const { t } = useI18n();
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !loading) onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [loading, onClose, open]);
+
+  if (!open) return null;
+  return (
+    <Box
+      position="fixed"
+      inset="0"
+      zIndex="50"
+      display="grid"
+      placeItems="center"
+      p="4"
+      bg="rgba(15, 23, 42, 0.48)"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !loading) onClose();
+      }}
+    >
+      <Box
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-environment-title"
+        w="full"
+        maxW="440px"
+        p="5"
+        bg="bg.surface"
+        borderWidth="1px"
+        borderColor="border.default"
+        borderRadius="2xl"
+        boxShadow="xl"
+      >
+        <Flex justify="space-between" align="start" gap="4" mb="5">
+          <Heading id="create-environment-title" size="lg" fontWeight="extrabold">
+            {t("dashboard.createEnvironmentTitle")}
+          </Heading>
+          <Button
+            type="button"
+            variant="ghost"
+            w="32px"
+            h="32px"
+            p="0"
+            aria-label={t("config.cancel")}
+            disabled={loading}
+            onClick={onClose}
+          >
+            <X size={16} />
+          </Button>
+        </Flex>
+        <styled.label
+          htmlFor="new-environment-name"
+          display="block"
+          mb="2"
+          fontSize="sm"
+          fontWeight="semibold"
+        >
+          {t("dashboard.environmentName")}
+        </styled.label>
+        <Input
+          id="new-environment-name"
+          autoFocus
+          value={value}
+          placeholder={t("dashboard.newEnvironment")}
+          disabled={loading}
+          onChange={(event) => onValueChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && value.trim() && !loading) void onCreate();
+          }}
+        />
+        <HStack justify="end" gap="2" mt="5">
+          <Button type="button" variant="ghost" disabled={loading} onClick={onClose}>
+            {t("config.cancel")}
+          </Button>
+          <Button
+            type="button"
+            colorPalette="accent"
+            loading={loading}
+            disabled={!value.trim()}
+            onClick={() => void onCreate()}
+          >
+            {t("dashboard.createEnvironment")}
+          </Button>
+        </HStack>
+      </Box>
     </Box>
   );
 }
 
-function Panel({ children }: { children: React.ReactNode }) {
+function DashboardTab({
+  value,
+  icon,
+  label,
+}: {
+  value: string;
+  icon: React.ReactNode;
+  label: string;
+}) {
   return (
-    <Box p="18px" borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface">
+    <Tabs.Trigger
+      value={value}
+      flex="1"
+      minW="0"
+      h={{ base: "48px", sm: "42px" }}
+      px={{ base: "1.5", sm: "3" }}
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+      gap="2"
+      color="fg.muted"
+      bg="transparent"
+      borderWidth="0"
+      borderRadius="0"
+      fontSize={{ base: "2xs", sm: "sm" }}
+      fontWeight="semibold"
+      position="relative"
+      _after={{
+        content: '""',
+        position: "absolute",
+        left: "3",
+        right: "3",
+        bottom: "0",
+        h: "3px",
+        bg: "transparent",
+        borderRadius: "full",
+      }}
+      _selected={{
+        color: "fg.default",
+        bg: "transparent",
+        _after: { bg: "accent.default" },
+      }}
+      _hover={{ color: "fg.default", bg: "transparent" }}
+    >
+      {icon}
+      <Text as="span" display={{ base: "none", sm: "inline" }} fontSize="inherit">
+        {label}
+      </Text>
+    </Tabs.Trigger>
+  );
+}
+
+function DashboardTabContent({ value, children }: { value: string; children: React.ReactNode }) {
+  return (
+    <Tabs.Content
+      value={value}
+      minH="420px"
+      mt="4.5"
+      p={{ base: "4", md: "7" }}
+      bg="bg.surface"
+      borderWidth="1px"
+      borderColor="border.default"
+      borderRadius="2xl"
+      boxShadow="app"
+    >
+      {children}
+    </Tabs.Content>
+  );
+}
+
+function SectionHeader({
+  title,
+  children,
+}: {
+  title: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Flex
+      align={{ base: "start", sm: "center" }}
+      justify="space-between"
+      gap="3"
+      mb="6"
+      flexWrap="wrap"
+    >
+      <Heading size="lg" fontWeight="bold">
+        {title}
+      </Heading>
+      {children}
+    </Flex>
+  );
+}
+
+function PageCenter({ children }: { children: React.ReactNode }) {
+  return (
+    <Box minH="calc(100vh - 72px)" display="grid" placeItems="center" px={6} py={12}>
       {children}
     </Box>
   );
@@ -672,7 +1174,14 @@ function Panel({ children }: { children: React.ReactNode }) {
 
 function ErrorAlert({ message }: { message: string }) {
   return (
-    <Alert.Root borderRadius="md" borderWidth="1px" borderColor="red.200" bg="red.50" py={3} px={4}>
+    <Alert.Root
+      borderRadius="md"
+      borderWidth="1px"
+      borderColor="status.danger"
+      bg="status.dangerMuted"
+      py={3}
+      px={4}
+    >
       <Alert.Indicator />
       <Alert.Content>
         <Text fontSize="sm">{message}</Text>
@@ -694,29 +1203,61 @@ export function SecretRow({
   onDelete: () => Promise<void>;
   deleteLabel: string;
 }) {
+  const { t } = useI18n();
   const [visible, setVisible] = useState(false);
+  const [copied, setCopied] = useState<"key" | "value" | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [editValue, setEditValue] = useState(secretValue);
 
   useEffect(() => {
     setEditValue(secretValue);
+    setCopied(null);
   }, [secretValue]);
 
   return (
-    <Box display="grid" gridTemplateColumns="220px minmax(0,1fr) 38px auto" gap={2}>
-      <Input
-        readOnly
-        value={secretKey}
-        h="38px"
-        borderColor="border.default"
-        borderRadius="md"
-        bg="bg.muted"
-        color="fg.muted"
-      />
+    <Box
+      minH="62px"
+      display="grid"
+      gridTemplateColumns={{
+        base: "minmax(0,1fr) auto",
+        md: "minmax(160px,.8fr) minmax(220px,1.2fr) auto",
+      }}
+      alignItems="center"
+      gap="3"
+      px="4"
+      py="3"
+      borderBottomWidth="1px"
+      borderColor="border.default"
+      _last={{ borderBottomWidth: "0" }}
+      _hover={{ bg: "bg.muted" }}
+    >
+      <HStack minW="0" gap="1">
+        <Text flex="1" minW="0" fontFamily="mono" fontSize="sm" fontWeight="bold" truncate>
+          {secretKey}
+        </Text>
+        <Button
+          variant="ghost"
+          w="30px"
+          h="30px"
+          p={0}
+          flexShrink="0"
+          color={copied === "key" ? "status.success" : "fg.muted"}
+          aria-label={copied === "key" ? t("dashboard.keyCopied") : t("dashboard.copyKey")}
+          title={copied === "key" ? t("dashboard.keyCopied") : t("dashboard.copyKey")}
+          onClick={async () => {
+            await navigator.clipboard.writeText(secretKey);
+            setCopied("key");
+          }}
+        >
+          {copied === "key" ? <Check size={15} /> : <Copy size={15} />}
+        </Button>
+      </HStack>
       <Input
         value={editValue}
         type={visible ? "text" : "password"}
         h="38px"
+        display={{ base: "none", md: "block" }}
         borderColor="border.default"
         borderRadius="md"
         onChange={(e) => setEditValue(e.target.value)}
@@ -724,36 +1265,64 @@ export function SecretRow({
           if (e.target.value !== secretValue) await onEdit(e.target.value);
         }}
       />
-      <Button
-        variant="ghost"
-        w="38px"
-        h="38px"
-        p={0}
-        color="fg.muted"
-        _hover={{ bg: "bg.muted", color: "fg.default" }}
-        aria-label={visible ? "Hide value" : "Show value"}
-        onClick={() => setVisible((v) => !v)}
-      >
-        {visible ? <EyeOff size={16} /> : <Eye size={16} />}
-      </Button>
-      <Button
-        variant="outline"
-        h="38px"
-        borderColor="border.default"
-        color="fg.default"
-        fontWeight="semibold"
+      <HStack gap="1">
+        <Button
+          variant="ghost"
+          w="34px"
+          h="34px"
+          p={0}
+          color={copied === "value" ? "status.success" : "fg.muted"}
+          aria-label={copied === "value" ? t("dashboard.valueCopied") : t("dashboard.copyValue")}
+          title={copied === "value" ? t("dashboard.valueCopied") : t("dashboard.copyValue")}
+          onClick={async () => {
+            await navigator.clipboard.writeText(editValue);
+            setCopied("value");
+          }}
+        >
+          {copied === "value" ? <Check size={16} /> : <Copy size={16} />}
+        </Button>
+        <Button
+          variant="ghost"
+          w="34px"
+          h="34px"
+          p={0}
+          color="fg.muted"
+          aria-label={visible ? "Hide value" : "Show value"}
+          onClick={() => setVisible((v) => !v)}
+        >
+          {visible ? <EyeOff size={16} /> : <Eye size={16} />}
+        </Button>
+        <Button
+          variant="ghost"
+          w="34px"
+          h="34px"
+          p={0}
+          color="fg.muted"
+          aria-label={deleteLabel}
+          title={deleteLabel}
+          disabled={deleting}
+          onClick={() => setDeleteConfirmationOpen(true)}
+        >
+          <Trash2 size={15} />
+        </Button>
+      </HStack>
+      <ConfirmDeleteDialog
+        open={deleteConfirmationOpen}
+        title={t("dashboard.deleteSecretConfirm", { key: secretKey })}
+        cancelLabel={t("config.cancel")}
+        confirmLabel={deleteLabel}
         loading={deleting}
-        onClick={async () => {
+        onClose={() => setDeleteConfirmationOpen(false)}
+        onConfirm={async () => {
           setDeleting(true);
           try {
             await onDelete();
+            setDeleteConfirmationOpen(false);
           } finally {
             setDeleting(false);
           }
         }}
-      >
-        {deleteLabel}
-      </Button>
+      />
     </Box>
   );
 }
@@ -761,92 +1330,203 @@ export function SecretRow({
 function RecipientsPanel() {
   const { t } = useI18n();
   const [recipients, setRecipients] = useState<Recipient[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const list = await backend.listRecipients();
       setRecipients((list ?? []).filter((r): r is Recipient => r != null));
-    } catch {
-      // ignore
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const toggle = useCallback(async () => {
-    if (!open) await load();
-    setOpen((v) => !v);
-  }, [open, load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return (
-    <Panel>
-      <Flex justify="space-between" align="center">
-        <Heading size="md" fontWeight="bold">
-          {t("recipients.title")}
-        </Heading>
+    <>
+      <SectionHeader title={t("recipients.members")}>
         <Button
           size="sm"
           variant="outline"
-          borderColor="border.default"
-          color="fg.default"
-          fontWeight="semibold"
-          loading={loading && !open}
-          onClick={toggle}
+          loading={loading}
+          title={t("dashboard.syncDescription")}
+          onClick={() => void load()}
         >
-          {open
-            ? t("config.cancel")
-            : t("config.edit").replace("編集", "表示").replace("Edit", "Show")}
+          <RefreshCw size={14} />
+          {t("dashboard.sync")}
         </Button>
-      </Flex>
-      {open && (
-        <Box mt={3}>
-          {loading ? (
-            <HStack>
-              <Spinner size="sm" color="accent.default" />
-              <Text fontSize="sm" color="fg.muted">
-                {t("common.loading")}
-              </Text>
-            </HStack>
-          ) : recipients.length === 0 ? (
-            <Text fontSize="sm" color="fg.muted">
-              {t("recipients.empty")}
-            </Text>
-          ) : (
-            <VStack alignItems="stretch" gap={2}>
-              {recipients.map((r) => (
-                <Box
-                  key={r.fingerprint}
-                  p={3}
-                  borderWidth="1px"
-                  borderColor="border.default"
-                  borderRadius="md"
-                  bg="bg.muted"
-                >
-                  <Text fontWeight="semibold" fontSize="sm">
-                    {r.username}
-                  </Text>
-                  <Text fontSize="xs" color="fg.muted" fontFamily="mono" mt="2px">
-                    {r.fingerprint}
-                  </Text>
-                </Box>
-              ))}
-            </VStack>
-          )}
+      </SectionHeader>
+      {error && (
+        <Box mb="4">
+          <ErrorAlert message={error} />
         </Box>
       )}
-    </Panel>
+      {loading ? (
+        <HStack py="8" justify="center">
+          <Spinner size="sm" />
+          <Text color="fg.muted">{t("common.loading")}</Text>
+        </HStack>
+      ) : recipients.length === 0 ? (
+        <Text color="fg.muted" textAlign="center" py="8">
+          {t("recipients.empty")}
+        </Text>
+      ) : (
+        <Box overflow="hidden" borderWidth="1px" borderColor="border.default" borderRadius="xl">
+          {recipients.map((recipient, index) => (
+            <MemberRow
+              key={recipient.fingerprint}
+              recipient={recipient}
+              last={index === recipients.length - 1}
+            />
+          ))}
+        </Box>
+      )}
+    </>
   );
 }
 
-function ConfigPanel() {
+export function MemberRow({ recipient, last = false }: { recipient: Recipient; last?: boolean }) {
+  const { t } = useI18n();
+  return (
+    <styled.button
+      type="button"
+      w="full"
+      minH="64px"
+      display="grid"
+      gridTemplateColumns="auto minmax(0,1fr) auto"
+      alignItems="center"
+      gap="3"
+      px="4"
+      py="3"
+      color="fg.default"
+      bg="transparent"
+      borderBottomWidth={last ? "0" : "1px"}
+      borderColor="border.default"
+      textAlign="left"
+      cursor="pointer"
+      _hover={{ bg: "bg.muted" }}
+      _focusVisible={{ outline: "2px solid token(colors.accent.default)", outlineOffset: "-2px" }}
+      aria-label={`${recipient.username} · GitHub`}
+      onClick={() => openURL(`https://github.com/${encodeURIComponent(recipient.username)}`)}
+    >
+      <MemberAvatar username={recipient.username} />
+      <Box minW="0">
+        <Text fontWeight="semibold" fontSize="sm">
+          {recipient.username}
+        </Text>
+        <Text fontSize="2xs" color="fg.muted" fontFamily="mono" truncate>
+          {recipient.fingerprint}
+        </Text>
+      </Box>
+      <Box
+        px="2"
+        py="1"
+        bg="bg.muted"
+        borderWidth="1px"
+        borderColor="border.default"
+        borderRadius="full"
+        color="fg.muted"
+        fontSize="2xs"
+      >
+        {t("recipients.member")}
+      </Box>
+    </styled.button>
+  );
+}
+
+export function MemberAvatar({ username }: { username: string }) {
+  return (
+    <Box position="relative" w="38px" h="38px" flexShrink="0">
+      <Box
+        position="absolute"
+        inset="0"
+        display="grid"
+        placeItems="center"
+        color="accent.default"
+        bg="accent.subtle"
+        borderRadius="full"
+        fontSize="2xs"
+        fontWeight="extrabold"
+      >
+        {username.slice(0, 2).toUpperCase()}
+      </Box>
+      <img
+        src={`https://avatars.githubusercontent.com/${encodeURIComponent(username)}?size=76`}
+        width={38}
+        height={38}
+        loading="lazy"
+        alt=""
+        style={{ position: "absolute", inset: 0, borderRadius: "50%" }}
+        onError={(event) => {
+          event.currentTarget.style.display = "none";
+        }}
+      />
+    </Box>
+  );
+}
+
+export type EnbuConfigDraft = {
+  version: string;
+  default_env: string;
+  env: Record<string, { output: string }>;
+};
+
+export function parseConfigDraft(content: string, environments: Environment[]): EnbuConfigDraft {
+  const parsed = parseToml(content) as Record<string, unknown>;
+  const parsedEnv =
+    parsed.env && typeof parsed.env === "object" ? (parsed.env as Record<string, unknown>) : {};
+  const env: Record<string, { output: string }> = {};
+  const names = new Set([...Object.keys(parsedEnv), ...environments.map((item) => item.name)]);
+  for (const name of names) {
+    const value = parsedEnv[name];
+    const output =
+      value &&
+      typeof value === "object" &&
+      typeof (value as { output?: unknown }).output === "string"
+        ? String((value as { output: string }).output)
+        : name === "default"
+          ? ".env"
+          : `.env.${name}`;
+    env[name] = { output };
+  }
+  const fallback =
+    environments.find((item) => item.current)?.name ?? environments[0]?.name ?? "default";
+  return {
+    version: typeof parsed.version === "string" ? parsed.version : "v1alpha1",
+    default_env: typeof parsed.default_env === "string" ? parsed.default_env : fallback,
+    env,
+  };
+}
+
+export function serializeConfigDraft(config: EnbuConfigDraft): string {
+  const header = stringifyToml({
+    version: config.version,
+    default_env: config.default_env,
+  }).trimEnd();
+  const environments = Object.entries(config.env)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, environment]) => {
+      const key = /^[A-Za-z0-9_-]+$/.test(name) ? name : JSON.stringify(name);
+      return `[env.${key}]\n${stringifyToml({ output: environment.output }).trimEnd()}`;
+    });
+  return [header, ...environments].join("\n\n") + "\n";
+}
+
+function ConfigPanel({ environments }: { environments: Environment[] }) {
   const { t } = useI18n();
   const [content, setContent] = useState("");
   const [draft, setDraft] = useState("");
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [gui, setGui] = useState<EnbuConfigDraft>();
+  const [view, setView] = useState<"gui" | "code">("gui");
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -856,125 +1536,187 @@ function ConfigPanel() {
       const text = await backend.readConfig();
       setContent(text ?? "");
       setDraft(text ?? "");
+      setGui(parseConfigDraft(text ?? "", environments));
       setLoadError("");
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [environments]);
 
-  const toggle = useCallback(async () => {
-    if (!open) await load();
-    setOpen((v) => !v);
-    setEditing(false);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const updateGui = (next: EnbuConfigDraft) => {
+    setGui(next);
+    setDraft(serializeConfigDraft(next));
     setSaveError("");
-  }, [open, load]);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      await backend.writeConfig(draft);
+      setContent(draft);
+    } catch {
+      setSaveError(t("config.saveError"));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <Panel>
-      <Flex justify="space-between" align="center">
-        <Heading size="md" fontWeight="bold">
-          {t("config.title")}
-        </Heading>
-        <HStack gap={2}>
-          {open && !editing && (
-            <Button
-              size="sm"
-              variant="outline"
-              borderColor="border.default"
-              color="fg.default"
-              fontWeight="semibold"
-              onClick={() => {
-                setDraft(content);
-                setEditing(true);
-                setSaveError("");
-              }}
-            >
-              {t("config.edit")}
-            </Button>
-          )}
-          {open && editing && (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                color="fg.muted"
-                onClick={() => {
-                  setEditing(false);
-                  setDraft(content);
-                  setSaveError("");
-                }}
-              >
-                {t("config.cancel")}
-              </Button>
-              <Button
-                size="sm"
-                bg="accent.default"
-                color="accent.fg"
-                fontWeight="semibold"
-                loading={saving}
-                onClick={async () => {
-                  setSaving(true);
-                  setSaveError("");
-                  try {
-                    await backend.writeConfig(draft);
-                    setContent(draft);
-                    setEditing(false);
-                  } catch {
-                    setSaveError(t("config.saveError"));
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
-              >
-                {t("config.save")}
-              </Button>
-            </>
-          )}
+    <>
+      <SectionHeader title={t("config.settings")}>
+        <HStack gap="2">
           <Button
             size="sm"
             variant="outline"
-            borderColor="border.default"
-            color="fg.default"
-            fontWeight="semibold"
-            onClick={toggle}
+            aria-pressed={view === "code"}
+            onClick={() => {
+              if (view === "code") {
+                try {
+                  setGui(parseConfigDraft(draft, environments));
+                  setView("gui");
+                  setSaveError("");
+                } catch {
+                  setSaveError(t("config.invalidToml"));
+                }
+              } else setView("code");
+            }}
           >
-            {open ? t("config.cancel") : t("config.title")}
+            {view === "code" ? <ListTree size={15} /> : <Code2 size={15} />}
+            {view === "code" ? t("config.guiView") : t("config.codeView")}
           </Button>
-        </HStack>
-      </Flex>
-      {open && (
-        <Box mt={3}>
-          {loadError && <ErrorAlert message={loadError} />}
-          {saveError && <ErrorAlert message={saveError} />}
-          {editing ? (
-            <Textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              fontFamily="mono"
-              fontSize="sm"
-              minH="240px"
-              borderColor="border.default"
-              borderRadius="md"
-              bg="bg.canvas"
-            />
-          ) : (
-            <styled.pre
-              fontSize="sm"
-              fontFamily="mono"
-              p="3"
-              borderWidth="1px"
-              borderColor="border.default"
-              borderRadius="md"
-              bg="bg.muted"
-              overflowX="auto"
-              whiteSpace="pre-wrap"
+          {view === "gui" && (
+            <Button
+              size="sm"
+              colorPalette="accent"
+              loading={saving}
+              disabled={draft === content}
+              onClick={() => void save()}
             >
-              {content || <styled.span color="fg.muted">(empty)</styled.span>}
-            </styled.pre>
+              {t("config.save")}
+            </Button>
           )}
+        </HStack>
+      </SectionHeader>
+      {loadError && (
+        <Box mb="4">
+          <ErrorAlert message={loadError} />
         </Box>
       )}
-    </Panel>
+      {saveError && (
+        <Box mb="4">
+          <ErrorAlert message={saveError} />
+        </Box>
+      )}
+      {loading ? (
+        <HStack py="8" justify="center">
+          <Spinner size="sm" />
+          <Text color="fg.muted">{t("common.loading")}</Text>
+        </HStack>
+      ) : view === "code" ? (
+        <TomlCodeEditor
+          value={draft}
+          onChange={setDraft}
+          saving={saving}
+          onSave={() => void save()}
+        />
+      ) : gui ? (
+        <VStack alignItems="stretch" gap="4">
+          <SettingsGroup title={t("config.general")}>
+            <SettingRow label={t("config.defaultEnvironment")}>
+              <styled.select
+                value={gui.default_env}
+                {...settingControlStyles}
+                onChange={(event) => updateGui({ ...gui, default_env: event.target.value })}
+              >
+                {Object.keys(gui.env).map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </styled.select>
+            </SettingRow>
+          </SettingsGroup>
+          <SettingsGroup title={t("config.outputFileNames")}>
+            {Object.entries(gui.env).map(([name, config]) => (
+              <SettingRow key={name} label={name}>
+                <styled.input
+                  value={config.output}
+                  {...settingControlStyles}
+                  onChange={(event) =>
+                    updateGui({
+                      ...gui,
+                      env: { ...gui.env, [name]: { output: event.target.value } },
+                    })
+                  }
+                />
+              </SettingRow>
+            ))}
+          </SettingsGroup>
+        </VStack>
+      ) : null}
+    </>
+  );
+}
+
+const settingControlStyles = {
+  w: "full",
+  h: "38px",
+  px: "3",
+  color: "fg.default",
+  bg: "bg.muted",
+  borderWidth: "1px",
+  borderColor: "border.default",
+  borderRadius: "md",
+} as const;
+
+function SettingsGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Box overflow="hidden" borderWidth="1px" borderColor="border.default" borderRadius="xl">
+      <Text
+        px="4"
+        py="3"
+        color="fg.muted"
+        bg="bg.muted"
+        borderBottomWidth="1px"
+        borderColor="border.default"
+        fontSize="2xs"
+        fontWeight="bold"
+        textTransform="uppercase"
+        letterSpacing="widest"
+      >
+        {title}
+      </Text>
+      {children}
+    </Box>
+  );
+}
+
+function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Box
+      minH="60px"
+      display="grid"
+      gridTemplateColumns={{ base: "1fr", sm: "minmax(140px,.65fr) minmax(220px,1.35fr)" }}
+      alignItems="center"
+      gap={{ base: "2", sm: "6" }}
+      px="4"
+      py="3"
+      borderBottomWidth="1px"
+      borderColor="border.default"
+      _last={{ borderBottomWidth: "0" }}
+    >
+      <Text fontSize="sm" fontWeight="semibold">
+        {label}
+      </Text>
+      {children}
+    </Box>
   );
 }
 
@@ -1028,8 +1770,8 @@ function DeviceLoginPanel({
           borderWidth="1px"
           borderColor="border.default"
           color="fg.default"
-          bg="gray.50"
-          _hover={{ bg: "gray.100" }}
+          bg="bg.muted"
+          _hover={{ bg: "accent.subtle" }}
           onClick={() => void navigator.clipboard.writeText(start.user_code)}
           aria-label="Copy device code"
         >

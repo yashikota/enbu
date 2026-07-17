@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/yashikota/enbu/app"
 	"github.com/yashikota/enbu/desktop"
+	gh "github.com/yashikota/enbu/provider/github"
 )
 
 type DesktopService struct {
@@ -125,6 +126,10 @@ func (s *DesktopService) GitInit(path string) (desktop.RepoInfo, error) {
 	return s.service.GitInit(path)
 }
 
-func (s *DesktopService) GitCreateRemote(path, repoName string, private bool) (desktop.RepoInfo, error) {
-	return s.service.GitCreateRemote(path, repoName, private)
+func (s *DesktopService) ListRepositoryOwners() ([]gh.RepositoryOwner, error) {
+	return s.service.ListRepositoryOwners()
+}
+
+func (s *DesktopService) GitCreateRemote(path, owner, repoName string, private bool) (desktop.RepoInfo, error) {
+	return s.service.GitCreateRemote(path, owner, repoName, private)
 }

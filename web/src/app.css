@@ -5,3 +5,25 @@ body,
 #root {
   height: 100%;
 }
+
+body {
+  margin: 0;
+  color: #1f2328;
+  background: #f8f9fa;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

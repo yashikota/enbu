@@ -9,13 +9,14 @@ import {
   useState,
 } from "react";
 import { Box, Flex, VStack, styled } from "styled-system/jsx";
-import { Badge, Button, Popover, Separator, Text } from "../components/ui";
+import { Button, Popover, Separator, Text } from "../components/ui";
 import { NativeSelect } from "../components/ui/native-select";
 import { Trash2 } from "lucide-react";
 import type { AuthStatus } from "../lib/api";
 import { backend, openURL } from "../lib/backend";
 import { createAuthRefresher, type AuthRefreshOptions } from "../lib/auth-refresh";
 import { I18nProvider, useI18n, type Locale } from "../lib/i18n";
+import { ConfirmDeleteDialog } from "../components/confirm-delete-dialog";
 
 export type AuthContextValue = {
   status: AuthStatus | null;
@@ -107,10 +108,10 @@ function RootLayout() {
     <AuthContext.Provider value={authContext}>
       <styled.header
         display="flex"
-        h="64px"
+        h="72px"
         alignItems="center"
         justifyContent="space-between"
-        px="6"
+        px={{ base: "4", md: "5.5" }}
         bg="bg.surface"
         borderBottomWidth="1px"
         borderColor="border.default"
@@ -118,12 +119,17 @@ function RootLayout() {
         top="0"
         zIndex="10"
       >
-        <Text fontWeight="extrabold" fontSize="2xl">
-          💃 enbu
-        </Text>
+        <Flex align="center" gap="2">
+          <Text as="span" fontSize="2xl" aria-hidden="true">
+            💃
+          </Text>
+          <Text fontWeight="extrabold" fontSize="2xl" letterSpacing="tight">
+            enbu
+          </Text>
+        </Flex>
         <AccountMenu status={status} loading={loading} />
       </styled.header>
-      <Flex minH="calc(100vh - 64px)">
+      <Flex minH="calc(100vh - 72px)">
         {status?.authenticated && <Sidebar activePath={repoPath} />}
         <Box flex="1" minW="0">
           <Outlet />
@@ -137,15 +143,31 @@ type RepoItem = NonNullable<
   NonNullable<Awaited<ReturnType<typeof backend.listRepositories>>>[number]
 >;
 
-function Sidebar({ activePath }: { activePath: string }) {
+export function Sidebar({ activePath }: { activePath: string }) {
   const { t } = useI18n();
   const [repos, setRepos] = useState<RepoItem[]>([]);
   const [addLoading, setAddLoading] = useState(false);
+  const [removingRepository, setRemovingRepository] = useState(false);
+  const [repositoryPendingRemoval, setRepositoryPendingRemoval] = useState<RepoItem | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    repo: RepoItem;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const loadRepos = useCallback(async () => {
     try {
       const list = await backend.listRepositories();
-      setRepos((list ?? []).filter((r): r is RepoItem => r != null));
+      const seen = new Set<string>();
+      setRepos(
+        (list ?? []).filter((repo): repo is RepoItem => {
+          if (repo == null) return false;
+          const key = (repo.path ?? "").replaceAll("\\", "/").toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }),
+      );
     } catch {
       // ignore
     }
@@ -158,19 +180,35 @@ function Sidebar({ activePath }: { activePath: string }) {
     return () => window.removeEventListener("enbu-repo-changed", onChanged);
   }, [loadRepos]);
 
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [contextMenu]);
+
   return (
     <styled.nav
-      w="240px"
-      minH="calc(100vh - 64px)"
+      w="248px"
+      minH="calc(100vh - 72px)"
+      display={{ base: "none", lg: "block" }}
       borderRightWidth="1px"
       borderColor="border.default"
       bg="bg.surface"
-      p="3"
+      p="3.5"
       flexShrink="0"
     >
-      <Text fontWeight="bold" fontSize="xs" color="fg.muted" textTransform="uppercase" mb="2">
-        {t("sidebar.repositories")}
-      </Text>
       <VStack alignItems="stretch" gap="1" mb="3">
         {repos.length === 0 && (
           <Text fontSize="sm" color="fg.muted">
@@ -182,14 +220,24 @@ function Sidebar({ activePath }: { activePath: string }) {
           return (
             <Flex
               key={repo.path}
+              data-repository-path={repo.path}
               alignItems="center"
-              justifyContent="space-between"
               px="2"
-              py="6px"
-              borderRadius="md"
+              py="9px"
+              borderRadius="lg"
+              borderWidth="1px"
+              borderColor={isActive ? "brand.100" : "transparent"}
               bg={isActive ? "accent.subtle" : undefined}
               _hover={{ bg: isActive ? "accent.subtle" : "bg.muted" }}
               cursor={isActive ? "default" : "pointer"}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setContextMenu({
+                  repo,
+                  x: Math.max(8, Math.min(event.clientX, window.innerWidth - 180)),
+                  y: Math.max(8, Math.min(event.clientY, window.innerHeight - 56)),
+                });
+              }}
               onClick={async () => {
                 if (isActive) return;
                 try {
@@ -201,39 +249,63 @@ function Sidebar({ activePath }: { activePath: string }) {
                 }
               }}
             >
-              <Box minW="0" flex="1">
-                <Text fontSize="sm" fontWeight={isActive ? "semibold" : "normal"} truncate>
-                  {repo.owner}/{repo.repo}
-                </Text>
-                {isActive && (
-                  <Badge colorPalette="accent" fontSize="xs" mt="1px">
-                    {t("sidebar.active")}
-                  </Badge>
-                )}
-              </Box>
-              <Button
-                aria-label={t("sidebar.remove")}
-                variant="ghost"
-                size="xs"
-                color="fg.muted"
-                p="1"
-                minW="auto"
-                h="auto"
-                _hover={{ color: "red.500", bg: "red.50" }}
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  await backend.removeRepository(repo.path ?? "");
-                  window.dispatchEvent(new Event("enbu-repo-changed"));
-                  if (isActive) window.dispatchEvent(new Event("enbu-auth-changed"));
-                  await loadRepos();
-                }}
+              <Text
+                minW="0"
+                flex="1"
+                fontSize="sm"
+                fontWeight={isActive ? "semibold" : "normal"}
+                truncate
               >
-                <Trash2 size={14} />
-              </Button>
+                {repo.owner}/{repo.repo}
+              </Text>
             </Flex>
           );
         })}
       </VStack>
+      {contextMenu && (
+        <RepositoryContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          removing={removingRepository}
+          onRemove={() => {
+            setRepositoryPendingRemoval(contextMenu.repo);
+            setContextMenu(null);
+          }}
+        />
+      )}
+      <ConfirmDeleteDialog
+        open={repositoryPendingRemoval != null}
+        title={t("sidebar.removeConfirm", {
+          repository: repositoryPendingRemoval
+            ? `${repositoryPendingRemoval.owner}/${repositoryPendingRemoval.repo}`
+            : "",
+        })}
+        cancelLabel={t("config.cancel")}
+        confirmLabel={t("sidebar.remove")}
+        loading={removingRepository}
+        onClose={() => setRepositoryPendingRemoval(null)}
+        onConfirm={async () => {
+          if (!repositoryPendingRemoval) return;
+          const removedPath = repositoryPendingRemoval.path ?? "";
+          const removingActive = removedPath === activePath;
+          setRemovingRepository(true);
+          try {
+            await backend.removeRepository(removedPath);
+            const removedKey = removedPath.replaceAll("\\", "/").toLowerCase();
+            setRepos((current) =>
+              current.filter(
+                (repo) => (repo.path ?? "").replaceAll("\\", "/").toLowerCase() !== removedKey,
+              ),
+            );
+            setRepositoryPendingRemoval(null);
+            window.dispatchEvent(new Event("enbu-repo-changed"));
+            if (removingActive) window.dispatchEvent(new Event("enbu-auth-changed"));
+            await loadRepos();
+          } finally {
+            setRemovingRepository(false);
+          }
+        }}
+      />
       <Button
         size="sm"
         variant="outline"
@@ -262,24 +334,57 @@ function Sidebar({ activePath }: { activePath: string }) {
   );
 }
 
-function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: boolean }) {
+export function RepositoryContextMenu({
+  x,
+  y,
+  removing,
+  onRemove,
+}: {
+  x: number;
+  y: number;
+  removing: boolean;
+  onRemove: () => void | Promise<void>;
+}) {
+  const { t } = useI18n();
+  return (
+    <Box
+      role="menu"
+      position="fixed"
+      style={{ left: x, top: y }}
+      zIndex="40"
+      minW="168px"
+      p="1"
+      bg="bg.surface"
+      borderWidth="1px"
+      borderColor="border.default"
+      borderRadius="lg"
+      boxShadow="dropdown"
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <Button
+        role="menuitem"
+        type="button"
+        variant="ghost"
+        w="full"
+        justifyContent="start"
+        color="status.danger"
+        loading={removing}
+        onClick={() => void onRemove()}
+      >
+        <Trash2 size={15} />
+        {t("sidebar.remove")}
+      </Button>
+    </Box>
+  );
+}
+
+export function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: boolean }) {
   const { locale, setLocale, t } = useI18n();
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   const authenticated = Boolean(status?.authenticated);
   const username = status?.username ?? "";
   const initial = username.slice(0, 1).toUpperCase() || (loading ? "…" : "-");
-
-  const statusLabel = loading
-    ? "Checking..."
-    : authenticated
-      ? t("auth.signedIn")
-      : t("auth.signedOut");
-  const badgeColor = loading ? "gray" : authenticated ? "green" : "gray";
-
-  const repoName = status?.repo?.name;
-  const repoOwner = status?.repo?.owner;
-
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
@@ -312,8 +417,8 @@ function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: 
               w="32px"
               h="32px"
               borderRadius="full"
-              bg={authenticated ? "green.600" : "gray.300"}
-              color={authenticated ? "white" : "gray.600"}
+              bg={authenticated ? "accent.default" : "bg.muted"}
+              color={authenticated ? "white" : "fg.muted"}
               fontSize="sm"
               fontWeight="extrabold"
               display={authenticated && username ? "none" : "grid"}
@@ -357,25 +462,6 @@ function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: 
             )}
           </Box>
 
-          {/* Status */}
-          <Flex justifyContent="space-between" alignItems="center" py="10px">
-            <Text fontSize="sm" color="fg.muted">
-              Status
-            </Text>
-            <Badge
-              colorPalette={badgeColor}
-              borderRadius="full"
-              px="2"
-              py="1px"
-              fontSize="xs"
-              fontWeight="semibold"
-            >
-              {statusLabel}
-            </Badge>
-          </Flex>
-
-          <Separator />
-
           {/* Language */}
           <Flex justifyContent="space-between" alignItems="center" py="10px">
             <Text fontSize="sm" color="fg.muted">
@@ -391,29 +477,6 @@ function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: 
             </NativeSelect>
           </Flex>
 
-          {/* Repository info */}
-          {authenticated && repoOwner && repoName && (
-            <>
-              <Separator />
-              <Flex justifyContent="space-between" alignItems="center" py="10px">
-                <Text fontSize="sm" color="fg.muted">
-                  Repository
-                </Text>
-                <Text
-                  fontSize="sm"
-                  truncate
-                  maxW="120px"
-                  cursor="pointer"
-                  _hover={{ textDecoration: "underline", color: "accent.default" }}
-                  onClick={() => openURL(`https://github.com/${repoOwner}/${repoName}`)}
-                >
-                  {repoName}
-                </Text>
-              </Flex>
-            </>
-          )}
-
-          {/* Action button */}
           <Separator mb="2" />
           {authenticated ? (
             <Button

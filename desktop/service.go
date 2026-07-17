@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -25,6 +26,11 @@ type DirectoryPicker func(context.Context) (string, error)
 type BrowserOpener func(string) error
 type ClipboardCopier func(string) error
 
+type repositoryPlatform interface {
+	ListRepositoryOwners(context.Context) ([]gh.RepositoryOwner, error)
+	CreateRepository(context.Context, string, string, bool) (*gh.CreateRepoResult, error)
+}
+
 type Service struct {
 	app       *app.App
 	clientID  string
@@ -33,6 +39,7 @@ type Service struct {
 	openURL   BrowserOpener
 	copyText  ClipboardCopier
 	git       gitprovider.Client
+	github    func(string) repositoryPlatform
 	repoMu    sync.Mutex
 	authMu    sync.Mutex
 	repoPath  string
@@ -49,11 +56,14 @@ type deviceSession struct {
 
 func NewService(a *app.App, clientID string) *Service {
 	s := &Service{
-		app:       a,
-		clientID:  clientID,
-		openURL:   auth.OpenBrowser,
-		copyText:  auth.CopyToClipboard,
-		git:       a.Git,
+		app:      a,
+		clientID: clientID,
+		openURL:  auth.OpenBrowser,
+		copyText: auth.CopyToClipboard,
+		git:      a.Git,
+		github: func(token string) repositoryPlatform {
+			return gh.NewClient(token)
+		},
 		sessions:  make(map[string]*deviceSession),
 		requestDC: auth.RequestDeviceCode,
 		pollToken: auth.PollForToken,
@@ -315,7 +325,13 @@ func (s *Service) ListRepositories() ([]RepoInfo, error) {
 		return nil, err
 	}
 	var repos []RepoInfo
+	seen := make(map[string]struct{}, len(cfg.RepoHistory))
 	for _, path := range cfg.RepoHistory {
+		key := repoPathKey(path)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
 		repo, err := validateRepoPath(s.context(), s.git, path)
 		if err != nil {
 			continue
@@ -336,14 +352,15 @@ func (s *Service) RemoveRepository(path string) error {
 	if err != nil {
 		return err
 	}
+	targetKey := repoPathKey(path)
 	filtered := cfg.RepoHistory[:0]
 	for _, p := range cfg.RepoHistory {
-		if p != path {
+		if repoPathKey(p) != targetKey {
 			filtered = append(filtered, p)
 		}
 	}
 	cfg.RepoHistory = filtered
-	if cfg.SelectedRepo == path {
+	if cfg.SelectedRepo != "" && repoPathKey(cfg.SelectedRepo) == targetKey {
 		cfg.SelectedRepo = ""
 		s.repoPath = ""
 	}
@@ -358,14 +375,30 @@ func (s *Service) GitInit(path string) (RepoInfo, error) {
 	return s.SelectRepository(path)
 }
 
+func (s *Service) ListRepositoryOwners() ([]gh.RepositoryOwner, error) {
+	token, err := auth.LoadToken()
+	if err != nil {
+		return nil, fmt.Errorf("not authenticated: %w", err)
+	}
+	return s.github(token.AccessToken).ListRepositoryOwners(s.context())
+}
+
 // GitCreateRemote creates a GitHub repository and sets it as origin, then re-selects.
-func (s *Service) GitCreateRemote(path, repoName string, private bool) (RepoInfo, error) {
+func (s *Service) GitCreateRemote(path, owner, repoName string, private bool) (RepoInfo, error) {
 	token, err := auth.LoadToken()
 	if err != nil {
 		return RepoInfo{}, fmt.Errorf("not authenticated: %w", err)
 	}
-	client := gh.NewClient(token.AccessToken)
-	result, err := client.CreateRepository(s.context(), repoName, private)
+	owner = strings.TrimSpace(owner)
+	if owner == "" {
+		return RepoInfo{}, fmt.Errorf("repository owner is required")
+	}
+	organization := owner
+	if strings.EqualFold(owner, token.Username) {
+		organization = ""
+	}
+	client := s.github(token.AccessToken)
+	result, err := client.CreateRepository(s.context(), organization, repoName, private)
 	if err != nil {
 		return RepoInfo{}, err
 	}
@@ -409,12 +442,29 @@ func (s *Service) WriteConfig(content string) error {
 }
 
 func appendUnique(slice []string, val string) []string {
-	for _, v := range slice {
-		if v == val {
-			return slice
+	seen := make(map[string]struct{}, len(slice)+1)
+	result := slice[:0]
+	for _, existing := range slice {
+		key := repoPathKey(existing)
+		if _, exists := seen[key]; exists {
+			continue
 		}
+		seen[key] = struct{}{}
+		result = append(result, existing)
 	}
-	return append(slice, val)
+	key := repoPathKey(val)
+	if _, exists := seen[key]; exists {
+		return result
+	}
+	return append(result, val)
+}
+
+func repoPathKey(path string) string {
+	key := filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		key = strings.ToLower(key)
+	}
+	return key
 }
 
 func (s *Service) GetRepoStatus() (RepoInfo, error) {

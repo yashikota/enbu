@@ -37,5 +37,6 @@ describe("i18n", () => {
     expect(translate("ja", "auth.expiresIn", { seconds: 30 })).toBe("有効期限まで 30 秒");
     expect(translate("ja", "init.gitAction")).toBe("Gitを初期化");
     expect(translate("en", "init.createRemote")).toBe("Create repository");
+    expect(translate("ja", "init.repositoryOwner")).toBe("作成先アカウント");
   });
 });

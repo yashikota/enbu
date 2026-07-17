@@ -47,6 +47,7 @@ const mockRecipients: Recipient[] = [
 const mockRepoHistory: NonNullable<GUIRepoStatus["repo"]>[] = [
   { path: "/demo/enbu", owner: "yashikota", repo: "enbu", initialized: true },
 ];
+let mockSelectedRepoPath = mockRepoHistory[0]?.path ?? "";
 
 let mockConfig = `version = "v1alpha1"\ndefault_env = "default"\n`;
 
@@ -85,13 +86,12 @@ export const mockBackend = {
   },
 
   async repoStatus(): Promise<GUIRepoStatus> {
+    const selected = mockRepoHistory.find((repo) => repo.path === mockSelectedRepoPath);
+    if (!selected) return { selected: false };
     return {
       selected: true,
       repo: {
-        path: "/demo/enbu",
-        owner: "yashikota",
-        repo: "enbu",
-        initialized: true,
+        ...selected,
         has_git: true,
         has_remote: true,
       },
@@ -102,7 +102,8 @@ export const mockBackend = {
     return mockBackend.repoStatus();
   },
 
-  async selectRepository(_path: string): Promise<GUIRepoStatus> {
+  async selectRepository(path: string): Promise<GUIRepoStatus> {
+    mockSelectedRepoPath = path;
     return mockBackend.repoStatus();
   },
 
@@ -116,10 +117,18 @@ export const mockBackend = {
 
   async gitCreateRemote(
     _path: string,
+    _owner: string,
     _repoName: string,
     _privateRepository: boolean,
   ): Promise<GUIRepoStatus> {
     return mockBackend.repoStatus();
+  },
+
+  async listRepositoryOwners() {
+    return [
+      { login: "yashikota", organization: false },
+      { login: "enbu-demo", organization: true },
+    ];
   },
 
   async listEnvironments(): Promise<Environment[]> {
@@ -190,6 +199,7 @@ export const mockBackend = {
   async removeRepository(path: string): Promise<void> {
     const idx = mockRepoHistory.findIndex((r) => r.path === path);
     if (idx >= 0) mockRepoHistory.splice(idx, 1);
+    if (mockSelectedRepoPath === path) mockSelectedRepoPath = "";
   },
   async listRecipients(): Promise<Recipient[]> {
     return [...mockRecipients];
