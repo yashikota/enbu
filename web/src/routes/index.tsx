@@ -1738,7 +1738,7 @@ function DeviceLoginPanel({
   const [countdown, setCountdown] = useState(start.browser_opened ? 0 : 5);
 
   useEffect(() => {
-    // Go 側が既にブラウザを開いていた場合は自動 open しない
+    // Do not open automatically if the Go side already opened the browser.
     if (terminal || start.browser_opened) return;
     if (countdown <= 0) {
       openURL(start.verification_uri);
@@ -1782,7 +1782,7 @@ function DeviceLoginPanel({
         </Button>
       </VStack>
 
-      {/* カウントダウン / 待機ステータス */}
+      {/* Countdown and waiting status */}
       {!terminal && !start.browser_opened && countdown > 0 && (
         <HStack justifyContent="center">
           <Spinner size="sm" color="accent.default" />

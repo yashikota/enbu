@@ -425,7 +425,7 @@ func (s *Service) GitCreateRemote(path, owner, repoName string, private bool) (R
 		return RepoInfo{}, err
 	}
 	if err := s.git.AddRemote(s.context(), path, "origin", result.SSHURL); err != nil {
-		// SSH失敗ならHTTPSにフォールバック
+		// Fall back to HTTPS when SSH fails.
 		if err2 := s.git.AddRemote(s.context(), path, "origin", result.HTTPSURL); err2 != nil {
 			return RepoInfo{}, fmt.Errorf("git remote add: %w", err)
 		}
