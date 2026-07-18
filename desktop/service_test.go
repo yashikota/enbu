@@ -3,6 +3,7 @@ package desktop
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	agecrypto "filippo.io/age"
 	"github.com/yashikota/enbu/app"
@@ -218,6 +220,25 @@ func TestStartOAuthLogin(t *testing.T) {
 	}
 	if err := s.CancelOAuthLogin(start.SessionID); err != nil {
 		t.Fatalf("CancelOAuthLogin: %v", err)
+	}
+}
+
+func TestStartOAuthLoginCancelsFailedContext(t *testing.T) {
+	s := NewService(app.New())
+	s.ctx = context.Background()
+	var loginContext context.Context
+	s.authLogin = func(ctx context.Context, _ auth.BrowserOpener) (*auth.StoredToken, error) {
+		loginContext = ctx
+		return nil, errors.New("login failed")
+	}
+
+	if _, err := s.StartOAuthLogin(); err == nil {
+		t.Fatal("StartOAuthLogin succeeded")
+	}
+	select {
+	case <-loginContext.Done():
+	case <-time.After(time.Second):
+		t.Fatal("failed login context was not cancelled")
 	}
 }
 

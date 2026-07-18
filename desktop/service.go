@@ -179,6 +179,7 @@ func (s *Service) StartOAuthLogin() (OAuthStart, error) {
 
 	go func() {
 		defer close(finished)
+		defer cancel()
 		token, err := s.authLogin(loginCtx, func(authorizeURL string) error {
 			if s.openURL == nil {
 				return errors.New("browser opener is unavailable")

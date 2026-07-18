@@ -393,6 +393,14 @@ func TestExchangeRetriesOnlyRateLimit(t *testing.T) {
 	}
 }
 
+func TestRetryAfterAcceptsPastHTTPDate(t *testing.T) {
+	now := time.Now()
+	delay, ok := retryAfter(now.Add(-time.Second).UTC().Format(http.TimeFormat), now)
+	if !ok || delay != 0 {
+		t.Fatalf("retryAfter returned delay=%s ok=%v", delay, ok)
+	}
+}
+
 func TestValidateTokenRequiresBearerAndAllScopes(t *testing.T) {
 	valid := exchangeResponse{
 		AccessToken: "token",

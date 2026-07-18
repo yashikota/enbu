@@ -394,8 +394,11 @@ func retryAfter(value string, now time.Time) (time.Duration, bool) {
 		return time.Duration(seconds) * time.Second, true
 	}
 	when, err := http.ParseTime(value)
-	if err != nil || when.Before(now) {
+	if err != nil {
 		return 0, false
+	}
+	if when.Before(now) {
+		return 0, true
 	}
 	return when.Sub(now), true
 }
