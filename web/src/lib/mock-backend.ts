@@ -6,7 +6,7 @@ import type {
   Recipient,
   SecretsResponse,
 } from "./api";
-import type { DeviceStart, DeviceStatus } from "./backend";
+import type { OAuthStart, OAuthStatus } from "./backend";
 
 let mockEnvs: Environment[] = [
   { name: "development", current: true },
@@ -69,15 +69,15 @@ export const mockBackend = {
     };
   },
 
-  async startDeviceLogin(): Promise<DeviceStart> {
+  async startOAuthLogin(): Promise<OAuthStart> {
     throw new Error("Mock mode: auth is pre-configured");
   },
 
-  async deviceStatus(_sessionID: string): Promise<DeviceStatus> {
+  async oauthStatus(_sessionID: string): Promise<OAuthStatus> {
     throw new Error("Mock mode: auth is pre-configured");
   },
 
-  async cancelDeviceLogin(_sessionID: string): Promise<void> {
+  async cancelOAuthLogin(_sessionID: string): Promise<void> {
     // no-op
   },
 

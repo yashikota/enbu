@@ -24,7 +24,6 @@ import (
 
 type DirectoryPicker func(context.Context) (string, error)
 type BrowserOpener func(string) error
-type ClipboardCopier func(string) error
 
 type repositoryPlatform interface {
 	ListRepositoryOwners(context.Context) ([]gh.RepositoryOwner, error)
@@ -33,40 +32,34 @@ type repositoryPlatform interface {
 
 type Service struct {
 	app       *app.App
-	clientID  string
 	ctx       context.Context
 	pickDir   DirectoryPicker
 	openURL   BrowserOpener
-	copyText  ClipboardCopier
 	git       gitprovider.Client
 	github    func(string) repositoryPlatform
 	repoMu    sync.Mutex
 	authMu    sync.Mutex
 	repoPath  string
-	sessions  map[string]*deviceSession
-	requestDC func(context.Context, string) (*auth.DeviceCodeResponse, error)
-	pollToken func(context.Context, string, string, int) (*auth.TokenResponse, error)
+	sessions  map[string]*oauthSession
+	authLogin func(context.Context, auth.BrowserOpener) (*auth.StoredToken, error)
 }
 
-type deviceSession struct {
+type oauthSession struct {
 	cancel    context.CancelFunc
 	expiresAt time.Time
-	status    DeviceStatus
+	status    OAuthStatus
 }
 
-func NewService(a *app.App, clientID string) *Service {
+func NewService(a *app.App) *Service {
 	s := &Service{
-		app:      a,
-		clientID: clientID,
-		openURL:  auth.OpenBrowser,
-		copyText: auth.CopyToClipboard,
-		git:      a.Git,
+		app:     a,
+		openURL: auth.OpenBrowser,
+		git:     a.Git,
 		github: func(token string) repositoryPlatform {
 			return gh.NewClient(token)
 		},
-		sessions:  make(map[string]*deviceSession),
-		requestDC: auth.RequestDeviceCode,
-		pollToken: auth.PollForToken,
+		sessions:  make(map[string]*oauthSession),
+		authLogin: auth.Login,
 	}
 	if s.git == nil {
 		s.git = gitprovider.NewCLIClient()
@@ -92,10 +85,6 @@ func (s *Service) SetBrowserOpener(opener BrowserOpener) {
 	s.openURL = opener
 }
 
-func (s *Service) SetClipboardCopier(copier ClipboardCopier) {
-	s.copyText = copier
-}
-
 type AuthStatus struct {
 	Authenticated bool      `json:"authenticated"`
 	Username      string    `json:"username,omitempty"`
@@ -111,17 +100,12 @@ type RepoInfo struct {
 	HasRemote   bool   `json:"has_remote"`
 }
 
-type DeviceStart struct {
-	SessionID       string    `json:"session_id"`
-	UserCode        string    `json:"user_code"`
-	VerificationURI string    `json:"verification_uri"`
-	ExpiresAt       time.Time `json:"expires_at"`
-	Interval        int       `json:"interval"`
-	Copied          bool      `json:"copied"`
-	BrowserOpened   bool      `json:"browser_opened"`
+type OAuthStart struct {
+	SessionID string    `json:"session_id"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
-type DeviceStatus struct {
+type OAuthStatus struct {
 	State    string `json:"state"`
 	Message  string `json:"message,omitempty"`
 	Username string `json:"username,omitempty"`
@@ -170,67 +154,87 @@ func (s *Service) GetAuthStatus() (AuthStatus, error) {
 	return status, nil
 }
 
-func (s *Service) StartDeviceLogin() (DeviceStart, error) {
-	slog.Info("StartDeviceLogin called")
-	ctx := s.context()
-	resp, err := s.requestDC(ctx, s.clientID)
+func (s *Service) StartOAuthLogin() (OAuthStart, error) {
+	slog.Info("StartOAuthLogin called")
+	sessionID, err := randomSessionID()
 	if err != nil {
-		return DeviceStart{}, err
+		return OAuthStart{}, err
 	}
-
-	sessionID := randomSessionID()
-	expiresAt := time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second)
-	loginCtx, cancel := context.WithDeadline(ctx, expiresAt)
-
-	copied := false
-	if s.copyText != nil {
-		copied = s.copyText(resp.UserCode) == nil
-	}
-	opened := false
-	if s.openURL != nil {
-		opened = s.openURL(resp.VerificationURI) == nil
-	}
-
+	expiresAt := time.Now().Add(10 * time.Minute)
+	loginCtx, cancel := context.WithDeadline(s.context(), expiresAt)
+	opened := make(chan struct{}, 1)
+	finished := make(chan struct{})
 	s.authMu.Lock()
 	for _, session := range s.sessions {
 		session.cancel()
 	}
-	s.sessions = map[string]*deviceSession{
+	s.sessions = map[string]*oauthSession{
 		sessionID: {
 			cancel:    cancel,
 			expiresAt: expiresAt,
-			status:    DeviceStatus{State: "pending"},
+			status:    OAuthStatus{State: "pending"},
 		},
 	}
 	s.authMu.Unlock()
 
-	go s.pollDeviceLogin(loginCtx, sessionID, resp.DeviceCode, resp.Interval)
+	go func() {
+		defer close(finished)
+		defer cancel()
+		token, err := s.authLogin(loginCtx, func(authorizeURL string) error {
+			if s.openURL == nil {
+				return errors.New("browser opener is unavailable")
+			}
+			if err := s.openURL(authorizeURL); err != nil {
+				return err
+			}
+			opened <- struct{}{}
+			return nil
+		})
+		if err != nil {
+			state := "error"
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				state = "expired"
+			} else if errors.Is(err, auth.ErrAccessDenied) {
+				state = "denied"
+			}
+			s.setOAuthStatus(sessionID, OAuthStatus{State: state, Message: err.Error()})
+			return
+		}
+		s.setOAuthStatus(sessionID, OAuthStatus{State: "success", Username: token.Username})
+	}()
 
-	return DeviceStart{
-		SessionID:       sessionID,
-		UserCode:        resp.UserCode,
-		VerificationURI: resp.VerificationURI,
-		ExpiresAt:       expiresAt,
-		Interval:        resp.Interval,
-		Copied:          copied,
-		BrowserOpened:   opened,
-	}, nil
+	select {
+	case <-opened:
+		return OAuthStart{SessionID: sessionID, ExpiresAt: expiresAt}, nil
+	case <-finished:
+		status, _ := s.GetOAuthLoginStatus(sessionID)
+		if status.State == "success" {
+			return OAuthStart{SessionID: sessionID, ExpiresAt: expiresAt}, nil
+		}
+		if status.Message == "" {
+			status.Message = "OAuth login failed"
+		}
+		return OAuthStart{}, errors.New(status.Message)
+	case <-s.context().Done():
+		cancel()
+		return OAuthStart{}, s.context().Err()
+	}
 }
 
-func (s *Service) GetDeviceLoginStatus(sessionID string) (DeviceStatus, error) {
+func (s *Service) GetOAuthLoginStatus(sessionID string) (OAuthStatus, error) {
 	s.authMu.Lock()
 	defer s.authMu.Unlock()
 	session, ok := s.sessions[sessionID]
 	if !ok {
-		return DeviceStatus{State: "expired", Message: "login session expired"}, nil
+		return OAuthStatus{State: "expired", Message: "login session expired"}, nil
 	}
 	if time.Now().After(session.expiresAt) && session.status.State == "pending" {
-		session.status = DeviceStatus{State: "expired", Message: "device code expired"}
+		session.status = OAuthStatus{State: "expired", Message: "login session expired"}
 	}
 	return session.status, nil
 }
 
-func (s *Service) CancelDeviceLogin(sessionID string) error {
+func (s *Service) CancelOAuthLogin(sessionID string) error {
 	s.authMu.Lock()
 	defer s.authMu.Unlock()
 	session, ok := s.sessions[sessionID]
@@ -242,35 +246,7 @@ func (s *Service) CancelDeviceLogin(sessionID string) error {
 	return nil
 }
 
-func (s *Service) pollDeviceLogin(ctx context.Context, sessionID, deviceCode string, interval int) {
-	token, err := s.pollToken(ctx, s.clientID, deviceCode, interval)
-	if err != nil {
-		state := "error"
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-			state = "expired"
-		} else if err.Error() == "access denied by user" {
-			state = "denied"
-		}
-		s.setDeviceStatus(sessionID, DeviceStatus{State: state, Message: err.Error()})
-		return
-	}
-
-	client := gh.NewClient(token.AccessToken)
-	user, err := client.GetUser(ctx)
-	if err != nil {
-		s.setDeviceStatus(sessionID, DeviceStatus{State: "error", Message: err.Error()})
-		return
-	}
-
-	if err := auth.SaveToken(&auth.StoredToken{AccessToken: token.AccessToken, Username: user.Login}); err != nil {
-		s.setDeviceStatus(sessionID, DeviceStatus{State: "error", Message: err.Error()})
-		return
-	}
-
-	s.setDeviceStatus(sessionID, DeviceStatus{State: "success", Username: user.Login})
-}
-
-func (s *Service) setDeviceStatus(sessionID string, status DeviceStatus) {
+func (s *Service) setOAuthStatus(sessionID string, status OAuthStatus) {
 	s.authMu.Lock()
 	defer s.authMu.Unlock()
 	if session, ok := s.sessions[sessionID]; ok {
@@ -733,10 +709,10 @@ func ensureGitignore(repoRoot string, extraEntries ...string) error {
 	return err
 }
 
-func randomSessionID() string {
-	var b [32]byte
+func randomSessionID() (string, error) {
+	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return fmt.Sprintf("%d-%d", time.Now().UnixNano(), os.Getpid())
+		return "", fmt.Errorf("generating login session ID: %w", err)
 	}
-	return hex.EncodeToString(b[:])
+	return hex.EncodeToString(b[:]), nil
 }

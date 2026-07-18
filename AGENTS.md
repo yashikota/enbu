@@ -4,7 +4,7 @@ This file provides guidance to Agent tool when working with code in this reposit
 
 ## What is enbu
 
-Keyless `.env` management powered by GitHub. Encrypts secrets with age, stores ciphertext as OCI artifacts on GHCR, and uses GitHub Device Flow for authentication. No shared master key — each team member gets their own age recipient key.
+Keyless `.env` management powered by GitHub. Encrypts secrets with age, stores ciphertext as OCI artifacts on GHCR, and uses Authorization Code Flow with PKCE for authentication. No shared master key — each team member gets their own age recipient key.
 
 ## Notes
 
@@ -28,7 +28,7 @@ task check          # lint + test
 main.go              → version injection, signal handling, delegates to pkg/cli
 pkg/cli/             → cobra commands: auth, init, add, pull, sync, switch
 pkg/config/          → repo detection (git remote), enbu.toml, XDG data dir
-pkg/auth/            → GitHub Device Flow OAuth, token persistence
+pkg/auth/            → GitHub OAuth broker flow, loopback callback, token persistence
 pkg/age/             → key generation, encrypt/decrypt with age (X25519 only)
 pkg/keystore/        → pluggable private key storage (OS keyring or plaintext file)
 pkg/bundle/          → JSON marshal/unmarshal of secret map, .env serialization

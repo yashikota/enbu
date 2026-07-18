@@ -3,6 +3,7 @@ package desktop
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	agecrypto "filippo.io/age"
 	"github.com/yashikota/enbu/app"
@@ -110,7 +112,7 @@ func TestValidateRepoPathRejectsMissingPath(t *testing.T) {
 func TestGitInitInitializesSelectedDirectory(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	dir := t.TempDir()
-	s := NewService(app.New(), "client")
+	s := NewService(app.New())
 	s.ctx = context.Background()
 
 	repo, err := s.GitInit(dir)
@@ -137,7 +139,7 @@ func TestListRepositoryOwners(t *testing.T) {
 		{Login: "octo-org", Organization: true},
 	}
 	platform := &fakeRepositoryPlatform{owners: want}
-	s := NewService(app.New(), "client")
+	s := NewService(app.New())
 	s.github = func(token string) repositoryPlatform {
 		if token != "test-token" {
 			t.Fatalf("token = %q", token)
@@ -173,7 +175,7 @@ func TestGitCreateRemoteSelectsPersonalOrOrganizationOwner(t *testing.T) {
 			platform := &fakeRepositoryPlatform{}
 			a := app.New()
 			a.Git = gitClient
-			s := NewService(a, "client")
+			s := NewService(a)
 			s.github = func(string) repositoryPlatform { return platform }
 
 			repo, err := s.GitCreateRemote(t.TempDir(), tt.owner, "example", true)
@@ -190,47 +192,88 @@ func TestGitCreateRemoteSelectsPersonalOrOrganizationOwner(t *testing.T) {
 	}
 }
 
-func TestStartDeviceLoginDoesNotExposeDeviceCode(t *testing.T) {
+func TestStartOAuthLogin(t *testing.T) {
 	a := app.New()
 	a.KeyStore = &desktopKeyStore{values: make(map[string][]byte)}
-	s := NewService(a, "client")
-	s.SetClipboardCopier(func(text string) error {
-		if text != "ABCD-1234" {
-			t.Fatalf("copied text = %q, want user code", text)
-		}
-		return nil
-	})
+	s := NewService(a)
+	s.ctx = context.Background()
 	s.SetBrowserOpener(func(url string) error {
-		if url != "https://github.com/login/device" {
+		if url != "https://github.com/login/oauth/authorize" {
 			t.Fatalf("opened url = %q", url)
 		}
 		return nil
 	})
-	s.requestDC = func(context.Context, string) (*auth.DeviceCodeResponse, error) {
-		return &auth.DeviceCodeResponse{
-			DeviceCode:      "secret-device-code",
-			UserCode:        "ABCD-1234",
-			VerificationURI: "https://github.com/login/device",
-			ExpiresIn:       900,
-			Interval:        5,
-		}, nil
-	}
-	s.pollToken = func(context.Context, string, string, int) (*auth.TokenResponse, error) {
+	cancelled := make(chan struct{})
+	s.authLogin = func(ctx context.Context, open auth.BrowserOpener) (*auth.StoredToken, error) {
+		if err := open("https://github.com/login/oauth/authorize"); err != nil {
+			return nil, err
+		}
+		<-ctx.Done()
+		close(cancelled)
 		return nil, context.Canceled
 	}
 
-	start, err := s.StartDeviceLogin()
+	start, err := s.StartOAuthLogin()
 	if err != nil {
-		t.Fatalf("StartDeviceLogin: %v", err)
-	}
-	if start.UserCode != "ABCD-1234" {
-		t.Fatalf("UserCode = %q", start.UserCode)
-	}
-	if start.Copied != true || start.BrowserOpened != true {
-		t.Fatalf("Copied/BrowserOpened = %v/%v", start.Copied, start.BrowserOpened)
+		t.Fatalf("StartOAuthLogin: %v", err)
 	}
 	if start.SessionID == "" {
 		t.Fatal("SessionID is empty")
+	}
+	if err := s.CancelOAuthLogin(start.SessionID); err != nil {
+		t.Fatalf("CancelOAuthLogin: %v", err)
+	}
+	select {
+	case <-cancelled:
+	case <-time.After(time.Second):
+		t.Fatal("cancellation did not reach the login context")
+	}
+}
+
+func TestGetOAuthLoginStatus(t *testing.T) {
+	tests := []struct {
+		name      string
+		status    OAuthStatus
+		expiresAt time.Time
+		want      string
+	}{
+		{name: "success", status: OAuthStatus{State: "success"}, expiresAt: time.Now().Add(time.Minute), want: "success"},
+		{name: "denied", status: OAuthStatus{State: "denied"}, expiresAt: time.Now().Add(time.Minute), want: "denied"},
+		{name: "error", status: OAuthStatus{State: "error"}, expiresAt: time.Now().Add(time.Minute), want: "error"},
+		{name: "expired", status: OAuthStatus{State: "pending"}, expiresAt: time.Now().Add(-time.Second), want: "expired"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewService(app.New())
+			s.sessions["session"] = &oauthSession{
+				cancel:    func() {},
+				expiresAt: tt.expiresAt,
+				status:    tt.status,
+			}
+			got, err := s.GetOAuthLoginStatus("session")
+			if err != nil || got.State != tt.want {
+				t.Fatalf("GetOAuthLoginStatus() = %#v, %v; want %q", got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestStartOAuthLoginCancelsFailedContext(t *testing.T) {
+	s := NewService(app.New())
+	s.ctx = context.Background()
+	var loginContext context.Context
+	s.authLogin = func(ctx context.Context, _ auth.BrowserOpener) (*auth.StoredToken, error) {
+		loginContext = ctx
+		return nil, errors.New("login failed")
+	}
+
+	if _, err := s.StartOAuthLogin(); err == nil {
+		t.Fatal("StartOAuthLogin succeeded")
+	}
+	select {
+	case <-loginContext.Done():
+	case <-time.After(time.Second):
+		t.Fatal("failed login context was not cancelled")
 	}
 }
 
@@ -239,7 +282,7 @@ func TestSelectRepositoryUpdatesHistory(t *testing.T) {
 	repoDir := newGitRepo(t)
 	a := app.New()
 	a.KeyStore = &desktopKeyStore{values: make(map[string][]byte)}
-	s := NewService(a, "client")
+	s := NewService(a)
 	s.ctx = context.Background()
 
 	if _, err := s.SelectRepository(repoDir); err != nil {
@@ -267,7 +310,7 @@ func TestListRepositoriesRemovesLegacyDuplicates(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	s := NewService(app.New(), "client")
+	s := NewService(app.New())
 	s.ctx = context.Background()
 
 	repos, err := s.ListRepositories()
@@ -292,7 +335,7 @@ func TestRepositoryOperationsDoNotChangeWorkingDirectory(t *testing.T) {
 
 	a := app.New()
 	a.KeyStore = &desktopKeyStore{values: make(map[string][]byte)}
-	s := NewService(a, "client")
+	s := NewService(a)
 	if _, err := s.SelectRepository(repoDir); err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +360,7 @@ func TestRepoInfoRequiresPrivateKeyForInitialized(t *testing.T) {
 	keyStore := &desktopKeyStore{values: make(map[string][]byte)}
 	a := app.New()
 	a.KeyStore = keyStore
-	s := NewService(a, "client")
+	s := NewService(a)
 
 	info, err := s.SelectRepository(repoDir)
 	if err != nil {
@@ -349,7 +392,7 @@ func TestWriteConfigAddsCustomOutputToGitignore(t *testing.T) {
 	}
 	a := app.New()
 	a.KeyStore = &desktopKeyStore{values: make(map[string][]byte)}
-	s := NewService(a, "client")
+	s := NewService(a)
 	if _, err := s.SelectRepository(repoDir); err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +420,7 @@ func TestPreferredRemoteURLUsesHTTPS(t *testing.T) {
 func TestRemoveRepository(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	repoDir := newGitRepo(t)
-	s := NewService(app.New(), "client")
+	s := NewService(app.New())
 	s.ctx = context.Background()
 
 	if _, err := s.SelectRepository(repoDir); err != nil {
@@ -408,7 +451,7 @@ func TestRemoveRepository(t *testing.T) {
 func TestRemoveRepositoryMatchesNormalizedPath(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	repoDir := newGitRepo(t)
-	s := NewService(app.New(), "client")
+	s := NewService(app.New())
 	s.ctx = context.Background()
 	if _, err := s.SelectRepository(repoDir); err != nil {
 		t.Fatalf("SelectRepository: %v", err)

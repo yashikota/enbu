@@ -25,10 +25,10 @@ import {
 import { SiGithub } from "@icons-pack/react-simple-icons";
 import {
   backend,
-  type DeviceStart,
-  type DeviceStatus,
-  type RepositoryOwner,
   openURL,
+  type OAuthStart,
+  type OAuthStatus,
+  type RepositoryOwner,
 } from "../lib/backend";
 import type { Environment, Recipient, SecretsResponse } from "../lib/api";
 import { useI18n } from "../lib/i18n";
@@ -173,7 +173,7 @@ export function RepositoryOwnerSelect({
   );
 }
 
-function HomePage() {
+export function HomePage() {
   const { t } = useI18n();
   const { status, loading: authLoading } = useAuth();
 
@@ -191,8 +191,8 @@ function HomePage() {
   const [repoPath, setRepoPath] = useState("");
   const [repoError, setRepoError] = useState("");
   const [selectingRepo, setSelectingRepo] = useState(false);
-  const [deviceStart, setDeviceStart] = useState<DeviceStart | null>(null);
-  const [deviceStatus, setDeviceStatus] = useState<DeviceStatus | null>(null);
+  const [oauthStart, setOAuthStart] = useState<OAuthStart | null>(null);
+  const [oauthStatus, setOAuthStatus] = useState<OAuthStatus | null>(null);
   const [authError, setAuthError] = useState("");
   const [startingAuth, setStartingAuth] = useState(false);
   const [initializing, setInitializing] = useState(false);
@@ -235,40 +235,51 @@ function HomePage() {
 
   useEffect(() => {
     const onConnect = () => {
-      if (!deviceStart) void handleStartAuth();
+      if (!oauthStart) void handleStartAuth();
     };
     window.addEventListener("enbu-connect-github", onConnect);
     return () => window.removeEventListener("enbu-connect-github", onConnect);
-  }, [status?.authenticated, deviceStart]);
+  }, [status?.authenticated, oauthStart]);
 
   useEffect(() => {
+    if (!oauthStart || oauthStatus?.state !== "pending") return;
+    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [oauthStart, oauthStatus?.state]);
 
   useEffect(() => {
-    if (!deviceStart || deviceStatus?.state !== "pending") return;
-    const poll = window.setInterval(
-      async () => {
-        const next = await backend.deviceStatus(deviceStart.session_id);
-        setDeviceStatus(next);
-        if (next.state === "success") {
-          window.clearInterval(poll);
-          window.dispatchEvent(new Event("enbu-auth-changed"));
-          setRepoStatus(await backend.repoStatus());
-          setDeviceStart(null);
-          setDeviceStatus(null);
+    if (!oauthStart || oauthStatus?.state !== "pending") return;
+    const poll = window.setInterval(async () => {
+      try {
+        const next = await backend.oauthStatus(oauthStart.session_id);
+        if (next.state !== "success") {
+          setOAuthStatus(next);
+          return;
         }
-      },
-      Math.max(deviceStart.interval, 2) * 1000,
-    );
+        window.clearInterval(poll);
+        setOAuthStart(null);
+        setOAuthStatus(null);
+        window.dispatchEvent(new Event("enbu-auth-changed"));
+        try {
+          setRepoStatus(await backend.repoStatus());
+        } catch (err) {
+          setRepoError(err instanceof Error ? err.message : String(err));
+        }
+      } catch (err) {
+        setOAuthStatus({
+          state: "error",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }, 1000);
     return () => window.clearInterval(poll);
-  }, [deviceStart, deviceStatus?.state]);
+  }, [oauthStart, oauthStatus?.state]);
 
   const expiresIn = useMemo(() => {
-    if (!deviceStart) return 0;
-    return Math.max(0, Math.ceil((new Date(deviceStart.expires_at).getTime() - now) / 1000));
-  }, [deviceStart, now]);
+    if (!oauthStart) return 0;
+    return Math.max(0, Math.ceil((new Date(oauthStart.expires_at).getTime() - now) / 1000));
+  }, [oauthStart, now]);
 
   const currentEnvironment = useMemo(
     () => environments.find((env) => env.current)?.name ?? secrets?.environment ?? "",
@@ -334,9 +345,9 @@ function HomePage() {
     setStartingAuth(true);
     setAuthError("");
     try {
-      const start = await backend.startDeviceLogin();
-      setDeviceStart(start);
-      setDeviceStatus({ state: "pending" });
+      const start = await backend.startOAuthLogin();
+      setOAuthStart(start);
+      setOAuthStatus({ state: "pending" });
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -357,7 +368,7 @@ function HomePage() {
   }
 
   // Screen 02: Auth start
-  if (!status?.authenticated && !deviceStart) {
+  if (!status?.authenticated && !oauthStart) {
     return (
       <PageCenter>
         <VStack gap={5} w="full" maxW="480px" textAlign="center">
@@ -381,22 +392,21 @@ function HomePage() {
     );
   }
 
-  // Screen 03: Device flow
-  if (!status?.authenticated && deviceStart) {
+  // Screen 03: OAuth callback wait
+  if (!status?.authenticated && oauthStart) {
     return (
       <PageCenter>
-        <DeviceLoginPanel
-          start={deviceStart}
-          status={deviceStatus}
+        <OAuthLoginPanel
+          status={oauthStatus}
           expiresIn={expiresIn}
           onCancel={async () => {
-            await backend.cancelDeviceLogin(deviceStart.session_id);
-            setDeviceStart(null);
-            setDeviceStatus(null);
+            await backend.cancelOAuthLogin(oauthStart.session_id);
+            setOAuthStart(null);
+            setOAuthStatus(null);
           }}
           onRetry={() => {
-            setDeviceStart(null);
-            setDeviceStatus(null);
+            setOAuthStart(null);
+            setOAuthStatus(null);
             setAuthError("");
           }}
         />
@@ -404,21 +414,20 @@ function HomePage() {
     );
   }
 
-  if (status?.authenticated && deviceStart) {
+  if (status?.authenticated && oauthStart) {
     return (
       <PageCenter>
-        <DeviceLoginPanel
-          start={deviceStart}
-          status={deviceStatus}
+        <OAuthLoginPanel
+          status={oauthStatus}
           expiresIn={expiresIn}
           onCancel={async () => {
-            await backend.cancelDeviceLogin(deviceStart.session_id);
-            setDeviceStart(null);
-            setDeviceStatus(null);
+            await backend.cancelOAuthLogin(oauthStart.session_id);
+            setOAuthStart(null);
+            setOAuthStatus(null);
           }}
           onRetry={() => {
-            setDeviceStart(null);
-            setDeviceStatus(null);
+            setOAuthStart(null);
+            setOAuthStatus(null);
             setAuthError("");
           }}
         />
@@ -1717,33 +1726,19 @@ function SettingRow({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-function DeviceLoginPanel({
-  start,
+function OAuthLoginPanel({
   status,
   expiresIn,
   onCancel,
   onRetry,
 }: {
-  start: DeviceStart;
-  status: DeviceStatus | null;
+  status: OAuthStatus | null;
   expiresIn: number;
   onCancel: () => Promise<void>;
   onRetry: () => void;
 }) {
   const { t } = useI18n();
   const terminal = status?.state && status.state !== "pending";
-  const [countdown, setCountdown] = useState(start.browser_opened ? 0 : 5);
-
-  useEffect(() => {
-    // Do not open automatically if the Go side already opened the browser.
-    if (terminal || start.browser_opened) return;
-    if (countdown <= 0) {
-      openURL(start.verification_uri);
-      return;
-    }
-    const timer = window.setTimeout(() => setCountdown((c) => c - 1), 1000);
-    return () => window.clearTimeout(timer);
-  }, [countdown, terminal, start.browser_opened, start.verification_uri]);
 
   return (
     <VStack gap={5} w="full" maxW="480px" alignItems="stretch">
@@ -1751,44 +1746,13 @@ function DeviceLoginPanel({
         {t("auth.authorizeTitle")}
       </Heading>
 
-      {/* Code copy button */}
       <VStack gap={2} alignItems="center">
         <Text fontSize="sm" color="fg.muted">
-          {t("auth.codeInstruction")}
+          {t("auth.browserInstruction")}
         </Text>
-        <Button
-          display="inline-flex"
-          alignItems="center"
-          gap={3}
-          h="auto"
-          py={4}
-          px={5}
-          borderRadius="md"
-          borderWidth="1px"
-          borderColor="border.default"
-          color="fg.default"
-          bg="bg.muted"
-          _hover={{ bg: "accent.subtle" }}
-          onClick={() => void navigator.clipboard.writeText(start.user_code)}
-          aria-label="Copy device code"
-        >
-          <Copy size={18} color="#57606a" />
-          <Text fontFamily="mono" fontSize="3xl" fontWeight="800" letterSpacing="0.08em">
-            {start.user_code}
-          </Text>
-        </Button>
       </VStack>
 
-      {/* Countdown and waiting status */}
-      {!terminal && !start.browser_opened && countdown > 0 && (
-        <HStack justifyContent="center">
-          <Spinner size="sm" color="accent.default" />
-          <Text fontSize="sm" color="fg.muted">
-            {t("auth.autoRedirect", { seconds: countdown })}
-          </Text>
-        </HStack>
-      )}
-      {!terminal && status?.state === "pending" && (start.browser_opened || countdown <= 0) && (
+      {!terminal && status?.state === "pending" && (
         <HStack justifyContent="center">
           <Spinner size="sm" color="accent.default" />
           <Text fontSize="sm">{t("auth.waiting")}</Text>
@@ -1803,16 +1767,6 @@ function DeviceLoginPanel({
 
       {/* Actions */}
       <HStack justifyContent="center" flexWrap="wrap">
-        <Button
-          variant="outline"
-          h="38px"
-          borderColor="border.default"
-          color="fg.default"
-          fontWeight="semibold"
-          onClick={() => openURL(start.verification_uri)}
-        >
-          {t("auth.openGitHub")}
-        </Button>
         {terminal ? (
           <Button
             bg="accent.default"

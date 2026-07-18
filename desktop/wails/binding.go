@@ -14,16 +14,16 @@ func (s *DesktopService) GetAuthStatus() (desktop.AuthStatus, error) {
 	return s.service.GetAuthStatus()
 }
 
-func (s *DesktopService) StartDeviceLogin() (desktop.DeviceStart, error) {
-	return s.service.StartDeviceLogin()
+func (s *DesktopService) StartOAuthLogin() (desktop.OAuthStart, error) {
+	return s.service.StartOAuthLogin()
 }
 
-func (s *DesktopService) GetDeviceLoginStatus(sessionID string) (desktop.DeviceStatus, error) {
-	return s.service.GetDeviceLoginStatus(sessionID)
+func (s *DesktopService) GetOAuthLoginStatus(sessionID string) (desktop.OAuthStatus, error) {
+	return s.service.GetOAuthLoginStatus(sessionID)
 }
 
-func (s *DesktopService) CancelDeviceLogin(sessionID string) error {
-	return s.service.CancelDeviceLogin(sessionID)
+func (s *DesktopService) CancelOAuthLogin(sessionID string) error {
+	return s.service.CancelOAuthLogin(sessionID)
 }
 
 func (s *DesktopService) Logout() error {

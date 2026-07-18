@@ -3,11 +3,12 @@ import { createRoot } from "react-dom/client";
 import { act } from "react-dom/test-utils";
 import { I18nProvider } from "../lib/i18n";
 import { backend, openURL } from "../lib/backend";
-import { RepositoryContextMenu, Sidebar } from "./__root";
+import { AuthContext, RepositoryContextMenu, Sidebar } from "./__root";
 import {
   parseConfigDraft,
   CreateEnvironmentModal,
   EnvironmentSelector,
+  HomePage,
   MemberAvatar,
   MemberRow,
   RepositoryOwnerSelect,
@@ -16,14 +17,21 @@ import {
   serializeConfigDraft,
 } from "./index";
 
+const oauthMocks = vi.hoisted(() => ({
+  start: vi.fn(),
+  status: vi.fn(),
+  cancel: vi.fn(),
+  repoStatus: vi.fn(),
+}));
+
 vi.mock("../lib/backend", () => ({
   backend: {
     authStatus: vi.fn(async () => ({ authenticated: false })),
-    startDeviceLogin: vi.fn(),
-    deviceStatus: vi.fn(),
-    cancelDeviceLogin: vi.fn(),
+    startOAuthLogin: oauthMocks.start,
+    oauthStatus: oauthMocks.status,
+    cancelOAuthLogin: oauthMocks.cancel,
     logout: vi.fn(),
-    repoStatus: vi.fn(async () => ({ selected: false })),
+    repoStatus: oauthMocks.repoStatus,
     browseRepository: vi.fn(),
     selectRepository: vi.fn(),
     initialize: vi.fn(),
@@ -72,7 +80,27 @@ afterEach(() => {
     root.unmount();
   });
   container.remove();
+  vi.useRealTimers();
 });
+
+function renderUnauthenticatedHome() {
+  act(() => {
+    root.render(
+      <I18nProvider>
+        <AuthContext.Provider
+          value={{
+            status: { authenticated: false },
+            loading: false,
+            repoPath: "",
+            refresh: async () => {},
+          }}
+        >
+          <HomePage />
+        </AuthContext.Provider>
+      </I18nProvider>,
+    );
+  });
+}
 
 function renderSecretRow(props: {
   secretKey: string;
@@ -111,6 +139,68 @@ function queryButton(label: string): HTMLButtonElement | null {
     ) ?? null
   );
 }
+
+describe("OAuth login", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    oauthMocks.start.mockReset();
+    oauthMocks.status.mockReset();
+    oauthMocks.cancel.mockReset();
+    oauthMocks.repoStatus.mockReset();
+    oauthMocks.start.mockResolvedValue({
+      session_id: "session",
+      expires_at: new Date(Date.now() + 60_000).toISOString(),
+    });
+    oauthMocks.cancel.mockResolvedValue(undefined);
+    oauthMocks.repoStatus.mockResolvedValue({ selected: false });
+  });
+
+  it("clears the OAuth panel even when repository refresh fails", async () => {
+    oauthMocks.status.mockResolvedValue({ state: "success", username: "octo" });
+    oauthMocks.repoStatus.mockRejectedValue(new Error("refresh failed"));
+    renderUnauthenticatedHome();
+
+    await act(async () => {
+      queryButton("Connect with GitHub")?.click();
+      await Promise.resolve();
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(1000));
+
+    expect(oauthMocks.status).toHaveBeenCalledWith("session");
+    expect(queryButton("Connect with GitHub")).toBeTruthy();
+  });
+
+  it("shows a terminal error when OAuth status polling rejects", async () => {
+    oauthMocks.status.mockRejectedValue(new Error("poll failed"));
+    renderUnauthenticatedHome();
+
+    await act(async () => {
+      queryButton("Connect with GitHub")?.click();
+      await Promise.resolve();
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(1000));
+
+    expect(container.textContent).toContain("poll failed");
+    expect(queryButton("Try again")).toBeTruthy();
+  });
+
+  it("cancels and resets a pending OAuth login", async () => {
+    oauthMocks.status.mockResolvedValue({ state: "pending" });
+    renderUnauthenticatedHome();
+
+    await act(async () => {
+      queryButton("Connect with GitHub")?.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      queryButton("Cancel")?.click();
+      await Promise.resolve();
+    });
+
+    expect(oauthMocks.cancel).toHaveBeenCalledWith("session");
+    expect(queryButton("Connect with GitHub")).toBeTruthy();
+  });
+});
 
 describe("SecretRow", () => {
   it("renders value input as password by default", () => {
