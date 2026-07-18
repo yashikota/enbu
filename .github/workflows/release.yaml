@@ -85,23 +85,23 @@ jobs:
           - os: windows-latest
             platform: windows/amd64
             suffix: windows_amd64
-            archive: zip
+            package: exe
           - os: windows-11-arm
             platform: windows/arm64
             suffix: windows_arm64
-            archive: zip
+            package: exe
           - os: macos-latest
             platform: darwin/arm64
             suffix: darwin_arm64
-            archive: tar.gz
+            package: dmg
           - os: ubuntu-22.04
             platform: linux/amd64
             suffix: linux_amd64
-            archive: tar.gz
+            package: tar.gz
           - os: ubuntu-22.04-arm
             platform: linux/arm64
             suffix: linux_arm64
-            archive: tar.gz
+            package: tar.gz
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -143,7 +143,7 @@ jobs:
             -trimpath
 
       - name: Package desktop app
-        if: matrix.archive == 'tar.gz'
+        if: matrix.package == 'tar.gz'
         shell: bash
         env:
           DESKTOP_SUFFIX: ${{ matrix.suffix }}
@@ -154,15 +154,38 @@ jobs:
             .
 
       - name: Package desktop app
-        if: matrix.archive == 'zip'
+        if: matrix.package == 'dmg'
+        shell: bash
+        env:
+          DESKTOP_SUFFIX: ${{ matrix.suffix }}
+        run: |
+          set -euo pipefail
+          app_path="$(find desktop/wails/build/bin -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app_path"
+          mkdir -p release dmg-root
+          ditto "$app_path" "dmg-root/$(basename "$app_path")"
+          ln -s /Applications dmg-root/Applications
+          hdiutil create \
+            -volname enbu \
+            -srcfolder dmg-root \
+            -ov \
+            -format UDZO \
+            "release/enbu_${GITHUB_REF_NAME}_${DESKTOP_SUFFIX}-desktop.dmg"
+
+      - name: Package desktop app
+        if: matrix.package == 'exe'
         shell: pwsh
         env:
           DESKTOP_SUFFIX: ${{ matrix.suffix }}
         run: |
           New-Item -ItemType Directory -Force -Path release | Out-Null
-          Compress-Archive `
-            -Path desktop/wails/build/bin/* `
-            -DestinationPath "release/enbu_${env:GITHUB_REF_NAME}_${env:DESKTOP_SUFFIX}-desktop.zip"
+          $binary = Get-ChildItem desktop/wails/build/bin -Filter *.exe | Select-Object -First 1
+          if ($null -eq $binary) {
+            throw "Wails did not produce a Windows executable"
+          }
+          Copy-Item `
+            -Path $binary.FullName `
+            -Destination "release/enbu_${env:GITHUB_REF_NAME}_${env:DESKTOP_SUFFIX}-desktop.exe"
 
       - name: Upload desktop artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -251,6 +274,10 @@ jobs:
           test -s release-assets/checksums.txt
           test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*' | wc -l)" -gt 0
           test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*-desktop*' | wc -l)" -gt 0
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*_windows_*-desktop.exe' | wc -l)" -eq 2
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*_windows_*-desktop.zip' | wc -l)" -eq 0
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*_darwin_*-desktop.dmg' | wc -l)" -eq 1
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*_darwin_*-desktop.tar.gz' | wc -l)" -eq 0
           test "$(find release-assets -maxdepth 1 -type f -name '*.sbom.spdx.json' | wc -l)" -gt 0
           test "$(find release-assets -maxdepth 1 -type f -name '*.sigstore.json' | wc -l)" -gt 0
           (cd release-assets && sha256sum -c checksums.txt)
