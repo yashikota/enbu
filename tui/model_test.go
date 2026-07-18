@@ -117,6 +117,38 @@ func TestAddOverlaySupportsMouseFocusAndKeepsErrors(t *testing.T) {
 	}
 }
 
+func TestAddOverlayEnterAdvancesToValueAndRejectsEmptyValue(t *testing.T) {
+	m := testModel()
+	m.openAdd()
+	m.keyInput.SetValue("API_TOKEN")
+	if view := m.View(); !strings.Contains(view, "enter value") {
+		t.Fatalf("key step help is missing: %q", view)
+	}
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil || m.loading || m.focusKey || !m.valueInput.Focused() || m.overlay != overlayAdd {
+		t.Fatalf(
+			"key enter state: cmd=%v loading=%v focusKey=%v valueFocused=%v overlay=%d",
+			cmd != nil,
+			m.loading,
+			m.focusKey,
+			m.valueInput.Focused(),
+			m.overlay,
+		)
+	}
+
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil || m.loading || m.err == nil || m.err.Error() != "value cannot be empty" {
+		t.Fatalf("empty value state: cmd=%v loading=%v err=%v", cmd != nil, m.loading, m.err)
+	}
+
+	m.valueInput.SetValue("secret")
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil || !m.loading {
+		t.Fatalf("value submit state: cmd=%v loading=%v", cmd != nil, m.loading)
+	}
+}
+
 func TestCopyUsesInjectedClipboard(t *testing.T) {
 	m := testModel()
 	var copied string

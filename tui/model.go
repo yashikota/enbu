@@ -368,6 +368,16 @@ func (m *model) handleOverlayKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if key.Matches(msg, keys.Enter) {
+		if m.overlay == overlayAdd && m.focusKey {
+			if strings.TrimSpace(m.keyInput.Value()) == "" {
+				m.err = fmt.Errorf("key cannot be empty")
+				return m, nil
+			}
+			m.focusKey = false
+			m.focusSecretInput()
+			m.err = nil
+			return m, nil
+		}
 		return m.confirmOverlay()
 	}
 	return m.updateInputs(msg)
@@ -748,7 +758,11 @@ func (m *model) renderOverlay(startY int) []string {
 	actionY := startY + len(lines) - 1
 	m.addHit(hitConfirm, 0, actionY, 9, 1, 0, "")
 	m.addHit(hitCancel, 11, actionY, 8, 1, 0, "")
-	lines = append(lines, helpStyle.Render("enter confirm  esc cancel"))
+	help := "enter confirm  esc cancel"
+	if m.overlay == overlayAdd && m.focusKey {
+		help = "enter value  tab switch field  esc cancel"
+	}
+	lines = append(lines, helpStyle.Render(help))
 	return lines
 }
 
@@ -815,6 +829,10 @@ func (m *model) confirmOverlay() (tea.Model, tea.Cmd) {
 		secretKey := strings.TrimSpace(m.keyInput.Value())
 		if secretKey == "" {
 			m.err = fmt.Errorf("key cannot be empty")
+			return m, nil
+		}
+		if m.valueInput.Value() == "" {
+			m.err = fmt.Errorf("value cannot be empty")
 			return m, nil
 		}
 		m.loading = true
