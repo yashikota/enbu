@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/yashikota/enbu/utils/age"
@@ -17,7 +18,7 @@ import (
 const maxRetries = 3
 
 func (a *App) ListSecrets(ctx context.Context, env string) (map[string]string, error) {
-	resolved, err := ResolveEnvironment(env)
+	resolved, err := a.resolveEnvironment(env)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +55,7 @@ func (a *App) ListSecrets(ctx context.Context, env string) (map[string]string, e
 }
 
 func (a *App) AddSecret(ctx context.Context, env, key, value string) error {
-	resolved, err := ResolveEnvironment(env)
+	resolved, err := a.resolveEnvironment(env)
 	if err != nil {
 		return err
 	}
@@ -135,7 +136,7 @@ func (a *App) AddSecret(ctx context.Context, env, key, value string) error {
 }
 
 func (a *App) EditSecret(ctx context.Context, env, key, value string) error {
-	resolved, err := ResolveEnvironment(env)
+	resolved, err := a.resolveEnvironment(env)
 	if err != nil {
 		return err
 	}
@@ -211,7 +212,7 @@ func (a *App) EditSecret(ctx context.Context, env, key, value string) error {
 }
 
 func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
-	resolved, err := ResolveEnvironment(env)
+	resolved, err := a.resolveEnvironment(env)
 	if err != nil {
 		return err
 	}
@@ -290,7 +291,7 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 }
 
 func (a *App) PullSecrets(ctx context.Context, env string) ([]byte, string, int, error) {
-	resolved, err := ResolveEnvironment(env)
+	resolved, err := a.resolveEnvironment(env)
 	if err != nil {
 		return nil, "", 0, err
 	}
@@ -340,7 +341,11 @@ func (a *App) PullSecretsToFile(ctx context.Context, env string) error {
 		return err
 	}
 
-	if err := os.WriteFile(output, dotenv, 0o600); err != nil {
+	outputPath := output
+	if a.RepositoryDir != "" && !filepath.IsAbs(output) {
+		outputPath = filepath.Join(a.RepositoryDir, output)
+	}
+	if err := os.WriteFile(outputPath, dotenv, 0o600); err != nil {
 		return fmt.Errorf("writing %s: %w", output, err)
 	}
 
@@ -351,7 +356,7 @@ func (a *App) PullSecretsToFile(ctx context.Context, env string) error {
 var errConflict = errors.New("secrets changed by another user")
 
 func (a *App) SyncSecrets(ctx context.Context, env string) error {
-	resolved, err := ResolveEnvironment(env)
+	resolved, err := a.resolveEnvironment(env)
 	if err != nil {
 		return err
 	}

@@ -130,7 +130,15 @@ type ResolvedEnvironment struct {
 }
 
 func ResolveEnvironment(name string) (*ResolvedEnvironment, error) {
-	cfg, err := config.LoadProject()
+	return resolveEnvironment(config.LoadProject, name)
+}
+
+func (a *App) resolveEnvironment(name string) (*ResolvedEnvironment, error) {
+	return resolveEnvironment(a.loadProject, name)
+}
+
+func resolveEnvironment(load func() (*config.ProjectConfig, error), name string) (*ResolvedEnvironment, error) {
+	cfg, err := load()
 	if err != nil {
 		if strings.Contains(err.Error(), "enbu.toml not found") {
 			if name == "" {
