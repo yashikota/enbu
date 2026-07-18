@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -269,6 +270,22 @@ func TestMarshalProjectSortsAndQuotesEnvironmentNames(t *testing.T) {
 	want := "version = \"v1alpha1\"\ndefault_env = \"a.b\"\n\n[env.\"a.b\"]\noutput = \".env.dotted\"\n\n[env.z]\noutput = \".env.z\"\n"
 	if string(content) != want {
 		t.Fatalf("unexpected TOML:\n%s\nwant:\n%s", content, want)
+	}
+}
+
+func TestEnvironmentNamesAreStableAndSorted(t *testing.T) {
+	cfg := &ProjectConfig{
+		Environments: map[string]EnvironmentConfig{
+			"staging":     {Output: ".env.staging"},
+			"development": {Output: ".env.development"},
+			"production":  {Output: ".env.production"},
+		},
+	}
+	want := []string{"development", "production", "staging"}
+	for range 10 {
+		if got := cfg.EnvironmentNames(); !slices.Equal(got, want) {
+			t.Fatalf("EnvironmentNames() = %v, want %v", got, want)
+		}
 	}
 }
 

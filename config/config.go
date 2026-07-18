@@ -291,6 +291,7 @@ func (cfg *ProjectConfig) EnvironmentNames() []string {
 	for name := range cfg.Environments {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }
 

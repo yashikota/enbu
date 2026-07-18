@@ -7,6 +7,12 @@ export default defineConfig(({ mode }) => ({
   base: mode === "preview" ? (process.env.PREVIEW_BASE ?? "/enbu/main/web/") : undefined,
   build: {
     outDir: mode === "preview" ? "dist-preview" : "dist",
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, "index.html"),
+        tui: resolve(__dirname, "tui.html"),
+      },
+    },
   },
   fmt: {
     ignorePatterns: [

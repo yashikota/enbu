@@ -8,51 +8,106 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/yashikota/enbu/app"
+	"github.com/yashikota/enbu/auth"
+	"github.com/yashikota/enbu/config"
 )
 
-type viewState int
+type tabState int
 
 const (
-	viewSecrets viewState = iota
-	viewAdd
-	viewEdit
-	viewConfirmDelete
-	viewEnvSwitch
-	viewRecipients
-	viewConfig
+	tabSecrets tabState = iota
+	tabMembers
+	tabSettings
 )
 
+type overlayState int
+
+const (
+	overlayNone overlayState = iota
+	overlayAdd
+	overlayEdit
+	overlayDelete
+	overlayCreateEnvironment
+)
+
+type hitKind int
+
+const (
+	hitTab hitKind = iota
+	hitEnvironment
+	hitEnvironmentOption
+	hitCreateEnvironment
+	hitPull
+	hitSecretRow
+	hitEdit
+	hitReveal
+	hitCopyKey
+	hitCopyValue
+	hitDelete
+	hitAdd
+	hitRefreshMembers
+	hitSettingsView
+	hitSettingsEdit
+	hitInputKey
+	hitInputValue
+	hitConfirm
+	hitCancel
+)
+
+type hitRegion struct {
+	kind       hitKind
+	x, y, w, h int
+	index      int
+	value      string
+}
+
+func (h hitRegion) contains(x, y int) bool {
+	return x >= h.x && x < h.x+h.w && y >= h.y && y < h.y+h.h
+}
+
 type model struct {
-	app     *app.App
-	view    viewState
-	secrets []secretEntry
-	cursor  int
-	envs    []envItem
-	current string
+	app         *app.App
+	tab         tabState
+	overlay     overlayState
+	secrets     []secretEntry
+	cursor      int
+	offset      int
+	envs        []envItem
+	current     string
+	repository  string
+	envMenuOpen bool
+	envCursor   int
 
 	recipients []app.RecipientInfo
 
 	configContent string
 	configDraft   string
+	configCode    bool
 	configEditing bool
-	configInput   textinput.Model
+	configInput   textarea.Model
 
 	keyInput   textinput.Model
 	valueInput textinput.Model
+	envInput   textinput.Model
 	focusKey   bool
 
-	spinner   spinner.Model
-	loading   bool
-	notInited bool
-	err       error
-	status    string
+	revealed map[string]bool
+
+	spinner spinner.Model
+	loading bool
+	err     error
+	status  string
 
 	width  int
 	height int
+	hits   []hitRegion
+
+	copyToClipboard func(string) error
 }
 
 type secretEntry struct {
@@ -60,74 +115,77 @@ type secretEntry struct {
 	value string
 }
 
-func newModel(a *app.App) model {
+func newModel(a *app.App) *model {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 
 	ki := textinput.New()
 	ki.Placeholder = "KEY"
 	ki.CharLimit = 256
+	ki.Width = 28
 
 	vi := textinput.New()
 	vi.Placeholder = "VALUE"
 	vi.CharLimit = 4096
+	vi.Width = 38
 
-	ci := textinput.New()
-	ci.Placeholder = "toml content"
+	ei := textinput.New()
+	ei.Placeholder = "environment-name"
+	ei.CharLimit = 100
+	ei.Width = 32
+
+	ci := textarea.New()
+	ci.Placeholder = "enbu.toml"
 	ci.CharLimit = 65536
+	ci.SetWidth(72)
+	ci.SetHeight(14)
+	ci.ShowLineNumbers = true
 
-	return model{
-		app:         a,
-		view:        viewSecrets,
-		spinner:     sp,
-		keyInput:    ki,
-		valueInput:  vi,
-		configInput: ci,
-		focusKey:    true,
-		loading:     true,
+	return &model{
+		app:             a,
+		tab:             tabSecrets,
+		spinner:         sp,
+		keyInput:        ki,
+		valueInput:      vi,
+		envInput:        ei,
+		configInput:     ci,
+		focusKey:        true,
+		loading:         true,
+		revealed:        make(map[string]bool),
+		copyToClipboard: auth.CopyToClipboard,
 	}
 }
 
-func (m model) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, m.loadSecrets())
+func (m *model) Init() tea.Cmd {
+	return tea.Batch(m.spinner.Tick, m.loadWorkspace())
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.resizeInputs()
 		return m, nil
-
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
-
-	case secretsLoadedMsg:
+	case workspaceLoadedMsg:
 		m.loading = false
 		m.secrets = mapToEntries(msg.secrets)
-		m.current = msg.current
-		m.err = nil
-		if m.cursor >= len(m.secrets) {
-			m.cursor = max(0, len(m.secrets)-1)
-		}
-		return m, nil
-
-	case envsLoadedMsg:
-		m.loading = false
 		m.envs = msg.envs
 		m.current = msg.current
-		m.cursor = 0
+		m.repository = msg.repository
+		m.revealed = make(map[string]bool)
 		m.err = nil
+		m.clampCursor()
 		return m, nil
-
 	case recipientsLoadedMsg:
 		m.loading = false
 		m.recipients = msg.recipients
 		m.err = nil
 		return m, nil
-
 	case configLoadedMsg:
 		m.loading = false
 		m.configContent = msg.content
@@ -135,32 +193,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.configEditing = false
 		m.err = nil
 		return m, nil
-
 	case configSavedMsg:
-		m.loading = false
+		m.loading = true
 		m.configContent = m.configDraft
 		m.configEditing = false
-		m.status = "Config saved."
-		m.view = viewSecrets
-		return m, nil
-
+		m.status = "Saved enbu.toml"
+		m.err = nil
+		m.revealed = make(map[string]bool)
+		return m, m.loadWorkspace()
 	case operationDoneMsg:
-		m.loading = true
 		m.status = msg.message
-		m.view = viewSecrets
-		return m, m.loadSecrets()
-
+		m.err = nil
+		m.overlay = overlayNone
+		m.loading = true
+		m.revealed = make(map[string]bool)
+		return m, m.loadWorkspace()
+	case clipboardDoneMsg:
+		m.status = msg.message
+		m.err = nil
+		return m, nil
 	case errMsg:
 		m.loading = false
-		if app.IsNotInitializedError(msg.err) {
-			m.notInited = true
-			m.err = nil
-		} else {
-			m.notInited = false
-			m.err = msg.err
-		}
+		m.err = msg.err
 		return m, nil
-
+	case tea.MouseMsg:
+		if m.loading {
+			return m, nil
+		}
+		return m.handleMouse(msg)
 	case tea.KeyMsg:
 		if m.loading {
 			if key.Matches(msg, keys.Quit) {
@@ -171,516 +231,749 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 	}
 
-	if m.view == viewAdd || m.view == viewEdit {
-		return m.updateInputs(msg)
-	}
-
-	return m, nil
-}
-
-func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch m.view {
-	case viewSecrets:
-		return m.handleSecretsKey(msg)
-	case viewAdd:
-		return m.handleAddKey(msg)
-	case viewEdit:
-		return m.handleEditKey(msg)
-	case viewConfirmDelete:
-		return m.handleDeleteKey(msg)
-	case viewEnvSwitch:
-		return m.handleEnvSwitchKey(msg)
-	case viewRecipients:
-		return m.handleRecipientsKey(msg)
-	case viewConfig:
-		return m.handleConfigKey(msg)
-	}
-	return m, nil
-}
-
-func (m model) handleSecretsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, keys.Quit):
-		return m, tea.Quit
-	case key.Matches(msg, keys.Up):
-		if m.cursor > 0 {
-			m.cursor--
-		}
-	case key.Matches(msg, keys.Down):
-		if m.cursor < len(m.secrets)-1 {
-			m.cursor++
-		}
-	case key.Matches(msg, keys.Add):
-		m.view = viewAdd
-		m.keyInput.Reset()
-		m.valueInput.Reset()
-		m.keyInput.Focus()
-		m.focusKey = true
-		m.err = nil
-		m.status = ""
-	case key.Matches(msg, keys.Edit):
-		if len(m.secrets) > 0 {
-			m.view = viewEdit
-			m.valueInput.Reset()
-			m.valueInput.SetValue(m.secrets[m.cursor].value)
-			m.valueInput.Focus()
-			m.err = nil
-			m.status = ""
-		}
-	case key.Matches(msg, keys.Delete):
-		if len(m.secrets) > 0 {
-			m.view = viewConfirmDelete
-			m.err = nil
-			m.status = ""
-		}
-	case key.Matches(msg, keys.Switch):
-		m.view = viewEnvSwitch
-		m.loading = true
-		m.err = nil
-		m.status = ""
-		m.cursor = 0
-		return m, m.loadEnvs()
-	case key.Matches(msg, keys.Refresh):
-		m.loading = true
-		return m, m.loadSecrets()
-	case key.Matches(msg, keys.Recipients):
-		m.view = viewRecipients
-		m.loading = true
-		m.err = nil
-		m.status = ""
-		return m, m.loadRecipients()
-	case key.Matches(msg, keys.Config):
-		m.view = viewConfig
-		m.loading = true
-		m.err = nil
-		m.status = ""
-		m.configEditing = false
-		return m, m.loadConfig()
-	}
-	return m, nil
-}
-
-func (m model) handleAddKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, keys.Escape):
-		m.view = viewSecrets
-		return m, nil
-	case key.Matches(msg, keys.Tab):
-		m.focusKey = !m.focusKey
-		if m.focusKey {
-			m.keyInput.Focus()
-			m.valueInput.Blur()
-		} else {
-			m.keyInput.Blur()
-			m.valueInput.Focus()
-		}
-		return m, nil
-	case key.Matches(msg, keys.Enter):
-		k := strings.TrimSpace(m.keyInput.Value())
-		v := m.valueInput.Value()
-		if k == "" {
-			m.err = fmt.Errorf("key cannot be empty")
-			return m, nil
-		}
-		m.loading = true
-		m.view = viewSecrets
-		return m, m.addSecret(k, v)
-	}
-	return m.updateInputs(msg)
-}
-
-func (m model) handleEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, keys.Escape):
-		m.view = viewSecrets
-		return m, nil
-	case key.Matches(msg, keys.Enter):
-		v := m.valueInput.Value()
-		k := m.secrets[m.cursor].key
-		m.loading = true
-		m.view = viewSecrets
-		return m, m.editSecret(k, v)
-	}
-	return m.updateInputs(msg)
-}
-
-func (m model) handleDeleteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, keys.Escape):
-		m.view = viewSecrets
-		return m, nil
-	case key.Matches(msg, keys.Enter):
-		k := m.secrets[m.cursor].key
-		m.loading = true
-		m.view = viewSecrets
-		return m, m.deleteSecret(k)
-	}
-	return m, nil
-}
-
-func (m model) handleEnvSwitchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, keys.Escape):
-		m.view = viewSecrets
-		m.cursor = 0
-		return m, nil
-	case key.Matches(msg, keys.Up):
-		if m.cursor > 0 {
-			m.cursor--
-		}
-	case key.Matches(msg, keys.Down):
-		if m.cursor < len(m.envs)-1 {
-			m.cursor++
-		}
-	case key.Matches(msg, keys.Enter):
-		if len(m.envs) > 0 {
-			name := m.envs[m.cursor].name
-			m.loading = true
-			return m, m.switchEnv(name)
-		}
-	}
-	return m, nil
-}
-
-func (m model) handleRecipientsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if key.Matches(msg, keys.Escape) || key.Matches(msg, keys.Quit) {
-		if key.Matches(msg, keys.Quit) {
-			return m, tea.Quit
-		}
-		m.view = viewSecrets
-	}
-	return m, nil
-}
-
-func (m model) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.configEditing {
-		switch {
-		case key.Matches(msg, keys.Escape):
-			m.configEditing = false
-			m.configDraft = m.configContent
-			return m, nil
-		case key.Matches(msg, keys.Enter):
-			m.configDraft = m.configInput.Value()
-			m.loading = true
-			return m, m.saveConfig(m.configDraft)
-		}
 		var cmd tea.Cmd
 		m.configInput, cmd = m.configInput.Update(msg)
 		return m, cmd
 	}
-	switch {
-	case key.Matches(msg, keys.Quit):
-		return m, tea.Quit
-	case key.Matches(msg, keys.Escape):
-		m.view = viewSecrets
-	case key.Matches(msg, keys.Edit):
-		m.configEditing = true
-		m.configInput.SetValue(m.configContent)
-		m.configInput.Focus()
+	if m.overlay == overlayAdd || m.overlay == overlayEdit || m.overlay == overlayCreateEnvironment {
+		return m.updateInputs(msg)
 	}
 	return m, nil
 }
 
-func (m model) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) resizeInputs() {
+	inputWidth := max(18, min(48, m.width-22))
+	m.keyInput.Width = inputWidth
+	m.valueInput.Width = inputWidth
+	m.envInput.Width = inputWidth
+	m.configInput.SetWidth(max(30, m.width-10))
+	m.configInput.SetHeight(max(6, m.height-13))
+}
+
+func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.overlay != overlayNone {
+		return m.handleOverlayKey(msg)
+	}
+	if m.configEditing {
+		return m.handleConfigEditorKey(msg)
+	}
+	if key.Matches(msg, keys.Quit) {
+		return m, tea.Quit
+	}
+	if key.Matches(msg, keys.TabNext) {
+		return m.activateTab(tabState((int(m.tab) + 1) % 3))
+	}
+	if key.Matches(msg, keys.TabPrev) {
+		return m.activateTab(tabState((int(m.tab) + 2) % 3))
+	}
+	if key.Matches(msg, keys.SecretsTab) {
+		return m.activateTab(tabSecrets)
+	}
+	if key.Matches(msg, keys.MembersTab) {
+		return m.activateTab(tabMembers)
+	}
+	if key.Matches(msg, keys.SettingsTab) {
+		return m.activateTab(tabSettings)
+	}
+
+	switch m.tab {
+	case tabSecrets:
+		return m.handleSecretsKey(msg)
+	case tabMembers:
+		if key.Matches(msg, keys.Refresh) {
+			m.loading = true
+			return m, m.loadRecipients()
+		}
+	case tabSettings:
+		switch {
+		case key.Matches(msg, keys.Edit):
+			return m.startConfigEdit()
+		case key.Matches(msg, keys.ToggleView):
+			m.configCode = !m.configCode
+		}
+	}
+	return m, nil
+}
+
+func (m *model) handleSecretsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.environmentOpen() {
+		switch {
+		case key.Matches(msg, keys.Escape):
+			m.status = ""
+			m.closeEnvironment()
+		case key.Matches(msg, keys.Up):
+			m.envCursor = max(0, m.envCursor-1)
+		case key.Matches(msg, keys.Down):
+			m.envCursor = min(len(m.envs), m.envCursor+1)
+		case key.Matches(msg, keys.Enter):
+			if m.envCursor == len(m.envs) {
+				m.closeEnvironment()
+				m.openCreateEnvironment()
+			} else if len(m.envs) > 0 {
+				return m.selectEnvironment(m.envs[m.envCursor].name)
+			}
+		}
+		return m, nil
+	}
+
+	switch {
+	case key.Matches(msg, keys.Up):
+		m.cursor = max(0, m.cursor-1)
+		m.ensureCursorVisible()
+	case key.Matches(msg, keys.Down):
+		m.cursor = min(max(0, len(m.secrets)-1), m.cursor+1)
+		m.ensureCursorVisible()
+	case key.Matches(msg, keys.Add):
+		m.openAdd()
+	case key.Matches(msg, keys.Edit):
+		m.openEdit()
+	case key.Matches(msg, keys.Delete):
+		m.openDelete()
+	case key.Matches(msg, keys.Switch):
+		m.openEnvironment()
+	case key.Matches(msg, keys.Refresh):
+		m.loading = true
+		return m, m.loadWorkspace()
+	case key.Matches(msg, keys.Pull):
+		m.loading = true
+		return m, m.pullSecrets()
+	case key.Matches(msg, keys.Reveal):
+		m.toggleReveal(m.cursor)
+	case key.Matches(msg, keys.CopyValue):
+		return m.copySecret(m.cursor, false)
+	case key.Matches(msg, keys.CopyKey):
+		return m.copySecret(m.cursor, true)
+	}
+	return m, nil
+}
+
+func (m *model) handleOverlayKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, keys.Escape) {
+		m.closeOverlay()
+		return m, nil
+	}
+	if m.overlay == overlayDelete {
+		if key.Matches(msg, keys.Enter) && len(m.secrets) > 0 {
+			m.loading = true
+			return m, m.deleteSecret(m.secrets[m.cursor].key)
+		}
+		return m, nil
+	}
+	if key.Matches(msg, keys.Tab) {
+		if m.overlay == overlayAdd {
+			m.focusKey = !m.focusKey
+			m.focusSecretInput()
+		}
+		return m, nil
+	}
+	if key.Matches(msg, keys.Enter) {
+		if m.overlay == overlayAdd && m.focusKey {
+			if strings.TrimSpace(m.keyInput.Value()) == "" {
+				m.err = fmt.Errorf("key cannot be empty")
+				return m, nil
+			}
+			m.focusKey = false
+			m.focusSecretInput()
+			m.err = nil
+			return m, nil
+		}
+		return m.confirmOverlay()
+	}
+	return m.updateInputs(msg)
+}
+
+func (m *model) handleConfigEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keys.Escape):
+		m.configEditing = false
+		m.configDraft = m.configContent
+		m.configInput.Blur()
+		m.err = nil
+		return m, nil
+	case key.Matches(msg, keys.Save):
+		m.configDraft = m.configInput.Value()
+		cfg, err := config.ParseProject(m.configDraft)
+		if err != nil {
+			m.err = err
+			return m, nil
+		}
+		if err := config.ValidateProjectOutputs(cfg); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.loading = true
+		return m, m.saveConfig(m.configDraft)
+	}
+	var cmd tea.Cmd
+	m.configInput, cmd = m.configInput.Update(msg)
+	return m, cmd
+}
+
+func (m *model) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	var cmd tea.Cmd
 	m.keyInput, cmd = m.keyInput.Update(msg)
 	cmds = append(cmds, cmd)
 	m.valueInput, cmd = m.valueInput.Update(msg)
 	cmds = append(cmds, cmd)
+	m.envInput, cmd = m.envInput.Update(msg)
+	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
 
-func (m model) View() string {
+func (m *model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+		if m.tab == tabSecrets && m.overlay == overlayNone {
+			delta := 3
+			if msg.Button == tea.MouseButtonWheelUp {
+				delta = -3
+			}
+			m.offset = max(0, min(m.maxOffset(), m.offset+delta))
+			m.cursor = max(m.offset, min(len(m.secrets)-1, m.offset))
+		}
+		return m, nil
+	}
+	if msg.Action == tea.MouseActionMotion {
+		for _, hit := range m.hits {
+			if hit.kind == hitSecretRow && hit.contains(msg.X, msg.Y) {
+				m.cursor = hit.index
+				break
+			}
+		}
+		return m, nil
+	}
+	if msg.Button != tea.MouseButtonLeft || msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	for i := len(m.hits) - 1; i >= 0; i-- {
+		hit := m.hits[i]
+		if !hit.contains(msg.X, msg.Y) {
+			continue
+		}
+		switch hit.kind {
+		case hitTab:
+			return m.activateTab(tabState(hit.index))
+		case hitEnvironment:
+			m.openEnvironment()
+		case hitEnvironmentOption:
+			return m.selectEnvironment(hit.value)
+		case hitCreateEnvironment:
+			m.closeEnvironment()
+			m.openCreateEnvironment()
+		case hitPull:
+			m.loading = true
+			return m, m.pullSecrets()
+		case hitSecretRow:
+			m.cursor = hit.index
+		case hitEdit:
+			m.cursor = hit.index
+			m.openEdit()
+		case hitReveal:
+			m.toggleReveal(hit.index)
+		case hitCopyKey:
+			return m.copySecret(hit.index, true)
+		case hitCopyValue:
+			return m.copySecret(hit.index, false)
+		case hitDelete:
+			m.cursor = hit.index
+			m.openDelete()
+		case hitAdd:
+			m.openAdd()
+		case hitRefreshMembers:
+			m.loading = true
+			return m, m.loadRecipients()
+		case hitSettingsView:
+			m.configCode = !m.configCode
+		case hitSettingsEdit:
+			return m.startConfigEdit()
+		case hitInputKey:
+			m.focusKey = true
+			m.focusSecretInput()
+		case hitInputValue:
+			m.focusKey = false
+			m.focusSecretInput()
+		case hitConfirm:
+			if m.configEditing {
+				m.configDraft = m.configInput.Value()
+				cfg, err := config.ParseProject(m.configDraft)
+				if err != nil {
+					m.err = err
+					return m, nil
+				}
+				if err := config.ValidateProjectOutputs(cfg); err != nil {
+					m.err = err
+					return m, nil
+				}
+				m.loading = true
+				return m, m.saveConfig(m.configDraft)
+			}
+			return m.confirmOverlay()
+		case hitCancel:
+			if m.configEditing {
+				m.configEditing = false
+				m.configDraft = m.configContent
+				m.configInput.Blur()
+				m.err = nil
+			} else {
+				m.closeOverlay()
+			}
+		}
+		break
+	}
+	return m, nil
+}
+
+func (m *model) activateTab(tab tabState) (tea.Model, tea.Cmd) {
+	if m.tab == tab && ((tab == tabMembers && m.recipients != nil) || (tab == tabSettings && m.configContent != "") || tab == tabSecrets) {
+		return m, nil
+	}
+	if m.configEditing && tab != tabSettings {
+		m.configEditing = false
+		m.configDraft = m.configContent
+		m.configInput.Blur()
+	}
+	m.tab = tab
+	m.overlay = overlayNone
+	m.envMenuOpen = false
+	m.err = nil
+	m.status = ""
+	switch tab {
+	case tabMembers:
+		m.loading = true
+		return m, m.loadRecipients()
+	case tabSettings:
+		m.loading = true
+		return m, m.loadConfig()
+	default:
+		return m, nil
+	}
+}
+
+func (m *model) View() string {
+	m.hits = m.hits[:0]
+	if m.width > 0 && m.width < 58 || m.height > 0 && m.height < 16 {
+		return errorStyle.Render("enbu needs a terminal of at least 58×16")
+	}
+
+	lines := []string{headerStyle.Render("💃 enbu")}
+	if m.repository != "" {
+		lines[0] += "  " + dimStyle.Render(m.repository)
+	}
+	lines = append(lines, "")
+	lines = append(lines, m.renderTabs(2), "")
+	if m.err != nil {
+		lines = append(lines, errorStyle.Render("! "+m.err.Error()))
+	} else if m.status != "" {
+		lines = append(lines, successStyle.Render("✓ "+m.status))
+	} else {
+		lines = append(lines, "")
+	}
 	if m.loading {
-		return fmt.Sprintf("\n  %s Loading...\n", m.spinner.View())
+		lines = append(lines, "", "  "+m.spinner.View()+" Loading…")
+		return strings.Join(lines, "\n")
 	}
 
-	switch m.view {
-	case viewSecrets:
-		return m.viewSecrets()
-	case viewAdd:
-		return m.viewAdd()
-	case viewEdit:
-		return m.viewEdit()
-	case viewConfirmDelete:
-		return m.viewConfirmDelete()
-	case viewEnvSwitch:
-		return m.viewEnvSwitch()
-	case viewRecipients:
-		return m.viewRecipientsView()
-	case viewConfig:
-		return m.viewConfigView()
+	switch m.tab {
+	case tabSecrets:
+		lines = append(lines, m.renderSecrets(len(lines))...)
+	case tabMembers:
+		lines = append(lines, m.renderMembers(len(lines))...)
+	case tabSettings:
+		lines = append(lines, m.renderSettings(len(lines))...)
 	}
-	return ""
+	if m.overlay != overlayNone {
+		lines = append(lines, m.renderOverlay(len(lines))...)
+	}
+	return strings.Join(lines, "\n")
 }
 
-func (m model) viewSecrets() string {
+func (m *model) renderTabs(y int) string {
+	labels := []string{" 1 Secrets ", " 2 Members ", " 3 Settings "}
 	var b strings.Builder
-
-	env := m.current
-	if env == "" {
-		env = "default"
-	}
-	b.WriteString(titleStyle.Render(fmt.Sprintf("enbu — %s", env)))
-	b.WriteString("\n")
-
-	if m.err != nil {
-		b.WriteString(errorStyle.Render("  Error: "+m.err.Error()) + "\n\n")
-	}
-	if m.status != "" {
-		b.WriteString(successStyle.Render("  ✓ "+m.status) + "\n\n")
-	}
-
-	if m.notInited {
-		b.WriteString(dimStyle.Render("  Not initialized. Run 'enbu init' to get started."))
-		b.WriteString("\n")
-	} else if len(m.secrets) == 0 && m.err == nil {
-		b.WriteString(dimStyle.Render("  No secrets yet. Press 'a' to add one."))
-		b.WriteString("\n")
-	} else {
-		maxKeyLen := 0
-		for _, s := range m.secrets {
-			if len(s.key) > maxKeyLen {
-				maxKeyLen = len(s.key)
-			}
+	x := 0
+	for i, label := range labels {
+		style := tabStyle
+		if int(m.tab) == i {
+			style = activeTabStyle
 		}
+		rendered := style.Render(label)
+		b.WriteString(rendered)
+		m.addHit(hitTab, x, y, lipgloss.Width(rendered), 1, i, "")
+		x += lipgloss.Width(rendered)
+		b.WriteString(" ")
+		x++
+	}
+	return b.String()
+}
 
-		for i, s := range m.secrets {
-			cursor := "  "
-			style := lipgloss.NewStyle()
-			if i == m.cursor {
-				cursor = "▸ "
-				style = selectedStyle
+func (m *model) renderSecrets(startY int) []string {
+	lines := []string{}
+	envLabel := fmt.Sprintf(" Environment: %s ▾ ", fallback(m.current, "default"))
+	pullLabel := " ⇩ Pull "
+	lines = append(lines, sectionStyle.Render(envLabel)+"  "+buttonStyle.Render(pullLabel))
+	m.addHit(hitEnvironment, 0, startY, lipgloss.Width(envLabel), 1, 0, "")
+	m.addHit(hitPull, lipgloss.Width(envLabel)+2, startY, lipgloss.Width(pullLabel), 1, 0, "")
+
+	if m.environmentOpen() {
+		for i, env := range m.envs {
+			marker := "  "
+			if env.name == m.current {
+				marker = "✓ "
 			}
-			line := fmt.Sprintf("%s%-*s = %s", cursor, maxKeyLen, s.key, s.value)
-			b.WriteString(style.Render(line))
-			b.WriteString("\n")
+			label := "   " + marker + env.name
+			lines = append(lines, selectedIf(label, i == m.envCursor))
+			m.addHit(hitEnvironmentOption, 0, startY+len(lines)-1, max(24, lipgloss.Width(label)), 1, i, env.name)
 		}
+		label := "   + Create environment"
+		lines = append(lines, selectedIf(label, m.envCursor == len(m.envs)))
+		m.addHit(hitCreateEnvironment, 0, startY+len(lines)-1, max(24, lipgloss.Width(label)), 1, 0, "")
 	}
 
-	b.WriteString(helpStyle.Render("  a:add  e:edit  d:delete  s:switch env  r:refresh  R:recipients  C:config  q:quit"))
-	return b.String()
-}
-
-func (m model) viewAdd() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Add Secret"))
-	b.WriteString("\n")
-
-	if m.err != nil {
-		b.WriteString(errorStyle.Render("  "+m.err.Error()) + "\n\n")
-	}
-
-	b.WriteString(inputLabelStyle.Render("  Key:   "))
-	b.WriteString(m.keyInput.View())
-	b.WriteString("\n")
-	b.WriteString(inputLabelStyle.Render("  Value: "))
-	b.WriteString(m.valueInput.View())
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("  tab:switch field  enter:confirm  esc:cancel"))
-	return b.String()
-}
-
-func (m model) viewEdit() string {
-	var b strings.Builder
-	k := m.secrets[m.cursor].key
-	b.WriteString(titleStyle.Render(fmt.Sprintf("Edit: %s", k)))
-	b.WriteString("\n")
-
-	if m.err != nil {
-		b.WriteString(errorStyle.Render("  "+m.err.Error()) + "\n\n")
-	}
-
-	b.WriteString(inputLabelStyle.Render("  Value: "))
-	b.WriteString(m.valueInput.View())
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("  enter:confirm  esc:cancel"))
-	return b.String()
-}
-
-func (m model) viewConfirmDelete() string {
-	var b strings.Builder
-	k := m.secrets[m.cursor].key
-	b.WriteString(titleStyle.Render("Delete Secret"))
-	b.WriteString("\n")
-	fmt.Fprintf(&b, "  Are you sure you want to delete %s?\n", selectedStyle.Render(k))
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("  enter:confirm  esc:cancel"))
-	return b.String()
-}
-
-func (m model) viewEnvSwitch() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Switch Environment"))
-	b.WriteString("\n")
-
-	for i, env := range m.envs {
-		cursor := "  "
-		style := lipgloss.NewStyle()
+	keyWidth := min(24, max(14, (m.contentWidth()-21)/3))
+	valueWidth := max(14, m.contentWidth()-keyWidth-21)
+	header := fmt.Sprintf("  %-*s  %-*s  ACTIONS", keyWidth, "KEY", valueWidth, "VALUE")
+	lines = append(lines, "", tableHeaderStyle.Render(header))
+	rowStart := startY + len(lines)
+	visible := m.visibleRows()
+	end := min(len(m.secrets), m.offset+visible)
+	for i := m.offset; i < end; i++ {
+		s := m.secrets[i]
+		value := strings.Repeat("•", max(8, min(24, len([]rune(s.value)))))
+		if m.revealed[s.key] {
+			value = s.value
+		}
+		keyText := truncate(s.key, keyWidth)
+		valueText := truncate(value, valueWidth)
+		prefix := "  "
 		if i == m.cursor {
-			cursor = "▸ "
-			style = selectedStyle
+			prefix = "› "
 		}
-		marker := ""
-		if env.isCurrent {
-			marker = " (current)"
-		}
-		b.WriteString(style.Render(fmt.Sprintf("%s%s%s", cursor, env.name, marker)))
-		b.WriteString("\n")
+		row := fmt.Sprintf("%s%-*s  %-*s  [K] [V] [E] [D]", prefix, keyWidth, keyText, valueWidth, valueText)
+		lines = append(lines, selectedIf(row, i == m.cursor))
+		y := rowStart + i - m.offset
+		m.addHit(hitSecretRow, 0, y, max(1, m.width), 1, i, "")
+		actionX := 2 + keyWidth + 2 + valueWidth + 2
+		m.addHit(hitCopyKey, actionX, y, 3, 1, i, "")
+		m.addHit(hitCopyValue, actionX+4, y, 3, 1, i, "")
+		m.addHit(hitReveal, actionX+8, y, 3, 1, i, "")
+		m.addHit(hitDelete, actionX+12, y, 3, 1, i, "")
 	}
-
-	b.WriteString(helpStyle.Render("  enter:switch  esc:back"))
-	return b.String()
+	if len(m.secrets) == 0 {
+		lines = append(lines, dimStyle.Render("  No secrets yet."))
+	}
+	if len(m.secrets) > visible {
+		lines = append(lines, dimStyle.Render(fmt.Sprintf("  %d–%d of %d", m.offset+1, end, len(m.secrets))))
+	}
+	lines = append(lines, "", buttonPrimaryStyle.Render(" + Add secret "))
+	m.addHit(hitAdd, 0, startY+len(lines)-1, 14, 1, 0, "")
+	lines = append(lines, helpStyle.Render("j/k move  space reveal  y/Y copy value/key  a add  e edit  d delete  s environment  p pull  q quit"))
+	return lines
 }
 
-func (m model) viewRecipientsView() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Recipients"))
-	b.WriteString("\n")
-
+func (m *model) renderMembers(startY int) []string {
+	lines := []string{sectionStyle.Render(" Members ") + "  " + buttonStyle.Render(" ↻ Refresh "), ""}
+	m.addHit(hitRefreshMembers, 11, startY, 11, 1, 0, "")
 	if len(m.recipients) == 0 {
-		b.WriteString(dimStyle.Render("  No recipients found."))
-		b.WriteString("\n")
+		lines = append(lines, dimStyle.Render("  No recipients found."))
 	} else {
-		for _, r := range m.recipients {
-			fmt.Fprintf(&b, "  %s\n", selectedStyle.Render(r.Username))
-			fmt.Fprintf(&b, "    %s\n", dimStyle.Render(r.Fingerprint))
+		for _, recipient := range m.recipients {
+			lines = append(lines, fmt.Sprintf("  %s  %s", selectedStyle.Render(recipient.Username), dimStyle.Render(recipient.Fingerprint)))
 		}
 	}
-
-	b.WriteString(helpStyle.Render("  esc:back"))
-	return b.String()
+	lines = append(lines, "", helpStyle.Render("r refresh  1/2/3 switch tab  q quit"))
+	return lines
 }
 
-func (m model) viewConfigView() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("enbu.toml"))
-	b.WriteString("\n")
-
+func (m *model) renderSettings(startY int) []string {
 	if m.configEditing {
-		b.WriteString(inputLabelStyle.Render("  Content (enter:save  esc:cancel):"))
-		b.WriteString("\n")
-		b.WriteString(m.configInput.View())
-		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("  enter:save  esc:cancel"))
+		lines := []string{sectionStyle.Render(" Edit enbu.toml "), ""}
+		lines = append(lines, strings.Split(m.configInput.View(), "\n")...)
+		lines = append(lines, "", buttonPrimaryStyle.Render(" Save ")+"  "+buttonStyle.Render(" Cancel "))
+		actionY := startY + len(lines) - 1
+		m.addHit(hitConfirm, 0, actionY, 6, 1, 0, "")
+		m.addHit(hitCancel, 8, actionY, 8, 1, 0, "")
+		lines = append(lines, helpStyle.Render("ctrl+s save  esc cancel"))
+		return lines
+	}
+	viewLabel := " </> Code view "
+	if m.configCode {
+		viewLabel = " ≡ Form view "
+	}
+	lines := []string{sectionStyle.Render(" enbu.toml ") + "  " + buttonStyle.Render(viewLabel) + "  " + buttonPrimaryStyle.Render(" Edit "), ""}
+	viewX := 13
+	m.addHit(hitSettingsView, viewX, startY, lipgloss.Width(viewLabel), 1, 0, "")
+	m.addHit(hitSettingsEdit, viewX+lipgloss.Width(viewLabel)+2, startY, 6, 1, 0, "")
+	if m.configCode {
+		for _, line := range strings.Split(strings.TrimRight(m.configContent, "\n"), "\n") {
+			lines = append(lines, codeStyle.Render("  "+line))
+		}
 	} else {
-		if m.configContent == "" {
-			b.WriteString(dimStyle.Render("  (empty)"))
+		cfg, err := config.ParseProject(m.configContent)
+		if err != nil {
+			lines = append(lines, errorStyle.Render("  "+err.Error()))
 		} else {
-			for _, line := range strings.Split(m.configContent, "\n") {
-				b.WriteString("  " + line + "\n")
+			lines = append(lines, fmt.Sprintf("  Version       %s", selectedStyle.Render(cfg.Version)))
+			lines = append(lines, fmt.Sprintf("  Default env   %s", selectedStyle.Render(cfg.CurrentEnvironment())), "")
+			for _, name := range cfg.EnvironmentNames() {
+				env, _ := cfg.Environment(name)
+				lines = append(lines, fmt.Sprintf("  %-20s %s", name, dimStyle.Render(env.Output)))
 			}
 		}
-		b.WriteString(helpStyle.Render("  e:edit  esc:back"))
 	}
-	return b.String()
+	lines = append(lines, "", helpStyle.Render("v toggle view  e edit TOML  1/2/3 switch tab  q quit"))
+	return lines
 }
 
-func (m model) loadSecrets() tea.Cmd {
+func (m *model) renderOverlay(startY int) []string {
+	lines := []string{"", dialogStyle.Render("────────────────────────────────────────────────────────")}
+	title := ""
+	switch m.overlay {
+	case overlayAdd:
+		title = "Add secret"
+	case overlayEdit:
+		title = "Edit " + m.secrets[m.cursor].key
+	case overlayDelete:
+		title = "Delete secret"
+	case overlayCreateEnvironment:
+		title = "Create environment"
+	}
+	lines = append(lines, dialogTitleStyle.Render("  "+title))
+	baseY := startY + len(lines)
+	switch m.overlay {
+	case overlayAdd:
+		lines = append(lines, "  Key    "+m.keyInput.View(), "  Value  "+m.valueInput.View())
+		m.addHit(hitInputKey, 9, baseY, max(1, m.keyInput.Width), 1, 0, "")
+		m.addHit(hitInputValue, 9, baseY+1, max(1, m.valueInput.Width), 1, 0, "")
+	case overlayEdit:
+		lines = append(lines, "  Value  "+m.valueInput.View())
+		m.addHit(hitInputValue, 9, baseY, max(1, m.valueInput.Width), 1, 0, "")
+	case overlayDelete:
+		lines = append(lines, fmt.Sprintf("  Delete %s? This cannot be undone.", selectedStyle.Render(m.secrets[m.cursor].key)))
+	case overlayCreateEnvironment:
+		lines = append(lines, "  Name   "+m.envInput.View())
+		m.addHit(hitInputKey, 9, baseY, max(1, m.envInput.Width), 1, 0, "")
+	}
+	lines = append(lines, "", buttonPrimaryStyle.Render(" Confirm ")+"  "+buttonStyle.Render(" Cancel "))
+	actionY := startY + len(lines) - 1
+	m.addHit(hitConfirm, 0, actionY, 9, 1, 0, "")
+	m.addHit(hitCancel, 11, actionY, 8, 1, 0, "")
+	help := "enter confirm  esc cancel"
+	if m.overlay == overlayAdd && m.focusKey {
+		help = "enter value  tab switch field  esc cancel"
+	}
+	lines = append(lines, helpStyle.Render(help))
+	return lines
+}
+
+func (m *model) startConfigEdit() (tea.Model, tea.Cmd) {
+	m.configEditing = true
+	m.configCode = true
+	m.configDraft = m.configContent
+	m.configInput.SetValue(m.configContent)
+	cmd := m.configInput.Focus()
+	return m, cmd
+}
+
+func (m *model) addHit(kind hitKind, x, y, w, h, index int, value string) {
+	m.hits = append(m.hits, hitRegion{kind: kind, x: x, y: y, w: w, h: h, index: index, value: value})
+}
+
+func (m *model) openAdd() {
+	m.overlay = overlayAdd
+	m.keyInput.Reset()
+	m.valueInput.Reset()
+	m.focusKey = true
+	m.focusSecretInput()
+	m.err = nil
+}
+
+func (m *model) openEdit() {
+	if len(m.secrets) == 0 {
+		return
+	}
+	m.overlay = overlayEdit
+	m.valueInput.SetValue(m.secrets[m.cursor].value)
+	m.focusKey = false
+	m.focusSecretInput()
+	m.err = nil
+}
+
+func (m *model) openDelete() {
+	if len(m.secrets) > 0 {
+		m.overlay = overlayDelete
+		m.err = nil
+	}
+}
+
+func (m *model) openCreateEnvironment() {
+	m.overlay = overlayCreateEnvironment
+	m.envInput.Reset()
+	m.envInput.Focus()
+	m.keyInput.Blur()
+	m.valueInput.Blur()
+	m.err = nil
+}
+
+func (m *model) closeOverlay() {
+	m.overlay = overlayNone
+	m.keyInput.Blur()
+	m.valueInput.Blur()
+	m.envInput.Blur()
+	m.err = nil
+}
+
+func (m *model) confirmOverlay() (tea.Model, tea.Cmd) {
+	switch m.overlay {
+	case overlayAdd:
+		secretKey := strings.TrimSpace(m.keyInput.Value())
+		if secretKey == "" {
+			m.err = fmt.Errorf("key cannot be empty")
+			return m, nil
+		}
+		if m.valueInput.Value() == "" {
+			m.err = fmt.Errorf("value cannot be empty")
+			return m, nil
+		}
+		m.loading = true
+		return m, m.addSecret(secretKey, m.valueInput.Value())
+	case overlayEdit:
+		if len(m.secrets) > 0 {
+			m.loading = true
+			return m, m.editSecret(m.secrets[m.cursor].key, m.valueInput.Value())
+		}
+	case overlayDelete:
+		if len(m.secrets) > 0 {
+			m.loading = true
+			return m, m.deleteSecret(m.secrets[m.cursor].key)
+		}
+	case overlayCreateEnvironment:
+		name := strings.TrimSpace(m.envInput.Value())
+		if !config.ValidEnvironmentName(name) {
+			m.err = fmt.Errorf("invalid environment name %q", name)
+			return m, nil
+		}
+		m.loading = true
+		return m, m.createEnvironment(name)
+	}
+	return m, nil
+}
+
+func (m *model) focusSecretInput() {
+	if m.overlay == overlayCreateEnvironment {
+		m.envInput.Focus()
+		return
+	}
+	if m.focusKey && m.overlay == overlayAdd {
+		m.keyInput.Focus()
+		m.valueInput.Blur()
+	} else {
+		m.keyInput.Blur()
+		m.valueInput.Focus()
+	}
+}
+
+func (m *model) environmentOpen() bool { return m.envMenuOpen }
+func (m *model) openEnvironment() {
+	m.envMenuOpen = true
+	for i, env := range m.envs {
+		if env.name == m.current {
+			m.envCursor = i
+			break
+		}
+	}
+}
+func (m *model) closeEnvironment() { m.envMenuOpen = false }
+
+func (m *model) selectEnvironment(name string) (tea.Model, tea.Cmd) {
+	m.closeEnvironment()
+	if name == m.current {
+		return m, nil
+	}
+	m.loading = true
+	return m, m.switchEnv(name)
+}
+
+func (m *model) toggleReveal(index int) {
+	if index < 0 || index >= len(m.secrets) {
+		return
+	}
+	secretKey := m.secrets[index].key
+	m.revealed[secretKey] = !m.revealed[secretKey]
+}
+
+func (m *model) copySecret(index int, copyKey bool) (tea.Model, tea.Cmd) {
+	if index < 0 || index >= len(m.secrets) {
+		return m, nil
+	}
+	value := m.secrets[index].value
+	label := "value"
+	if copyKey {
+		value = m.secrets[index].key
+		label = "key"
+	}
+	copyFn := m.copyToClipboard
+	return m, func() tea.Msg {
+		if err := copyFn(value); err != nil {
+			return errMsg{err: fmt.Errorf("copying %s: %w", label, err)}
+		}
+		return clipboardDoneMsg{message: "Copied " + label}
+	}
+}
+
+func (m *model) visibleRows() int  { return max(1, m.height-15) }
+func (m *model) contentWidth() int { return max(58, m.width) }
+func (m *model) maxOffset() int    { return max(0, len(m.secrets)-m.visibleRows()) }
+func (m *model) ensureCursorVisible() {
+	if m.cursor < m.offset {
+		m.offset = m.cursor
+	}
+	if m.cursor >= m.offset+m.visibleRows() {
+		m.offset = m.cursor - m.visibleRows() + 1
+	}
+}
+func (m *model) clampCursor() {
+	m.cursor = max(0, min(m.cursor, len(m.secrets)-1))
+	m.offset = max(0, min(m.offset, m.maxOffset()))
+}
+
+func (m *model) loadWorkspace() tea.Cmd {
 	return func() tea.Msg {
 		if m.app == nil {
 			secrets := make(map[string]string)
-			for _, e := range demoSecretsByEnv[demoCurrent] {
-				secrets[e.key] = e.value
+			for _, entry := range demoSecretsByEnv[demoCurrent] {
+				secrets[entry.key] = entry.value
 			}
-			return secretsLoadedMsg{secrets: secrets, current: demoCurrent}
-		}
-		secrets, err := m.app.ListSecrets(context.Background(), "")
-		if err != nil {
-			return errMsg{err}
-		}
-		cur, _ := m.app.CurrentEnvironment()
-		return secretsLoadedMsg{secrets: secrets, current: cur}
-	}
-}
-
-func (m model) loadEnvs() tea.Cmd {
-	return func() tea.Msg {
-		if m.app == nil {
-			return envsLoadedMsg{envs: demoEnvs, current: demoCurrent}
+			return workspaceLoadedMsg{secrets: secrets, envs: demoEnvs, current: demoCurrent, repository: "yashikota/enbu"}
 		}
 		envs, err := m.app.ListEnvironments()
 		if err != nil {
 			return errMsg{err}
 		}
-		var items []envItem
-		var current string
-		for _, e := range envs {
-			items = append(items, envItem{name: e.Name, isCurrent: e.IsCurrent})
-			if e.IsCurrent {
-				current = e.Name
+		items := make([]envItem, 0, len(envs))
+		current := ""
+		for _, env := range envs {
+			items = append(items, envItem{name: env.Name, isCurrent: env.IsCurrent})
+			if env.IsCurrent {
+				current = env.Name
 			}
 		}
-		return envsLoadedMsg{envs: items, current: current}
-	}
-}
-
-func (m model) addSecret(key, value string) tea.Cmd {
-	return func() tea.Msg {
-		if m.app == nil {
-			secrets := demoSecretsByEnv[demoCurrent]
-			found := false
-			for i, s := range secrets {
-				if s.key == key {
-					secrets[i].value = value
-					found = true
-					break
-				}
-			}
-			if !found {
-				secrets = append(secrets, secretEntry{key: key, value: value})
-			}
-			demoSecretsByEnv[demoCurrent] = secrets
-			return operationDoneMsg{message: fmt.Sprintf("Added %s", key)}
-		}
-		if err := m.app.AddSecret(context.Background(), "", key, value); err != nil {
+		secrets, err := m.app.ListSecrets(context.Background(), current)
+		if err != nil {
 			return errMsg{err}
 		}
-		return operationDoneMsg{message: fmt.Sprintf("Added %s", key)}
-	}
-}
-
-func (m model) editSecret(key, value string) tea.Cmd {
-	return func() tea.Msg {
-		if m.app == nil {
-			secrets := demoSecretsByEnv[demoCurrent]
-			for i, s := range secrets {
-				if s.key == key {
-					secrets[i].value = value
-					break
-				}
+		repository := ""
+		if m.app.RepoDetector != nil {
+			owner, repo, repoErr := m.app.RepoDetector.LoadRepo()
+			if repoErr == nil {
+				repository = owner + "/" + repo
 			}
-			demoSecretsByEnv[demoCurrent] = secrets
-			return operationDoneMsg{message: fmt.Sprintf("Updated %s", key)}
 		}
-		if err := m.app.EditSecret(context.Background(), "", key, value); err != nil {
-			return errMsg{err}
-		}
-		return operationDoneMsg{message: fmt.Sprintf("Updated %s", key)}
+		return workspaceLoadedMsg{secrets: secrets, envs: items, current: current, repository: repository}
 	}
 }
 
-func (m model) deleteSecret(key string) tea.Cmd {
-	return func() tea.Msg {
-		if m.app == nil {
-			var updated []secretEntry
-			for _, s := range demoSecretsByEnv[demoCurrent] {
-				if s.key != key {
-					updated = append(updated, s)
-				}
-			}
-			demoSecretsByEnv[demoCurrent] = updated
-			return operationDoneMsg{message: fmt.Sprintf("Deleted %s", key)}
-		}
-		if err := m.app.DeleteSecret(context.Background(), "", key); err != nil {
-			return errMsg{err}
-		}
-		return operationDoneMsg{message: fmt.Sprintf("Deleted %s", key)}
-	}
-}
-
-func (m model) loadRecipients() tea.Cmd {
+func (m *model) loadRecipients() tea.Cmd {
 	return func() tea.Msg {
 		if m.app == nil {
 			return recipientsLoadedMsg{recipients: demoRecipients}
@@ -693,7 +986,7 @@ func (m model) loadRecipients() tea.Cmd {
 	}
 }
 
-func (m model) loadConfig() tea.Cmd {
+func (m *model) loadConfig() tea.Cmd {
 	return func() tea.Msg {
 		if m.app == nil {
 			return configLoadedMsg{content: demoConfigContent}
@@ -706,7 +999,7 @@ func (m model) loadConfig() tea.Cmd {
 	}
 }
 
-func (m model) saveConfig(content string) tea.Cmd {
+func (m *model) saveConfig(content string) tea.Cmd {
 	return func() tea.Msg {
 		if m.app == nil {
 			demoConfigContent = content
@@ -719,29 +1012,139 @@ func (m model) saveConfig(content string) tea.Cmd {
 	}
 }
 
-func (m model) switchEnv(name string) tea.Cmd {
+func (m *model) addSecret(secretKey, value string) tea.Cmd {
+	return func() tea.Msg {
+		if m.app == nil {
+			for _, secret := range demoSecretsByEnv[demoCurrent] {
+				if secret.key == secretKey {
+					return errMsg{err: fmt.Errorf("secret %s already exists", secretKey)}
+				}
+			}
+			demoSecretsByEnv[demoCurrent] = append(demoSecretsByEnv[demoCurrent], secretEntry{key: secretKey, value: value})
+			return operationDoneMsg{message: "Added " + secretKey}
+		}
+		if err := m.app.AddSecret(context.Background(), m.current, secretKey, value); err != nil {
+			return errMsg{err}
+		}
+		return operationDoneMsg{message: "Added " + secretKey}
+	}
+}
+
+func (m *model) editSecret(secretKey, value string) tea.Cmd {
+	return func() tea.Msg {
+		if m.app == nil {
+			for i, secret := range demoSecretsByEnv[demoCurrent] {
+				if secret.key == secretKey {
+					demoSecretsByEnv[demoCurrent][i].value = value
+				}
+			}
+			return operationDoneMsg{message: "Updated " + secretKey}
+		}
+		if err := m.app.EditSecret(context.Background(), m.current, secretKey, value); err != nil {
+			return errMsg{err}
+		}
+		return operationDoneMsg{message: "Updated " + secretKey}
+	}
+}
+
+func (m *model) deleteSecret(secretKey string) tea.Cmd {
+	return func() tea.Msg {
+		if m.app == nil {
+			updated := make([]secretEntry, 0, len(demoSecretsByEnv[demoCurrent]))
+			for _, secret := range demoSecretsByEnv[demoCurrent] {
+				if secret.key != secretKey {
+					updated = append(updated, secret)
+				}
+			}
+			demoSecretsByEnv[demoCurrent] = updated
+			return operationDoneMsg{message: "Deleted " + secretKey}
+		}
+		if err := m.app.DeleteSecret(context.Background(), m.current, secretKey); err != nil {
+			return errMsg{err}
+		}
+		return operationDoneMsg{message: "Deleted " + secretKey}
+	}
+}
+
+func (m *model) switchEnv(name string) tea.Cmd {
 	return func() tea.Msg {
 		if m.app == nil {
 			demoCurrent = name
-			for i, env := range demoEnvs {
-				demoEnvs[i].isCurrent = (env.name == name)
+			for i := range demoEnvs {
+				demoEnvs[i].isCurrent = demoEnvs[i].name == name
 			}
-			return operationDoneMsg{message: fmt.Sprintf("Switched to %s", name)}
+			return operationDoneMsg{message: "Switched to " + name}
 		}
 		if err := m.app.SwitchEnvironment(name); err != nil {
 			return errMsg{err}
 		}
-		return operationDoneMsg{message: fmt.Sprintf("Switched to %s", name)}
+		return operationDoneMsg{message: "Switched to " + name}
+	}
+}
+
+func (m *model) createEnvironment(name string) tea.Cmd {
+	return func() tea.Msg {
+		if m.app == nil {
+			demoEnvs = append(demoEnvs, envItem{name: name, isCurrent: true})
+			for i := range demoEnvs {
+				demoEnvs[i].isCurrent = demoEnvs[i].name == name
+			}
+			demoSecretsByEnv[name] = nil
+			demoCurrent = name
+			return operationDoneMsg{message: "Created " + name}
+		}
+		if err := m.app.CreateEnvironment(name); err != nil {
+			return errMsg{err}
+		}
+		return operationDoneMsg{message: "Created " + name}
+	}
+}
+
+func (m *model) pullSecrets() tea.Cmd {
+	return func() tea.Msg {
+		if m.app == nil {
+			return operationDoneMsg{message: "Wrote environment file"}
+		}
+		if err := m.app.PullSecretsToFile(context.Background(), m.current); err != nil {
+			return errMsg{err}
+		}
+		return operationDoneMsg{message: "Wrote environment file"}
 	}
 }
 
 func mapToEntries(secrets map[string]string) []secretEntry {
 	entries := make([]secretEntry, 0, len(secrets))
-	for k, v := range secrets {
-		entries = append(entries, secretEntry{key: k, value: v})
+	for secretKey, value := range secrets {
+		entries = append(entries, secretEntry{key: secretKey, value: value})
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].key < entries[j].key
-	})
+	sort.Slice(entries, func(i, j int) bool { return entries[i].key < entries[j].key })
 	return entries
+}
+
+func selectedIf(value string, selected bool) string {
+	if selected {
+		return selectedRowStyle.Render(value)
+	}
+	return value
+}
+
+func truncate(value string, width int) string {
+	if lipgloss.Width(value) <= width {
+		return value
+	}
+	runes := []rune(value)
+	if len(runes) > width {
+		runes = runes[:width]
+	}
+	for len(runes) > 0 && lipgloss.Width(string(runes))+1 > width {
+		runes = runes[:len(runes)-1]
+	}
+	return string(runes) + "…"
+}
+
+func fallback(value, defaultValue string) string {
+	if value == "" {
+		return defaultValue
+	}
+	return value
 }

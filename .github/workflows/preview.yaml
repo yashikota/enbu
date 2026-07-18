@@ -52,10 +52,10 @@ jobs:
           path: web/dist-preview
 
   build-tui:
-    name: Build TUI Screenshots
+    name: Build Interactive TUI Preview
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -68,32 +68,45 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Restore browser VM cache
+        id: browser-vm-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: test/preview/out/tui/out.wasm.gz
+          key: tui-vm-${{ runner.os }}-c2w-v0.8.4-${{ hashFiles('go.mod', 'go.sum', '**/*.go', 'test/preview/Dockerfile.tui') }}
+
       - name: Build TUI demo binary
-        run: go build -o tui-demo ./test/preview/tui-demo
+        run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tui-demo ./test/preview/tui-demo
 
-      - name: Install VHS dependencies
+      - name: Build TUI container
+        if: steps.browser-vm-cache.outputs.cache-hit != 'true'
+        run: docker build -f test/preview/Dockerfile.tui -t enbu-tui-preview:local .
+
+      - name: Install container2wasm
+        if: steps.browser-vm-cache.outputs.cache-hit != 'true'
+        env:
+          C2W_VERSION: v0.8.4
+          C2W_COMMIT: 6ed3d98882a2b22eafc1334f574c364a5b2b8c47
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          curl -fsSL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 -o /usr/local/bin/ttyd
-          sudo chmod +x /usr/local/bin/ttyd
+          curl -fsSL "https://github.com/container2wasm/container2wasm/releases/download/${C2W_VERSION}/container2wasm-${C2W_VERSION}-linux-amd64.tar.gz" -o /tmp/c2w.tar.gz
+          echo "1142ab95212578c0c7f666de830de6945f2abbea1713d1e07a7cb04072e00f31  /tmp/c2w.tar.gz" | sha256sum -c -
+          sudo tar -xz -C /usr/local/bin -f /tmp/c2w.tar.gz c2w
+          curl -fsSL "https://github.com/container2wasm/container2wasm/archive/${C2W_COMMIT}.tar.gz" -o /tmp/c2w-assets.tar.gz
+          echo "4815b8923167732ad53a8b60492395c6b0a9ff3d14cc2ac7fa08afab48e47bc5  /tmp/c2w-assets.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/c2w-assets
+          tar -xzf /tmp/c2w-assets.tar.gz -C /tmp/c2w-assets --strip-components=1
 
-      - name: Install VHS
-        run: go install github.com/charmbracelet/vhs@latest
-
-      - name: Generate GIFs
+      - name: Build browser VM
+        if: steps.browser-vm-cache.outputs.cache-hit != 'true'
         run: |
-          mkdir -p test/preview/vhs/out
-          GOPATH="$(go env GOPATH)"
-          export PATH="$PWD:${GOPATH}/bin:$PATH"
-          for tape in test/preview/vhs/*.tape; do
-            vhs "$tape"
-          done
+          mkdir -p test/preview/out/tui
+          c2w --assets /tmp/c2w-assets enbu-tui-preview:local test/preview/out/tui/out.wasm
+          gzip -9 test/preview/out/tui/out.wasm
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tui-preview
-          path: test/preview/vhs/out
+          path: test/preview/out
 
   deploy:
     name: Deploy to GitHub Pages
@@ -124,12 +137,17 @@ jobs:
       - name: Copy preview page
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          sparse-checkout: test/preview/index.html
+          sparse-checkout: |
+            test/preview/index.html
+            test/preview/coi-serviceworker.min.js
           sparse-checkout-cone-mode: false
           path: src
           persist-credentials: false
 
       - run: cp src/test/preview/index.html site/index.html
+
+      - name: Copy cross-origin isolation worker
+        run: cp src/test/preview/coi-serviceworker.min.js site/coi-serviceworker.min.js
 
       - name: Determine deploy path
         id: path

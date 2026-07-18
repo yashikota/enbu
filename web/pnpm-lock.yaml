@@ -385,6 +385,9 @@ importers:
       '@ark-ui/react':
         specifier: ^5.37.2
         version: 5.37.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@bjorn3/browser_wasi_shim':
+        specifier: 0.2.9
+        version: 0.2.9
       '@icons-pack/react-simple-icons':
         specifier: ^13.13.0
         version: 13.13.0(react@19.2.7)
@@ -400,6 +403,9 @@ importers:
       '@taplo/lsp':
         specifier: ^0.8.0
         version: 0.8.0
+      ghostty-web:
+        specifier: 0.4.0
+        version: 0.4.0
       lucide-react:
         specifier: ^1.23.0
         version: 1.23.0(react@19.2.7)
@@ -415,6 +421,9 @@ importers:
       smol-toml:
         specifier: ^1.7.0
         version: 1.7.0
+      xterm-pty:
+        specifier: 0.9.4
+        version: 0.9.4
     devDependencies:
       '@pandacss/dev':
         specifier: ^1.11.4
@@ -556,6 +565,9 @@ packages:
 
   '@better-fetch/fetch@1.1.18':
     resolution: {integrity: sha512-rEFOE1MYIsBmoMJtQbl32PGHHXuG2hDxvEd7rUHE0vCBoFQVSDqaVs9hkZEtHCxRoY+CljXKFCOuJ8uxqw1LcA==}
+
+  '@bjorn3/browser_wasi_shim@0.2.9':
+    resolution: {integrity: sha512-EyLP/p2l7gz40kllHupJpCZb5DccfcUQzSeLRCNXtp33PahHRSsFVQo+1Qmba7GsHVonNk6FJmlr0IY8fG7hzQ==}
 
   '@blazediff/core@1.9.1':
     resolution: {integrity: sha512-ehg3jIkYKulZh+8om/O25vkvSsXXwC+skXmyA87FFx6A/45eqOkZsBltMw/TVteb0mloiGT8oGRTcjRAz66zaA==}
@@ -2640,6 +2652,9 @@ packages:
   get-tsconfig@4.14.0:
     resolution: {integrity: sha512-yTb+8DXzDREzgvYmh6s9vHsSVCHeC0G3PI5bEXNBHtmshPnO+S5O7qgLEOn0I5QvMy6kpZN8K1NKGyilLb93wA==}
 
+  ghostty-web@0.4.0:
+    resolution: {integrity: sha512-0puDBik2qapbD/QQBW9o5ZHfXnZBqZWx/ctBiVtKZ6ZLds4NYb+wZuw1cRLXZk9zYovIQ908z3rvFhexAvc5Hg==}
+
   glob-parent@5.1.2:
     resolution: {integrity: sha512-AOIgSQCepiJYwP3ARnGx+5VnTu2HBYdzbGP45eLw1vr3zB3vZLeyed1sC9hnbcOc9/SrMyM5RPQrkGz4aS9Zow==}
     engines: {node: '>= 6'}
@@ -3697,6 +3712,13 @@ packages:
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
 
+  xterm-pty@0.9.4:
+    resolution: {integrity: sha512-bqQUdJgFjObaoQ4n9b/fRsZJ7F3PjxeoO1ib1mqxH6GPAFQVBWf+6Vr8I5XBsiMcwfmCOVQWmFXB6bW+BFyPlQ==}
+
+  xterm@4.19.0:
+    resolution: {integrity: sha512-c3Cp4eOVsYY5Q839dR5IejghRPpxciGmLWWaP9g+ppfMeBChMeLa1DCA+pmX/jyDZ+zxFOmlJL/82qVdayVoGQ==}
+    deprecated: This package is now deprecated. Move to @xterm/xterm instead.
+
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
@@ -3955,6 +3977,8 @@ snapshots:
       '@babel/helper-validator-identifier': 7.29.7
 
   '@better-fetch/fetch@1.1.18': {}
+
+  '@bjorn3/browser_wasi_shim@0.2.9': {}
 
   '@blazediff/core@1.9.1': {}
 
@@ -6476,6 +6500,8 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
+  ghostty-web@0.4.0: {}
+
   glob-parent@5.1.2:
     dependencies:
       is-glob: 4.0.3
@@ -7447,6 +7473,12 @@ snapshots:
   xml-name-validator@5.0.0: {}
 
   xmlchars@2.2.0: {}
+
+  xterm-pty@0.9.4:
+    dependencies:
+      xterm: 4.19.0
+
+  xterm@4.19.0: {}
 
   yallist@3.1.1: {}
 
