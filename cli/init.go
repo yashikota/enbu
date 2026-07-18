@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yashikota/enbu/app"
 	"github.com/yashikota/enbu/config"
+	gitprovider "github.com/yashikota/enbu/provider/git"
 	gh "github.com/yashikota/enbu/provider/github"
 	"github.com/yashikota/enbu/utils/age"
 	"github.com/yashikota/enbu/utils/keystore"
@@ -49,10 +49,14 @@ func newInitCommand(a *app.App) *cobra.Command {
 				}
 			}
 
-			repoRoot, err := config.RepoRoot()
+			repository, err := gitClient(a).Inspect(ctx, ".")
 			if err != nil {
 				return fmt.Errorf("finding repository root: %w", err)
 			}
+			if !repository.HasGit {
+				return fmt.Errorf("finding repository root: not in a git repository")
+			}
+			repoRoot := repository.Root
 
 			existingTags, err := a.Registry.ListTags(ctx, registryRef, accessToken)
 			if err != nil && !strings.Contains(err.Error(), "404") && !strings.Contains(err.Error(), "NAME_UNKNOWN") {
@@ -156,7 +160,7 @@ func newInitCommand(a *app.App) *cobra.Command {
 			ensureProjectGitignore(repoRoot, projectCfg)
 
 			if configMissing {
-				if err := gitCommitInitFiles(repoRoot); err != nil {
+				if err := gitCommitInitFiles(ctx, gitClient(a), repoRoot); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to commit init files: %v\n", err)
 					fmt.Println("  Run: git add enbu.toml .gitignore && git commit -m 'chore: add enbu config'")
 				} else {
@@ -297,18 +301,11 @@ func ensureGitignore(repoRoot string, extraEntries ...string) error {
 	return err
 }
 
-func gitCommitInitFiles(repoRoot string) error {
-	addCmd := exec.Command("git", "add", "enbu.toml", ".gitignore")
-	addCmd.Dir = repoRoot
-	if out, err := addCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git add: %s: %w", out, err)
-	}
-
-	commitCmd := exec.Command("git", "commit", "-m", "chore: add enbu config")
-	commitCmd.Dir = repoRoot
-	if out, err := commitCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git commit: %s: %w", out, err)
-	}
-
-	return nil
+func gitCommitInitFiles(ctx context.Context, client gitprovider.Client, repoRoot string) error {
+	return client.CommitFiles(
+		ctx,
+		repoRoot,
+		[]string{"enbu.toml", ".gitignore"},
+		"chore: add enbu config",
+	)
 }

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://park-ui.com/schema.json",
+  "framework": "react",
+  "jsxExtension": "tsx",
+  "outdir": "src/components/ui",
+  "css": "panda",
+  "theme": {
+    "recipes": "src/theme/recipes"
+  }
+}

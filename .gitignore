@@ -1,7 +1,9 @@
 enbu
 dist/
 .env
+.worktrees/
 *.enc
+output/
 
 # Binaries for programs and plugins
 *.exe
@@ -19,3 +21,15 @@ coverage.*
 *.coverprofile
 profile.cov
 
+# Misc
+plans/
+docs/superpowers/
+
+# Frontend
+web/node_modules/
+web/dist/
+web/dist-preview/
+web/package.json.md5
+web/src/routeTree.gen.ts
+web/src/wailsjs/
+desktop/wails/build/

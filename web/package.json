@@ -1,0 +1,54 @@
+{
+  "name": "frontend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare": "panda codegen --clean",
+    "dev": "(panda codegen --watch & vp dev) > web.log 2>&1",
+    "build": "panda codegen --clean && vp build",
+    "build:preview": "panda codegen --clean && vp build --mode preview",
+    "lint": "vp lint",
+    "fmt": "vp fmt",
+    "fmt:check": "vp fmt --check",
+    "test": "vp test",
+    "check": "vp check && vp test",
+    "preview": "vp preview"
+  },
+  "dependencies": {
+    "@ark-ui/react": "^5.37.2",
+    "@icons-pack/react-simple-icons": "^13.13.0",
+    "@park-ui/panda-preset": "^0.43.1",
+    "@tanstack/react-router": "^1.170.17",
+    "@taplo/core": "^0.2.0",
+    "@taplo/lsp": "^0.8.0",
+    "lucide-react": "^1.23.0",
+    "monaco-editor": "^0.55.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "smol-toml": "^1.7.0"
+  },
+  "devDependencies": {
+    "@pandacss/dev": "^1.11.4",
+    "@pandacss/preset-base": "^1.11.4",
+    "@park-ui/cli": "^1.0.1",
+    "@tanstack/router-devtools": "^1.167.0",
+    "@tanstack/router-plugin": "^1.168.19",
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "jsdom": "^29.1.1",
+    "typescript": "~7.0.2",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.12.0",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@11.12.0"
+}

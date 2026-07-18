@@ -241,6 +241,37 @@ func TestSaveProject(t *testing.T) {
 	}
 }
 
+func TestMarshalProjectUsesFlatEnvironmentTables(t *testing.T) {
+	cfg := NewProjectWithEnvironment("default")
+	content, err := MarshalProject(cfg)
+	if err != nil {
+		t.Fatalf("MarshalProject: %v", err)
+	}
+	want := "version = \"v1alpha1\"\ndefault_env = \"default\"\n\n[env.default]\noutput = \".env\"\n"
+	if string(content) != want {
+		t.Fatalf("unexpected TOML:\n%s\nwant:\n%s", content, want)
+	}
+}
+
+func TestMarshalProjectSortsAndQuotesEnvironmentNames(t *testing.T) {
+	cfg := &ProjectConfig{
+		Version:    "v1alpha1",
+		DefaultEnv: "a.b",
+		Environments: map[string]EnvironmentConfig{
+			"z":   {Output: ".env.z"},
+			"a.b": {Output: ".env.dotted"},
+		},
+	}
+	content, err := MarshalProject(cfg)
+	if err != nil {
+		t.Fatalf("MarshalProject: %v", err)
+	}
+	want := "version = \"v1alpha1\"\ndefault_env = \"a.b\"\n\n[env.\"a.b\"]\noutput = \".env.dotted\"\n\n[env.z]\noutput = \".env.z\"\n"
+	if string(content) != want {
+		t.Fatalf("unexpected TOML:\n%s\nwant:\n%s", content, want)
+	}
+}
+
 func TestNewProjectWithEnvironment(t *testing.T) {
 	cfg := NewProjectWithEnvironment("dev")
 	if cfg.DefaultEnv != "dev" {
