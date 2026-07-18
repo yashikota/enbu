@@ -97,7 +97,7 @@ type model struct {
 
 	revealed map[string]bool
 
-	spinner spinner.Model
+	spinner         spinner.Model
 	copyToClipboard func(string) error
 
 	loading bool
