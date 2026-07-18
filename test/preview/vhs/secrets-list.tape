@@ -14,4 +14,13 @@ Down
 Sleep 400ms
 Up
 Sleep 400ms
+Space
+Sleep 700ms
+Space
+Sleep 400ms
+Type "2"
+Sleep 700ms
+Type "3"
+Sleep 700ms
+Type "1"
 Sleep 1s
