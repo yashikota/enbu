@@ -13,7 +13,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/auth"
 	"github.com/yashikota/enbu/config"
 )
 
@@ -99,6 +98,8 @@ type model struct {
 	revealed map[string]bool
 
 	spinner spinner.Model
+	copyToClipboard func(string) error
+
 	loading bool
 	err     error
 	status  string
@@ -107,7 +108,6 @@ type model struct {
 	height int
 	hits   []hitRegion
 
-	copyToClipboard func(string) error
 }
 
 type secretEntry struct {
@@ -152,7 +152,7 @@ func newModel(a *app.App) *model {
 		focusKey:        true,
 		loading:         true,
 		revealed:        make(map[string]bool),
-		copyToClipboard: auth.CopyToClipboard,
+		copyToClipboard: copyToClipboard,
 	}
 }
 

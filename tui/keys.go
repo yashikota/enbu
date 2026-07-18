@@ -6,7 +6,7 @@ type keyMap struct {
 	Up, Down, Add, Edit, Delete, Switch, Refresh, Pull key.Binding
 	Enter, Escape, Quit, Tab, TabNext, TabPrev         key.Binding
 	SecretsTab, MembersTab, SettingsTab                key.Binding
-	Reveal, CopyValue, CopyKey, ToggleView, Save       key.Binding
+	Reveal, CopyValue, CopyKey, ToggleView, Save        key.Binding
 }
 
 func binding(keys ...string) key.Binding { return key.NewBinding(key.WithKeys(keys...)) }
