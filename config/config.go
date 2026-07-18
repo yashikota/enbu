@@ -36,13 +36,25 @@ type LocalConfig struct {
 }
 
 func LoadProject() (*ProjectConfig, error) {
-	path, err := findProjectConfig()
+	return LoadProjectFrom("")
+}
+
+func LoadProjectFrom(dir string) (*ProjectConfig, error) {
+	path, err := findProjectConfigFrom(dir)
 	if err != nil {
 		return nil, ErrConfigNotFound{msg: err.Error()}
 	}
 
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading enbu.toml: %w", err)
+	}
+	return ParseProject(string(data))
+}
+
+func ParseProject(content string) (*ProjectConfig, error) {
 	var cfg ProjectConfig
-	if _, err := toml.DecodeFile(path, &cfg); err != nil {
+	if _, err := toml.Decode(content, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing enbu.toml: %w", err)
 	}
 	if cfg.Version != currentVersion {
@@ -51,10 +63,28 @@ func LoadProject() (*ProjectConfig, error) {
 	return &cfg, nil
 }
 
+func ValidateProjectOutputs(cfg *ProjectConfig) error {
+	for name, env := range cfg.Environments {
+		output := strings.TrimSpace(env.Output)
+		if output == "" {
+			continue
+		}
+		clean := filepath.Clean(output)
+		if filepath.IsAbs(output) || clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("environment %q output must stay within the repository", name)
+		}
+	}
+	return nil
+}
+
 func SaveProject(cfg *ProjectConfig) error {
-	path, err := findProjectConfig()
+	return SaveProjectTo("", cfg)
+}
+
+func SaveProjectTo(dir string, cfg *ProjectConfig) error {
+	path, err := findProjectConfigFrom(dir)
 	if err != nil {
-		path = "enbu.toml"
+		path = filepath.Join(baseDir(dir), "enbu.toml")
 	}
 
 	content, err := MarshalProject(cfg)
@@ -92,7 +122,11 @@ func MarshalProject(cfg *ProjectConfig) ([]byte, error) {
 }
 
 func LoadLocal() (*LocalConfig, error) {
-	path, err := findLocalConfig()
+	return LoadLocalFrom("")
+}
+
+func LoadLocalFrom(dir string) (*LocalConfig, error) {
+	path, err := findLocalConfigFrom(dir)
 	if err != nil {
 		return &LocalConfig{}, nil
 	}
@@ -105,9 +139,13 @@ func LoadLocal() (*LocalConfig, error) {
 }
 
 func SaveLocal(cfg *LocalConfig) error {
-	path, err := findLocalConfig()
+	return SaveLocalTo("", cfg)
+}
+
+func SaveLocalTo(dir string, cfg *LocalConfig) error {
+	path, err := findLocalConfigFrom(dir)
 	if err != nil {
-		path = ".enbu.local"
+		path = filepath.Join(baseDir(dir), ".enbu.local")
 	}
 
 	f, err := os.Create(path)
@@ -123,11 +161,8 @@ func SaveLocal(cfg *LocalConfig) error {
 	return f.Close()
 }
 
-func findLocalConfig() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
+func findLocalConfigFrom(dir string) (string, error) {
+	dir = baseDir(dir)
 
 	for {
 		path := filepath.Join(dir, ".enbu.local")
@@ -281,14 +316,15 @@ func ValidEnvironmentName(name string) bool {
 
 // ProjectConfigPath returns the path to enbu.toml by traversing up from cwd.
 func ProjectConfigPath() (string, error) {
-	return findProjectConfig()
+	return ProjectConfigPathFrom("")
 }
 
-func findProjectConfig() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
+func ProjectConfigPathFrom(dir string) (string, error) {
+	return findProjectConfigFrom(dir)
+}
+
+func findProjectConfigFrom(dir string) (string, error) {
+	dir = baseDir(dir)
 
 	for {
 		path := filepath.Join(dir, "enbu.toml")
@@ -306,6 +342,16 @@ func findProjectConfig() (string, error) {
 	return "", fmt.Errorf("enbu.toml not found (run 'enbu init' first)")
 }
 
+func baseDir(dir string) string {
+	if dir != "" {
+		return dir
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return wd
+}
 func ParseGitRemote(url string) (string, string, error) {
 	url = strings.TrimSuffix(url, "/")
 	if strings.HasPrefix(url, "git@") {

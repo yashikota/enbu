@@ -13,7 +13,7 @@ type EnvInfo struct {
 }
 
 func (a *App) ListEnvironments() ([]EnvInfo, error) {
-	cfg, err := config.LoadProject()
+	cfg, err := a.loadProject()
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func (a *App) ListEnvironments() ([]EnvInfo, error) {
 }
 
 func (a *App) CurrentEnvironment() (string, error) {
-	cfg, err := config.LoadProject()
+	cfg, err := a.loadProject()
 	if err != nil {
 		return "", err
 	}
@@ -40,7 +40,7 @@ func (a *App) CurrentEnvironment() (string, error) {
 }
 
 func (a *App) SwitchEnvironment(name string) error {
-	cfg, err := config.LoadProject()
+	cfg, err := a.loadProject()
 	if err != nil {
 		return err
 	}
@@ -56,20 +56,20 @@ func (a *App) SwitchEnvironment(name string) error {
 
 	cfg.SetDefault(name)
 
-	if err := config.SaveProject(cfg); err != nil {
+	if err := a.saveProject(cfg); err != nil {
 		return err
 	}
 
-	if local, err := config.LoadLocal(); err == nil && local != nil {
+	if local, err := a.loadLocal(); err == nil && local != nil {
 		local.Previous = previous
-		_ = config.SaveLocal(local)
+		_ = a.saveLocal(local)
 	}
 
 	return nil
 }
 
 func (a *App) SwitchPrevious() (string, error) {
-	local, err := config.LoadLocal()
+	local, err := a.loadLocal()
 	if err != nil || local.Previous == "" {
 		return "", fmt.Errorf("no previous environment")
 	}
@@ -85,14 +85,14 @@ func (a *App) CreateEnvironment(name string) error {
 		return fmt.Errorf("invalid environment name %q", name)
 	}
 
-	cfg, err := config.LoadProject()
+	cfg, err := a.loadProject()
 	if err != nil {
 		var notFound config.ErrConfigNotFound
 		if !errors.As(err, &notFound) {
 			return err
 		}
 		cfg = config.NewProjectWithEnvironment(name)
-		if err := config.SaveProject(cfg); err != nil {
+		if err := a.saveProject(cfg); err != nil {
 			return err
 		}
 		return nil
@@ -105,20 +105,20 @@ func (a *App) CreateEnvironment(name string) error {
 	previous := cfg.CurrentEnvironment()
 	cfg.SetDefault(name)
 
-	if err := config.SaveProject(cfg); err != nil {
+	if err := a.saveProject(cfg); err != nil {
 		return err
 	}
 
-	if local, err := config.LoadLocal(); err == nil && local != nil {
+	if local, err := a.loadLocal(); err == nil && local != nil {
 		local.Previous = previous
-		_ = config.SaveLocal(local)
+		_ = a.saveLocal(local)
 	}
 
 	return nil
 }
 
 func (a *App) DeleteEnvironment(name string) error {
-	cfg, err := config.LoadProject()
+	cfg, err := a.loadProject()
 	if err != nil {
 		return err
 	}
@@ -131,11 +131,11 @@ func (a *App) DeleteEnvironment(name string) error {
 		return err
 	}
 
-	return config.SaveProject(cfg)
+	return a.saveProject(cfg)
 }
 
 func (a *App) RenameEnvironment(oldName, newName string) error {
-	cfg, err := config.LoadProject()
+	cfg, err := a.loadProject()
 	if err != nil {
 		return err
 	}
@@ -144,5 +144,5 @@ func (a *App) RenameEnvironment(oldName, newName string) error {
 		return err
 	}
 
-	return config.SaveProject(cfg)
+	return a.saveProject(cfg)
 }

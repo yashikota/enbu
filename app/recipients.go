@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"strings"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type RecipientInfo struct {
@@ -27,27 +29,49 @@ func (a *App) ListRecipients(ctx context.Context) ([]RecipientInfo, error) {
 		return nil, err
 	}
 
-	var results []RecipientInfo
+	var recipientTags []string
 	for _, tag := range tags {
-		if !IsUserRecipientTag(tag) {
-			continue
+		if IsUserRecipientTag(tag) {
+			recipientTags = append(recipientTags, tag)
 		}
-		tagRef := ref + ":" + tag
-		data, err := a.Registry.Pull(ctx, tagRef, accessToken)
-		if err != nil {
-			continue
-		}
-		// tag format: recipient-{username}-{fingerprint}
-		without := strings.TrimPrefix(tag, RecipientTagPrefix())
-		lastDash := strings.LastIndex(without, "-")
-		if lastDash < 0 {
-			continue
-		}
-		results = append(results, RecipientInfo{
-			Username:    without[:lastDash],
-			Fingerprint: without[lastDash+1:],
-			PublicKey:   strings.TrimSpace(string(data)),
+	}
+
+	type pullResult struct {
+		recipient RecipientInfo
+		ok        bool
+	}
+	pulled := make([]pullResult, len(recipientTags))
+	var group errgroup.Group
+	group.SetLimit(8)
+	for i, tag := range recipientTags {
+		i, tag := i, tag
+		group.Go(func() error {
+			tagRef := ref + ":" + tag
+			data, err := a.Registry.Pull(ctx, tagRef, accessToken)
+			if err != nil {
+				return nil
+			}
+			// tag format: recipient-{username}-{fingerprint}
+			without := strings.TrimPrefix(tag, RecipientTagPrefix())
+			lastDash := strings.LastIndex(without, "-")
+			if lastDash < 0 {
+				return nil
+			}
+			pulled[i] = pullResult{ok: true, recipient: RecipientInfo{
+				Username:    without[:lastDash],
+				Fingerprint: without[lastDash+1:],
+				PublicKey:   strings.TrimSpace(string(data)),
+			}}
+			return nil
 		})
+	}
+	_ = group.Wait()
+
+	results := make([]RecipientInfo, 0, len(pulled))
+	for _, result := range pulled {
+		if result.ok {
+			results = append(results, result.recipient)
+		}
 	}
 	return results, nil
 }

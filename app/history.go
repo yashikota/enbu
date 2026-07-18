@@ -27,7 +27,7 @@ type Diff struct {
 }
 
 func (a *App) ListHistory(ctx context.Context, env string) ([]HistoryEntry, error) {
-	resolved, err := ResolveEnvironment(env)
+	resolved, err := a.resolveEnvironment(env)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (a *App) DiffHistory(ctx context.Context, env string, fromIdx, toIdx int) (
 }
 
 func (a *App) RestoreHistory(ctx context.Context, env string, idx int) error {
-	resolved, err := ResolveEnvironment(env)
+	resolved, err := a.resolveEnvironment(env)
 	if err != nil {
 		return err
 	}

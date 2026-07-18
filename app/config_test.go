@@ -15,16 +15,7 @@ func TestReadWriteConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	orig, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = os.Chdir(orig) }()
-
-	a := &App{}
+	a := &App{RepositoryDir: dir}
 
 	got, err := a.ReadConfig()
 	if err != nil {
@@ -48,19 +39,32 @@ func TestReadWriteConfig(t *testing.T) {
 	}
 }
 
+func TestWriteConfigRejectsOutputOutsideRepository(t *testing.T) {
+	dir := t.TempDir()
+	tomlPath := filepath.Join(dir, "enbu.toml")
+	original := "version = \"v1alpha1\"\n"
+	if err := os.WriteFile(tomlPath, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := &App{RepositoryDir: dir}
+	err := a.WriteConfig("version = \"v1alpha1\"\n[env.dev]\noutput = \"../secrets.local\"\n")
+	if err == nil {
+		t.Fatal("WriteConfig succeeded for output outside repository")
+	}
+	data, readErr := os.ReadFile(tomlPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(data) != original {
+		t.Fatalf("config changed after rejected write: %q", data)
+	}
+}
+
 func TestReadConfigMissing(t *testing.T) {
 	dir := t.TempDir()
-	orig, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = os.Chdir(orig) }()
-
-	a := &App{}
-	_, err = a.ReadConfig()
+	a := &App{RepositoryDir: dir}
+	_, err := a.ReadConfig()
 	if err == nil {
 		t.Fatal("ReadConfig succeeded for missing enbu.toml, want error")
 	}

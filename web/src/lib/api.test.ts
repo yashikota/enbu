@@ -47,6 +47,7 @@ describe("api.auth.status", () => {
         JSON.stringify({
           error: { message: "not logged in", code: "NOT_AUTHENTICATED" },
         }),
+        { status: 401 },
       ),
     );
 

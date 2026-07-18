@@ -311,6 +311,7 @@ func (s *Service) SelectRepository(path string) (RepoInfo, error) {
 	saveErr := config.SaveGUI(cfg)
 	if saveErr == nil {
 		s.repoPath = repo.Path
+		s.app.SetRepositoryDir(repo.Path)
 	}
 	s.repoMu.Unlock()
 	if saveErr != nil {
@@ -402,13 +403,14 @@ func (s *Service) GitCreateRemote(path, owner, repoName string, private bool) (R
 	if err != nil {
 		return RepoInfo{}, err
 	}
-	if err := s.git.AddRemote(s.context(), path, "origin", result.SSHURL); err != nil {
-		// Fall back to HTTPS when SSH fails.
-		if err2 := s.git.AddRemote(s.context(), path, "origin", result.HTTPSURL); err2 != nil {
-			return RepoInfo{}, fmt.Errorf("git remote add: %w", err)
-		}
+	if err := s.git.AddRemote(s.context(), path, "origin", preferredRemoteURL(result)); err != nil {
+		return RepoInfo{}, fmt.Errorf("git remote add: %w", err)
 	}
 	return s.SelectRepository(path)
+}
+
+func preferredRemoteURL(result *gh.CreateRepoResult) string {
+	return result.HTTPSURL
 }
 
 func (s *Service) ListRecipients() ([]Recipient, error) {
@@ -437,6 +439,16 @@ func (s *Service) ReadConfig() (string, error) {
 
 func (s *Service) WriteConfig(content string) error {
 	return s.withRepo(func() error {
+		cfg, err := config.ParseProject(content)
+		if err != nil {
+			return err
+		}
+		if err := config.ValidateProjectOutputs(cfg); err != nil {
+			return err
+		}
+		if err := ensureGitignore(s.app.RepositoryDir, projectGitignoreEntries(cfg)...); err != nil {
+			return fmt.Errorf("updating .gitignore: %w", err)
+		}
 		return s.app.WriteConfig(content)
 	})
 }
@@ -487,11 +499,8 @@ func (s *Service) Initialize() (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		repoRoot, err := os.Getwd()
-		if err == nil {
-			if err := ensureGitignore(repoRoot); err != nil {
-				slog.Warn("failed to update .gitignore", "err", err)
-			}
+		if err := ensureGitignore(s.app.RepositoryDir); err != nil {
+			slog.Warn("failed to update .gitignore", "err", err)
 		}
 		return map[string]any{
 			"public_key":  result.PublicKey,
@@ -608,6 +617,7 @@ func (s *Service) loadSelectedRepo() {
 		return
 	}
 	s.repoPath = repo.Path
+	s.app.SetRepositoryDir(repo.Path)
 }
 
 func (s *Service) repoInfo(repo *SelectedRepo) (RepoInfo, error) {
@@ -619,8 +629,9 @@ func (s *Service) repoInfo(repo *SelectedRepo) (RepoInfo, error) {
 		HasRemote: repo.HasRemote,
 	}
 	return withRepoPathResult(s, repo.Path, func() (RepoInfo, error) {
-		if _, err := config.LoadProject(); err == nil {
-			info.Initialized = true
+		if _, err := config.LoadProjectFrom(repo.Path); err == nil {
+			identities, identityErr := app.LoadIdentitiesForRepo(s.app.KeyStore, repo.Owner, repo.Repo)
+			info.Initialized = identityErr == nil && len(identities) > 0
 		}
 		return info, nil
 	})
@@ -647,15 +658,7 @@ func withRepoResult[T any](s *Service, fn func() (T, error)) (T, error) {
 func withRepoPathResult[T any](s *Service, path string, fn func() (T, error)) (T, error) {
 	s.repoMu.Lock()
 	defer s.repoMu.Unlock()
-	var zero T
-	wd, err := os.Getwd()
-	if err != nil {
-		return zero, err
-	}
-	if err := os.Chdir(path); err != nil {
-		return zero, err
-	}
-	defer func() { _ = os.Chdir(wd) }()
+	s.app.SetRepositoryDir(path)
 	return fn()
 }
 
@@ -673,7 +676,26 @@ var desktopGitignoreEntries = []string{
 	".enbu.local",
 }
 
-func ensureGitignore(repoRoot string) error {
+func projectGitignoreEntries(cfg *config.ProjectConfig) []string {
+	var entries []string
+	for _, name := range cfg.EnvironmentNames() {
+		env, err := cfg.Environment(name)
+		if err != nil {
+			continue
+		}
+		output := strings.TrimSpace(env.Output)
+		if output == "" || filepath.IsAbs(output) {
+			continue
+		}
+		if strings.HasPrefix(output, "#") || strings.HasPrefix(output, "!") {
+			output = `\` + output
+		}
+		entries = append(entries, output)
+	}
+	return entries
+}
+
+func ensureGitignore(repoRoot string, extraEntries ...string) error {
 	path := filepath.Join(repoRoot, ".gitignore")
 	existing := ""
 	if data, err := os.ReadFile(path); err == nil {
@@ -685,7 +707,9 @@ func ensureGitignore(repoRoot string) error {
 		lineSet[strings.TrimSpace(l)] = true
 	}
 	var toAdd []string
-	for _, entry := range desktopGitignoreEntries {
+	entries := append([]string{}, desktopGitignoreEntries...)
+	entries = append(entries, extraEntries...)
+	for _, entry := range entries {
 		entry = strings.TrimSpace(entry)
 		if entry != "" && !lineSet[entry] {
 			toAdd = append(toAdd, entry)
