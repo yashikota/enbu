@@ -68,13 +68,22 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Restore browser VM cache
+        id: browser-vm-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: test/preview/out/tui/out.wasm.gz
+          key: tui-vm-${{ runner.os }}-c2w-v0.8.4-${{ hashFiles('go.mod', 'go.sum', '**/*.go', 'test/preview/Dockerfile.tui') }}
+
       - name: Build TUI demo binary
         run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tui-demo ./test/preview/tui-demo
 
       - name: Build TUI container
+        if: steps.browser-vm-cache.outputs.cache-hit != 'true'
         run: docker build -f test/preview/Dockerfile.tui -t enbu-tui-preview:local .
 
       - name: Install container2wasm
+        if: steps.browser-vm-cache.outputs.cache-hit != 'true'
         env:
           C2W_VERSION: v0.8.4
           C2W_COMMIT: 6ed3d98882a2b22eafc1334f574c364a5b2b8c47
@@ -88,32 +97,11 @@ jobs:
           tar -xzf /tmp/c2w-assets.tar.gz -C /tmp/c2w-assets --strip-components=1
 
       - name: Build browser VM
+        if: steps.browser-vm-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p test/preview/out/tui
           c2w --assets /tmp/c2w-assets enbu-tui-preview:local test/preview/out/tui/out.wasm
           gzip -9 test/preview/out/tui/out.wasm
-
-      - name: Install VHS dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          curl -fsSL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 -o /usr/local/bin/ttyd
-          sudo chmod +x /usr/local/bin/ttyd
-
-      - name: Install VHS
-        run: go install github.com/charmbracelet/vhs@latest
-
-      - name: Generate GIFs
-        run: |
-          mkdir -p test/preview/vhs/out
-          GOPATH="$(go env GOPATH)"
-          export PATH="$PWD:${GOPATH}/bin:$PATH"
-          for tape in test/preview/vhs/*.tape; do
-            vhs "$tape"
-          done
-
-      - name: Assemble TUI preview
-        run: cp test/preview/vhs/out/*.gif test/preview/out/
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
