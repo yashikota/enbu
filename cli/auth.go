@@ -2,22 +2,14 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	agecrypto "filippo.io/age"
 	"github.com/spf13/cobra"
 	"github.com/yashikota/enbu/app"
 	"github.com/yashikota/enbu/auth"
 	"github.com/yashikota/enbu/config"
-	gh "github.com/yashikota/enbu/provider/github"
 	"github.com/yashikota/enbu/utils/keystore"
 )
-
-const defaultClientID = "Ov23li6nFmfdF4FW9ikd"
-
-func DefaultClientID() string {
-	return defaultClientID
-}
 
 func newAuthCommand(a *app.App) *cobra.Command {
 	cmd := &cobra.Command{
@@ -35,61 +27,26 @@ func newAuthCommand(a *app.App) *cobra.Command {
 }
 
 func newAuthLoginCommand() *cobra.Command {
-	var clientID string
-
 	cmd := &cobra.Command{
 		Use:   "login",
-		Short: "Authenticate with GitHub via OAuth Device Flow",
+		Short: "Authenticate with GitHub",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
 			fmt.Println("Initiating GitHub authentication...")
-			deviceResp, err := auth.RequestDeviceCode(ctx, clientID)
+			token, err := auth.Login(ctx, func(authorizeURL string) error {
+				fmt.Println("→ Opening GitHub in your browser...")
+				fmt.Println("Waiting for authorization...")
+				return auth.OpenBrowser(authorizeURL)
+			})
 			if err != nil {
-				return fmt.Errorf("requesting device code: %w", err)
+				return err
 			}
 
-			if err := auth.CopyToClipboard(deviceResp.UserCode); err == nil {
-				fmt.Printf("✓ Copied code to clipboard: %s\n", deviceResp.UserCode)
-			} else {
-				fmt.Printf("  Code: %s\n", deviceResp.UserCode)
-			}
-
-			fmt.Printf("→ Opening %s in your browser...\n", deviceResp.VerificationURI)
-			if err := auth.OpenBrowser(deviceResp.VerificationURI); err != nil {
-				fmt.Fprintf(os.Stderr, "  (Could not open browser automatically, visit the URL above)\n")
-			}
-
-			fmt.Println("\nWaiting for authorization...")
-
-			tokenResp, err := auth.PollForToken(ctx, clientID, deviceResp.DeviceCode, deviceResp.Interval)
-			if err != nil {
-				return fmt.Errorf("polling for token: %w", err)
-			}
-
-			client := gh.NewClient(tokenResp.AccessToken)
-			user, err := client.GetUser(ctx)
-			if err != nil {
-				return fmt.Errorf("getting user info: %w", err)
-			}
-
-			if err := auth.SaveToken(&auth.StoredToken{
-				AccessToken: tokenResp.AccessToken,
-				Username:    user.Login,
-			}); err != nil {
-				return fmt.Errorf("saving token: %w", err)
-			}
-
-			fmt.Printf("✓ Authenticated as: %s\n", user.Login)
+			fmt.Printf("✓ Authenticated as: %s\n", token.Username)
 			return nil
 		},
 	}
-
-	defaultID := os.Getenv("ENBU_CLIENT_ID")
-	if defaultID == "" {
-		defaultID = defaultClientID
-	}
-	cmd.Flags().StringVar(&clientID, "client-id", defaultID, "GitHub OAuth App client ID")
 
 	return cmd
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/yashikota/enbu/app"
 	"github.com/yashikota/enbu/assets"
-	"github.com/yashikota/enbu/cli"
 	"github.com/yashikota/enbu/desktop"
 	"github.com/yashikota/enbu/web"
 )
@@ -61,13 +60,7 @@ func main() {
 		defer logFile.Close()
 	}
 
-	clientID := cli.DefaultClientID()
-	if v := os.Getenv("ENBU_CLIENT_ID"); v != "" {
-		clientID = v
-	}
-	slog.Debug("config", "clientID", clientID)
-
-	core := desktop.NewService(app.New(), clientID)
+	core := desktop.NewService(app.New())
 	service := &DesktopService{service: core}
 	core.SetDirectoryPicker(func(ctx context.Context) (string, error) {
 		slog.Debug("OpenDirectoryDialog called")
@@ -76,7 +69,7 @@ func main() {
 		})
 	})
 	core.SetBrowserOpener(func(url string) error {
-		slog.Info("BrowserOpenURL", "url", url)
+		slog.Info("BrowserOpenURL")
 		runtime.BrowserOpenURL(core.Context(), url)
 		return nil
 	})

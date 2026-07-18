@@ -27,14 +27,14 @@ func TestGetUser(t *testing.T) {
 		if got := r.Header.Get("X-GitHub-Api-Version"); got != "2022-11-28" {
 			t.Errorf("API version = %q, want %q", got, "2022-11-28")
 		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"login": "testuser", "type": "User"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": int64(123), "login": "testuser", "type": "User"})
 	})
 
 	user, err := client.GetUser(context.Background())
 	if err != nil {
 		t.Fatalf("GetUser: %v", err)
 	}
-	if user.Login != "testuser" || user.Type != "User" {
+	if user.ID != 123 || user.Login != "testuser" || user.Type != "User" {
 		t.Fatalf("user = %#v", user)
 	}
 }

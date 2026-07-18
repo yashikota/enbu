@@ -13,17 +13,12 @@ const isMock =
   (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("mock")) ||
   import.meta.env.BASE_URL.includes("/enbu/");
 
-export interface DeviceStart {
+export interface OAuthStart {
   session_id: string;
-  user_code: string;
-  verification_uri: string;
   expires_at: string;
-  interval: number;
-  copied: boolean;
-  browser_opened: boolean;
 }
 
-export interface DeviceStatus {
+export interface OAuthStatus {
   state: "pending" | "success" | "expired" | "denied" | "error";
   message?: string;
   username?: string;
@@ -36,9 +31,9 @@ export interface RepositoryOwner {
 
 type DesktopService = {
   GetAuthStatus: () => Promise<DesktopAuthStatus>;
-  StartDeviceLogin: () => Promise<DeviceStart>;
-  GetDeviceLoginStatus: (sessionID: string) => Promise<DeviceStatus>;
-  CancelDeviceLogin: (sessionID: string) => Promise<void>;
+  StartOAuthLogin: () => Promise<OAuthStart>;
+  GetOAuthLoginStatus: (sessionID: string) => Promise<OAuthStatus>;
+  CancelOAuthLogin: (sessionID: string) => Promise<void>;
   Logout: () => Promise<void>;
   BrowseRepository: () => Promise<GUIRepoStatus["repo"]>;
   SelectRepository: (path: string) => Promise<GUIRepoStatus["repo"]>;
@@ -105,22 +100,22 @@ const realBackend = {
     }
     return normalizeAuthStatus(await svc.GetAuthStatus());
   },
-  async startDeviceLogin(): Promise<DeviceStart> {
+  async startOAuthLogin(): Promise<OAuthStart> {
     const svc = service();
     if (!svc) {
       throw new Error("Desktop authentication is not available");
     }
-    return svc.StartDeviceLogin();
+    return svc.StartOAuthLogin();
   },
-  async deviceStatus(sessionID: string): Promise<DeviceStatus> {
+  async oauthStatus(sessionID: string): Promise<OAuthStatus> {
     const svc = service();
     if (!svc) {
       throw new Error("Desktop authentication is not available");
     }
-    return svc.GetDeviceLoginStatus(sessionID);
+    return svc.GetOAuthLoginStatus(sessionID);
   },
-  async cancelDeviceLogin(sessionID: string): Promise<void> {
-    await service()?.CancelDeviceLogin(sessionID);
+  async cancelOAuthLogin(sessionID: string): Promise<void> {
+    await service()?.CancelOAuthLogin(sessionID);
   },
   async logout(): Promise<void> {
     const svc = service();

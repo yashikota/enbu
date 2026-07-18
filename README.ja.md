@@ -161,16 +161,20 @@ GHCR (ghcr.io/{owner}/{repo}-enbu)
 sequenceDiagram
     participant User as ユーザー
     participant CLI as enbu CLI
+    participant Auth as auth.enbu.net
     participant GitHub as GitHub OAuth
     participant GHCR as GHCR
 
     User->>CLI: enbu auth login
-    CLI->>GitHub: Device Code 要求
-    GitHub-->>CLI: User Code + Verification URI
-    CLI-->>User: コードを表示・ブラウザを開く
+    CLI->>CLI: 127.0.0.1 callback listenerを開始
+    CLI->>Auth: PKCE sessionを作成
+    Auth-->>CLI: GitHub認可URL
+    CLI-->>User: ブラウザを開く
     User->>GitHub: ブラウザで認証・承認
-    CLI->>GitHub: トークンをポーリング
-    GitHub-->>CLI: Access Token
+    GitHub-->>CLI: loopback callbackで認可コード
+    CLI->>Auth: PKCE verifierでコード交換
+    Auth-->>CLI: Access Token
+    CLI->>CLI: tokenをOSキーチェーンへ保存
     CLI-->>User: ✓ Authenticated
 
     User->>CLI: enbu init

@@ -13,9 +13,9 @@ beforeEach(() => {
     main: {
       DesktopService: {
         GetAuthStatus: vi.fn(),
-        StartDeviceLogin: vi.fn(),
-        GetDeviceLoginStatus: vi.fn(),
-        CancelDeviceLogin: vi.fn(),
+        StartOAuthLogin: vi.fn(),
+        GetOAuthLoginStatus: vi.fn(),
+        CancelOAuthLogin: vi.fn(),
         Logout: vi.fn(),
         BrowseRepository: vi.fn(),
         SelectRepository: vi.fn(),

@@ -19,9 +19,9 @@ import {
 vi.mock("../lib/backend", () => ({
   backend: {
     authStatus: vi.fn(async () => ({ authenticated: false })),
-    startDeviceLogin: vi.fn(),
-    deviceStatus: vi.fn(),
-    cancelDeviceLogin: vi.fn(),
+    startOAuthLogin: vi.fn(),
+    oauthStatus: vi.fn(),
+    cancelOAuthLogin: vi.fn(),
     logout: vi.fn(),
     repoStatus: vi.fn(async () => ({ selected: false })),
     browseRepository: vi.fn(),

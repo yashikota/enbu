@@ -58,7 +58,7 @@ The audit event content (which environment, which secrets) stays within the Priv
 
 ### OIDC Authentication Flow
 
-Normal enbu operations (pull, add, sync, etc.) continue to use GitHub Device Flow (OAuth access token).
+Normal enbu operations (pull, add, sync, etc.) use the GitHub OAuth access token obtained through the enbu auth broker with Authorization Code Flow and PKCE.
 The Fulcio signing request uses an additional OIDC flow via the cosign-go library.
 
 ```mermaid
@@ -68,7 +68,7 @@ sequenceDiagram
     participant Fulcio as Fulcio (Public)
     participant Rekor as Rekor (Private)
 
-    CLI->>GHCR: pull (Device Flow token)
+    CLI->>GHCR: pull (GitHub OAuth token)
     GHCR-->>CLI: encrypted artifact
     CLI->>CLI: decrypt → generate .env
     CLI->>Fulcio: OIDC ID token (browser auth on first use)

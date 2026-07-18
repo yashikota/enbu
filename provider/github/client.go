@@ -50,7 +50,7 @@ func (c *Client) GetUser(ctx context.Context) (*provider.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &provider.User{Login: user.GetLogin(), Type: user.GetType()}, nil
+	return &provider.User{ID: user.GetID(), Login: user.GetLogin(), Type: user.GetType()}, nil
 }
 
 func (c *Client) SourceRepoURL(owner, repo string) string {
