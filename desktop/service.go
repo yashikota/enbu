@@ -125,6 +125,7 @@ type DeviceStatus struct {
 	State    string `json:"state"`
 	Message  string `json:"message,omitempty"`
 	Username string `json:"username,omitempty"`
+	Storage  string `json:"storage,omitempty"`
 }
 
 type Environment struct {
@@ -262,12 +263,13 @@ func (s *Service) pollDeviceLogin(ctx context.Context, sessionID, deviceCode str
 		return
 	}
 
-	if err := auth.SaveToken(&auth.StoredToken{AccessToken: token.AccessToken, Username: user.Login}); err != nil {
+	account, err := auth.SaveTokenWithAccount(&auth.StoredToken{AccessToken: token.AccessToken, Username: user.Login})
+	if err != nil {
 		s.setDeviceStatus(sessionID, DeviceStatus{State: "error", Message: err.Error()})
 		return
 	}
 
-	s.setDeviceStatus(sessionID, DeviceStatus{State: "success", Username: user.Login})
+	s.setDeviceStatus(sessionID, DeviceStatus{State: "success", Username: user.Login, Storage: account.Storage})
 }
 
 func (s *Service) setDeviceStatus(sessionID string, status DeviceStatus) {
@@ -280,6 +282,26 @@ func (s *Service) setDeviceStatus(sessionID string, status DeviceStatus) {
 
 func (s *Service) Logout() error {
 	return auth.DeleteToken()
+}
+
+func (s *Service) ListAccounts() ([]auth.Account, error) {
+	return auth.ListAccounts()
+}
+
+func (s *Service) SwitchAccount(identifier string) error {
+	return auth.SwitchAccount(identifier)
+}
+
+func (s *Service) UseEnvironmentAccount() error {
+	return auth.UseEnvironmentAccount()
+}
+
+func (s *Service) RemoveAccount(identifier string) error {
+	return auth.RemoveAccount(identifier)
+}
+
+func (s *Service) RemoveAllAccounts() error {
+	return auth.RemoveAllAccounts()
 }
 
 func (s *Service) BrowseRepository() (RepoInfo, error) {

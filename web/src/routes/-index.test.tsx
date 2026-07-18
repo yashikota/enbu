@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { act } from "react-dom/test-utils";
 import { I18nProvider } from "../lib/i18n";
 import { backend, openURL } from "../lib/backend";
-import { RepositoryContextMenu, Sidebar } from "./__root";
+import { AccountMenu, RepositoryContextMenu, Sidebar } from "./__root";
 import {
   parseConfigDraft,
   CreateEnvironmentModal,
@@ -23,6 +23,11 @@ vi.mock("../lib/backend", () => ({
     deviceStatus: vi.fn(),
     cancelDeviceLogin: vi.fn(),
     logout: vi.fn(),
+    listAccounts: vi.fn(async () => []),
+    switchAccount: vi.fn(),
+    useEnvironmentAccount: vi.fn(),
+    removeAccount: vi.fn(),
+    removeAllAccounts: vi.fn(),
     repoStatus: vi.fn(async () => ({ selected: false })),
     browseRepository: vi.fn(),
     selectRepository: vi.fn(),
@@ -239,6 +244,95 @@ describe("RepositoryContextMenu", () => {
     });
     expect(container.textContent).not.toContain("yashikota/test");
     expect(container.textContent).toContain("No repositories yet.");
+  });
+});
+
+describe("AccountMenu", () => {
+  it("switches accounts manually from the account dropdown", async () => {
+    const backendMock = vi.mocked(backend);
+    backendMock.listAccounts.mockResolvedValue([
+      { id: "stored:octo", username: "octo", active: true, source: "stored", storage: "keychain" },
+      {
+        id: "stored:hubot",
+        username: "hubot",
+        active: false,
+        source: "stored",
+        storage: "keychain",
+      },
+    ]);
+    const switchAccount = vi.fn(async () => {});
+    backendMock.switchAccount.mockImplementation(switchAccount);
+    await act(async () => {
+      root.render(
+        <I18nProvider>
+          <AccountMenu status={{ authenticated: true, username: "octo" }} loading={false} />
+        </I18nProvider>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="Account menu"]')?.click();
+      await Promise.resolve();
+    });
+    const hubot = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("hubot"),
+    );
+    expect(hubot).toBeTruthy();
+    await act(async () => {
+      hubot?.click();
+      await Promise.resolve();
+    });
+    expect(switchAccount).toHaveBeenCalledWith("stored:hubot");
+  });
+
+  it("removes a stored account from its right-click menu after confirmation", async () => {
+    const backendMock = vi.mocked(backend);
+    backendMock.listAccounts.mockResolvedValue([
+      { id: "stored:octo", username: "octo", active: false, source: "stored", storage: "file" },
+    ]);
+    const removeAccount = vi.fn(async () => {});
+    backendMock.removeAccount.mockImplementation(removeAccount);
+    await act(async () => {
+      root.render(
+        <I18nProvider>
+          <AccountMenu status={{ authenticated: false }} loading={false} />
+        </I18nProvider>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="Account menu"]')?.click();
+      await Promise.resolve();
+    });
+    expect(document.body.textContent).toContain("octo");
+    expect(document.querySelector('[aria-label*="keychain is unavailable"]')).toBeTruthy();
+    expect(queryButton("Remove octo")).toBeNull();
+    const accountRow = container.querySelector<HTMLElement>('[data-account-id="stored:octo"]');
+    expect(accountRow).toBeTruthy();
+    act(() => {
+      accountRow?.dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, clientX: 20, clientY: 20 }),
+      );
+    });
+    const menu = container.querySelector<HTMLElement>('[role="menu"]');
+    expect(menu).toBeTruthy();
+    expect(menu?.style.left).toBe("20px");
+    expect(menu?.style.top).toBe("20px");
+    await act(async () => {
+      queryButton("Remove octo")?.click();
+    });
+    const dialog = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).find(
+      (item) => item.textContent?.includes("Remove GitHub account octo?"),
+    );
+    expect(dialog?.textContent).toContain("Remove GitHub account octo?");
+    await act(async () => {
+      dialog?.querySelector<HTMLButtonElement>('button[aria-label^="Remove:"]')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(removeAccount).toHaveBeenCalledWith("stored:octo");
   });
 });
 

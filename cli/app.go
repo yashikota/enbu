@@ -23,7 +23,7 @@ func NewWithApp(version string, a *app.App) *cobra.Command {
 	}
 
 	rootCmd.AddCommand(
-		newAuthCommand(a),
+		newAuthCommand(),
 		newInitCommand(a),
 		newSwitchCommand(a),
 		newAddCommand(a),

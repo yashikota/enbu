@@ -6,7 +6,24 @@ import type {
   Recipient,
   SecretsResponse,
 } from "./api";
-import type { DeviceStart, DeviceStatus } from "./backend";
+import type { DeviceStart, DeviceStatus, GitHubAccount } from "./backend";
+
+const mockAccounts: GitHubAccount[] = [
+  {
+    id: "stored:yashikota",
+    username: "yashikota",
+    active: true,
+    source: "stored" as const,
+    storage: "keychain" as const,
+  },
+  {
+    id: "stored:collaborator",
+    username: "collaborator",
+    active: false,
+    source: "stored" as const,
+    storage: "keychain" as const,
+  },
+];
 
 let mockEnvs: Environment[] = [
   { name: "development", current: true },
@@ -62,9 +79,11 @@ function secretsForEnv(env: string): { key: string; value: string }[] {
 
 export const mockBackend = {
   async authStatus(): Promise<AuthStatus> {
+    const active = mockAccounts.find((account) => account.active);
+    if (!active) return { authenticated: false };
     return {
       authenticated: true,
-      username: "yashikota",
+      username: active.username,
       repo: { owner: "yashikota", name: "enbu" },
     };
   },
@@ -82,7 +101,31 @@ export const mockBackend = {
   },
 
   async logout(): Promise<void> {
-    // no-op
+    const active = mockAccounts.find((account) => account.active);
+    if (active) mockAccounts.splice(mockAccounts.indexOf(active), 1);
+  },
+
+  async listAccounts() {
+    return mockAccounts.map((account) => ({ ...account }));
+  },
+
+  async switchAccount(identifier: string): Promise<void> {
+    for (const account of mockAccounts) account.active = account.id === identifier;
+  },
+
+  async useEnvironmentAccount(): Promise<void> {
+    for (const account of mockAccounts) account.active = account.source === "environment";
+  },
+
+  async removeAccount(identifier: string): Promise<void> {
+    const index = mockAccounts.findIndex((account) => account.id === identifier);
+    if (index >= 0) mockAccounts.splice(index, 1);
+  },
+
+  async removeAllAccounts(): Promise<void> {
+    for (let index = mockAccounts.length - 1; index >= 0; index -= 1) {
+      if (mockAccounts[index]?.source === "stored") mockAccounts.splice(index, 1);
+    }
   },
 
   async repoStatus(): Promise<GUIRepoStatus> {
