@@ -162,7 +162,7 @@ jobs:
         run: |
           mkdir -p release
           tar -C desktop/wails/build/bin \
-            -czf "release/enbu_${GITHUB_REF_NAME}_${DESKTOP_SUFFIX}-desktop.tar.gz" \
+            -czf "release/enbu-desktop_${GITHUB_REF_NAME}_${DESKTOP_SUFFIX}.tar.gz" \
             .
 
       - name: Package desktop app
@@ -182,7 +182,7 @@ jobs:
             -srcfolder dmg-root \
             -ov \
             -format UDZO \
-            "release/enbu_${GITHUB_REF_NAME}_${DESKTOP_SUFFIX}-desktop.dmg"
+            "release/enbu-desktop_${GITHUB_REF_NAME}_${DESKTOP_SUFFIX}.dmg"
 
       - name: Package desktop app
         if: matrix.package == 'exe'
@@ -197,12 +197,12 @@ jobs:
           }
           Copy-Item `
             -Path $binary.FullName `
-            -Destination "release/enbu_${env:GITHUB_REF_NAME}_${env:DESKTOP_SUFFIX}-desktop.exe"
+            -Destination "release/enbu-desktop_${env:GITHUB_REF_NAME}_${env:DESKTOP_SUFFIX}.exe"
 
       - name: Upload desktop artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-desktop-${{ matrix.suffix }}
+          name: release-enbu-desktop-${{ matrix.suffix }}
           path: release/*
           if-no-files-found: error
 
@@ -285,11 +285,11 @@ jobs:
           set -euo pipefail
           test -s release-assets/checksums.txt
           test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*' | wc -l)" -gt 0
-          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*-desktop*' | wc -l)" -gt 0
-          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*_windows_*-desktop.exe' | wc -l)" -eq 2
-          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*_windows_*-desktop.zip' | wc -l)" -eq 0
-          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*_darwin_*-desktop.dmg' | wc -l)" -eq 1
-          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*_darwin_*-desktop.tar.gz' | wc -l)" -eq 0
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu-desktop_*' | wc -l)" -gt 0
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu-desktop_*_windows_*.exe' | wc -l)" -eq 2
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu-desktop_*_windows_*.zip' | wc -l)" -eq 0
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu-desktop_*_darwin_*.dmg' | wc -l)" -eq 1
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu-desktop_*_darwin_*.tar.gz' | wc -l)" -eq 0
           test "$(find release-assets -maxdepth 1 -type f -name '*.sbom.spdx.json' | wc -l)" -gt 0
           test "$(find release-assets -maxdepth 1 -type f -name '*.sigstore.json' | wc -l)" -gt 0
           (cd release-assets && sha256sum -c checksums.txt)
