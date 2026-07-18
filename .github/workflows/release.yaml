@@ -43,10 +43,39 @@ jobs:
             dist/*.zip
           if-no-files-found: error
 
+  frontend:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
+        with:
+          run-install: false
+
+      - name: Build frontend for Go embed
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: frontend-dist
+          path: web/dist
+          if-no-files-found: error
+
   desktop:
     name: Build desktop (${{ matrix.suffix }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    needs: frontend
     permissions:
       contents: read
     strategy:
@@ -56,23 +85,23 @@ jobs:
           - os: windows-latest
             platform: windows/amd64
             suffix: windows_amd64
-            archive: zip
+            package: exe
           - os: windows-11-arm
             platform: windows/arm64
             suffix: windows_arm64
-            archive: zip
+            package: exe
           - os: macos-latest
             platform: darwin/arm64
             suffix: darwin_arm64
-            archive: tar.gz
+            package: dmg
           - os: ubuntu-22.04
             platform: linux/amd64
             suffix: linux_amd64
-            archive: tar.gz
+            package: tar.gz
           - os: ubuntu-22.04-arm
             platform: linux/arm64
             suffix: linux_arm64
-            archive: tar.gz
+            package: tar.gz
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -83,31 +112,17 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Download frontend artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: ~/.local/share/aquaproj-aqua
-          key: v2-aqua-installer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('aqua.yaml') }}
-          restore-keys: |
-            v2-aqua-installer-${{ runner.os }}-${{ runner.arch }}-
-
-      - uses: aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e # v4.0.5
-        with:
-          aqua_version: v2.60.1
-
-      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
+          name: frontend-dist
+          path: web/dist
 
       - name: Install Linux Wails dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
-
-      - name: Prebuild frontend for Go embed
-        shell: bash
-        working-directory: web
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build
 
       - name: Prepare Wails icon
         shell: bash
@@ -128,7 +143,7 @@ jobs:
             -trimpath
 
       - name: Package desktop app
-        if: matrix.archive == 'tar.gz'
+        if: matrix.package == 'tar.gz'
         shell: bash
         env:
           DESKTOP_SUFFIX: ${{ matrix.suffix }}
@@ -139,15 +154,38 @@ jobs:
             .
 
       - name: Package desktop app
-        if: matrix.archive == 'zip'
+        if: matrix.package == 'dmg'
+        shell: bash
+        env:
+          DESKTOP_SUFFIX: ${{ matrix.suffix }}
+        run: |
+          set -euo pipefail
+          app_path="$(find desktop/wails/build/bin -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app_path"
+          mkdir -p release dmg-root
+          ditto "$app_path" "dmg-root/$(basename "$app_path")"
+          ln -s /Applications dmg-root/Applications
+          hdiutil create \
+            -volname enbu \
+            -srcfolder dmg-root \
+            -ov \
+            -format UDZO \
+            "release/enbu_${GITHUB_REF_NAME}_${DESKTOP_SUFFIX}-desktop.dmg"
+
+      - name: Package desktop app
+        if: matrix.package == 'exe'
         shell: pwsh
         env:
           DESKTOP_SUFFIX: ${{ matrix.suffix }}
         run: |
           New-Item -ItemType Directory -Force -Path release | Out-Null
-          Compress-Archive `
-            -Path desktop/wails/build/bin/* `
-            -DestinationPath "release/enbu_${env:GITHUB_REF_NAME}_${env:DESKTOP_SUFFIX}-desktop.zip"
+          $binary = Get-ChildItem desktop/wails/build/bin -Filter *.exe | Select-Object -First 1
+          if ($null -eq $binary) {
+            throw "Wails did not produce a Windows executable"
+          }
+          Copy-Item `
+            -Path $binary.FullName `
+            -Destination "release/enbu_${env:GITHUB_REF_NAME}_${env:DESKTOP_SUFFIX}-desktop.exe"
 
       - name: Upload desktop artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -236,6 +274,10 @@ jobs:
           test -s release-assets/checksums.txt
           test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*' | wc -l)" -gt 0
           test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*-desktop*' | wc -l)" -gt 0
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*_windows_*-desktop.exe' | wc -l)" -eq 2
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*_windows_*-desktop.zip' | wc -l)" -eq 0
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*_darwin_*-desktop.dmg' | wc -l)" -eq 1
+          test "$(find release-assets -maxdepth 1 -type f -name 'enbu_*_darwin_*-desktop.tar.gz' | wc -l)" -eq 0
           test "$(find release-assets -maxdepth 1 -type f -name '*.sbom.spdx.json' | wc -l)" -gt 0
           test "$(find release-assets -maxdepth 1 -type f -name '*.sigstore.json' | wc -l)" -gt 0
           (cd release-assets && sha256sum -c checksums.txt)
