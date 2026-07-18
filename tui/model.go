@@ -107,7 +107,6 @@ type model struct {
 	width  int
 	height int
 	hits   []hitRegion
-
 }
 
 type secretEntry struct {
