@@ -57,10 +57,6 @@ jobs:
             platform: windows/amd64
             suffix: windows_amd64
             archive: zip
-          - os: macos-15-intel
-            platform: darwin/amd64
-            suffix: darwin_amd64
-            archive: tar.gz
           - os: macos-latest
             platform: darwin/arm64
             suffix: darwin_arm64
