@@ -20,5 +20,5 @@ export function createPtyTerminal(terminal: Terminal): PtyTerminal {
 }
 
 export function resolveRuntimeURL(pageURL: string): string {
-  return new URL("../tui/out.wasm", pageURL).href;
+  return new URL("../tui/out.wasm.gz", pageURL).href;
 }

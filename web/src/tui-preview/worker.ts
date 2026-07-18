@@ -67,7 +67,9 @@ async function run(imageURL: string, client: TtyClientLike): Promise<void> {
   const response = await fetch(imageURL, { credentials: "same-origin" });
   if (!response.ok) throw new Error(`Failed to load browser VM (${response.status})`);
 
-  const wasm = await response.arrayBuffer();
+  if (!response.body) throw new Error("The browser VM response did not include a body");
+  const decompressed = response.body.pipeThrough(new DecompressionStream("gzip"));
+  const wasm = await new Response(decompressed).arrayBuffer();
   const wasi = new WASI([], ["TERM=xterm-256color", "COLORTERM=truecolor"], []);
   patchTerminalIO(wasi, client);
   patchSocketStubs(wasi);

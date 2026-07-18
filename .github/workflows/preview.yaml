@@ -91,6 +91,7 @@ jobs:
         run: |
           mkdir -p test/preview/out/tui
           c2w --assets /tmp/c2w-assets enbu-tui-preview:local test/preview/out/tui/out.wasm
+          gzip -9 test/preview/out/tui/out.wasm
 
       - name: Install VHS dependencies
         run: |
