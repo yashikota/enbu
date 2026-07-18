@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vite-plus/test";
-import { encodeMouseEvent, encodeWheelEvent } from "./mouse-adapter";
+import { describe, expect, it, vi } from "vite-plus/test";
+import type { Terminal } from "ghostty-web";
+import { attachMouseReporting, encodeMouseEvent, encodeWheelEvent } from "./mouse-adapter";
 
 const position = { column: 12, row: 7 };
 
@@ -24,5 +25,44 @@ describe("encodeWheelEvent", () => {
     expect(encodeWheelEvent(new WheelEvent("wheel", { deltaY: 1 }), position)).toBe(
       "\x1b[<65;12;7M",
     );
+  });
+});
+
+describe("attachMouseReporting", () => {
+  it("gates tracking, maps canvas coordinates, forwards input, and cleans up", () => {
+    const host = document.createElement("div");
+    const canvas = document.createElement("canvas");
+    host.append(canvas);
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      x: 10,
+      y: 20,
+      left: 10,
+      top: 20,
+      right: 110,
+      bottom: 120,
+      width: 100,
+      height: 100,
+      toJSON: () => ({}),
+    });
+    const hasMouseTracking = vi.fn(() => false);
+    const input = vi.fn();
+    const terminal = { cols: 10, rows: 5, hasMouseTracking, input } as unknown as Terminal;
+    const cleanup = attachMouseReporting(terminal, host);
+    const press = () =>
+      canvas.dispatchEvent(
+        new MouseEvent("mousedown", { bubbles: true, cancelable: true, clientX: 60, clientY: 70 }),
+      );
+
+    press();
+    expect(input).not.toHaveBeenCalled();
+    hasMouseTracking.mockReturnValue(true);
+    press();
+    expect(input).toHaveBeenCalledWith("\x1b[<0;6;3M", true);
+
+    canvas.dispatchEvent(new WheelEvent("wheel", { cancelable: true, deltaX: 1, deltaY: 0 }));
+    expect(input).toHaveBeenCalledTimes(1);
+    cleanup();
+    press();
+    expect(input).toHaveBeenCalledTimes(1);
   });
 });

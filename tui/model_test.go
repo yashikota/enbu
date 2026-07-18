@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func testModel() *model {
@@ -240,7 +241,7 @@ func TestMouseTabNavigationCancelsConfigEditing(t *testing.T) {
 func TestTruncateHandlesLongAndWideValues(t *testing.T) {
 	value := strings.Repeat("界", 4096)
 	got := truncate(value, 12)
-	if len([]rune(got)) > 7 || !strings.HasSuffix(got, "…") {
-		t.Fatalf("truncate result has %d runes: %q", len([]rune(got)), got)
+	if lipgloss.Width(got) > 12 || !strings.HasSuffix(got, "…") {
+		t.Fatalf("truncate result has display width %d: %q", lipgloss.Width(got), got)
 	}
 }

@@ -16,6 +16,7 @@ import {
   openpty,
 } from "xterm-pty";
 import { attachMouseReporting } from "./mouse-adapter";
+import { type RegisterCleanup, SessionController } from "./session-controller";
 import { createPtyTerminal, resolveRuntimeURL } from "./terminal-adapter";
 import "./style.css";
 
@@ -30,7 +31,8 @@ const statusElement = requiredElement<HTMLElement>("#status");
 const errorElement = requiredElement<HTMLElement>("#error");
 const restartButton = requiredElement<HTMLButtonElement>("#restart");
 
-let cleanup: (() => void) | undefined;
+const sessions = new SessionController();
+let startPromise: Promise<void> | undefined;
 
 function reportError(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
@@ -39,8 +41,7 @@ function reportError(error: unknown): void {
   errorElement.hidden = false;
 }
 
-async function start(): Promise<void> {
-  cleanup?.();
+async function startSession(register: RegisterCleanup): Promise<void> {
   terminalElement.replaceChildren();
   errorElement.hidden = true;
   statusElement.textContent = "Loading Ghostty…";
@@ -66,7 +67,9 @@ async function start(): Promise<void> {
       selectionBackground: "#264f78",
     },
   });
+  register(() => terminal.dispose());
   const fit = new FitAddon();
+  register(() => fit.dispose());
   terminal.loadAddon(fit);
   terminal.open(terminalElement);
   // RunDemo requests all-motion + SGR mouse reporting. Prime ghostty-web's
@@ -75,10 +78,12 @@ async function start(): Promise<void> {
   terminal.write("\x1b[?1003h\x1b[?1006h");
   terminal.attachCustomWheelEventHandler(() => terminal.hasMouseTracking());
   const detachMouseReporting = attachMouseReporting(terminal, terminalElement);
+  register(detachMouseReporting);
   fit.fit();
   fit.observeResize();
 
   const { master, slave } = openpty();
+  register(() => master.dispose());
   const settings = slave.ioctl("TCGETS");
   slave.ioctl(
     "TCSETS",
@@ -94,34 +99,59 @@ async function start(): Promise<void> {
 
   statusElement.textContent = "Booting enbu…";
   const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
-  worker.addEventListener("error", (event) => reportError(event.message));
-  worker.addEventListener("message", (event: MessageEvent<unknown>) => {
-    if (typeof event.data !== "object" || event.data === null) return;
-    const message = event.data as { type?: string; error?: string };
-    if (message.type === "ready") {
-      window.setTimeout(() => {
-        statusElement.textContent = terminal.hasMouseTracking()
-          ? "Interactive · keyboard and mouse enabled"
-          : "Interactive · keyboard enabled · mouse unavailable";
-      }, 250);
-    }
-    if (message.type === "error") reportError(message.error ?? "Unknown worker error");
+  register(() => worker.terminate());
+
+  let ready = false;
+  const workerReady = new Promise<void>((resolve, reject) => {
+    const onError = (event: ErrorEvent) => {
+      if (ready) reportError(event.message);
+      else reject(new Error(event.message));
+    };
+    const onMessage = (event: MessageEvent<unknown>) => {
+      if (typeof event.data !== "object" || event.data === null) return;
+      const message = event.data as { type?: string; error?: string };
+      if (message.type === "ready") {
+        ready = true;
+        resolve();
+      }
+      if (message.type === "error") {
+        const error = new Error(message.error ?? "Unknown worker error");
+        if (ready) reportError(error);
+        else reject(error);
+      }
+    };
+    worker.addEventListener("error", onError);
+    worker.addEventListener("message", onMessage);
+    register(() => {
+      worker.removeEventListener("error", onError);
+      worker.removeEventListener("message", onMessage);
+    });
   });
 
   const tty = new TtyServer(slave);
   tty.start(worker);
+  register(() => tty.stop());
   worker.postMessage({ type: "init", imageURL: resolveRuntimeURL(window.location.href) });
+  await workerReady;
   terminal.focus();
-
-  cleanup = () => {
-    detachMouseReporting();
-    tty.stop();
-    worker.terminate();
-    master.dispose();
-    fit.dispose();
-    terminal.dispose();
-  };
+  statusElement.textContent = terminal.hasMouseTracking()
+    ? "Interactive · keyboard and mouse enabled"
+    : "Interactive · keyboard enabled · mouse unavailable";
 }
 
-restartButton.addEventListener("click", () => void start().catch(reportError));
-void start().catch(reportError);
+function restart(): Promise<void> {
+  if (startPromise) return startPromise;
+  restartButton.disabled = true;
+  startPromise = sessions
+    .restart(startSession)
+    .then(() => {})
+    .catch(reportError)
+    .finally(() => {
+      startPromise = undefined;
+      restartButton.disabled = false;
+    });
+  return startPromise;
+}
+
+restartButton.addEventListener("click", () => void restart());
+void restart();

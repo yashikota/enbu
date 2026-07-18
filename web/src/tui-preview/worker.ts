@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import { WASI } from "@bjorn3/browser_wasi_shim";
+import { collectPollEvents } from "./poll-events";
 
 type TtyClientLike = {
   onRead(length: number): number[];
@@ -206,9 +207,7 @@ function pollOneoff(
   const readable =
     (stdinUserdata !== undefined || clockUserdata !== undefined) &&
     client.onWaitForReadable(timeoutSeconds);
-  const events: Array<{ userdata: bigint; type: number }> = [];
-  if (readable && stdinUserdata !== undefined) events.push({ userdata: stdinUserdata, type: 1 });
-  if (!readable && clockUserdata !== undefined) events.push({ userdata: clockUserdata, type: 0 });
+  const events = collectPollEvents(stdinUserdata, clockUserdata, readable);
 
   for (const [index, event] of events.entries()) {
     const pointer = eventsPointer + index * 32;

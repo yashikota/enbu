@@ -68,6 +68,7 @@ export function attachMouseReporting(terminal: Terminal, host: HTMLElement): () 
   const onMouseMove = (event: MouseEvent) => send(event, "move");
   const onWheel = (event: WheelEvent) => {
     if (!terminal.hasMouseTracking()) return;
+    if (event.deltaY === 0) return;
     const position = terminalPosition(event, canvas, terminal);
     if (!position) return;
     event.preventDefault();

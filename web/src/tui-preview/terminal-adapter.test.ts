@@ -6,10 +6,12 @@ describe("createPtyTerminal", () => {
   it("forwards xterm-compatible operations and supplies onBinary", () => {
     const disposable = { dispose: vi.fn() };
     const write = vi.fn();
+    const onData = vi.fn(() => disposable);
+    const onResize = vi.fn(() => disposable);
     const terminal = {
       write,
-      onData: vi.fn(() => disposable),
-      onResize: vi.fn(() => disposable),
+      onData,
+      onResize,
     } as unknown as Terminal;
     const adapter = createPtyTerminal(terminal);
     const dataListener = vi.fn();
@@ -18,6 +20,8 @@ describe("createPtyTerminal", () => {
     adapter.write("hello");
     expect(adapter.onData(dataListener)).toBe(disposable);
     expect(adapter.onResize(resizeListener)).toBe(disposable);
+    expect(onData).toHaveBeenCalledWith(dataListener);
+    expect(onResize).toHaveBeenCalledWith(resizeListener);
     expect(() => adapter.onBinary(vi.fn()).dispose()).not.toThrow();
     expect(write).toHaveBeenCalledWith("hello", undefined);
   });
