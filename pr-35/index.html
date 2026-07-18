@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>enbu Preview</title>
+  <script>window.coi = { quiet: true, doReload: () => {} };</script>
   <script src="./coi-serviceworker.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -76,14 +77,14 @@
     <section>
       <h2>Web UI</h2>
       <div class="web-frame">
-        <iframe src="./web/?mock" title="enbu Web UI preview"></iframe>
+        <iframe data-src="./web/?mock" title="enbu Web UI preview"></iframe>
       </div>
     </section>
     <section>
       <h2>TUI</h2>
-      <p class="hint">Click the terminal, then use the keyboard or mouse. The demo runs entirely in your browser.</p>
+      <p class="hint" id="tui-hint">Preparing the secure browser runtime…</p>
       <div class="tui-frame">
-        <iframe src="./web/tui.html" title="Interactive enbu TUI preview"></iframe>
+        <iframe data-src="./web/tui.html" title="Interactive enbu TUI preview"></iframe>
       </div>
     </section>
   </main>
@@ -91,6 +92,22 @@
     const params = new URLSearchParams(window.location.search);
     const ref = params.get("ref");
     if (ref) document.getElementById("ref-badge").textContent = ref;
+
+    const frames = document.querySelectorAll("iframe[data-src]");
+    if (crossOriginIsolated) {
+      for (const frame of frames) frame.src = frame.dataset.src;
+      document.getElementById("tui-hint").textContent =
+        "Click the terminal, then use the keyboard or mouse. The demo runs entirely in your browser.";
+    } else {
+      let reloading = false;
+      const reloadWhenControlled = () => {
+        if (reloading || !navigator.serviceWorker?.controller) return;
+        reloading = true;
+        window.location.reload();
+      };
+      navigator.serviceWorker?.addEventListener("controllerchange", reloadWhenControlled, { once: true });
+      navigator.serviceWorker?.ready.then(reloadWhenControlled);
+    }
   </script>
 </body>
 </html>
