@@ -57,6 +57,10 @@ jobs:
             platform: windows/amd64
             suffix: windows_amd64
             archive: zip
+          - os: windows-11-arm
+            platform: windows/arm64
+            suffix: windows_arm64
+            archive: zip
           - os: macos-latest
             platform: darwin/arm64
             suffix: darwin_arm64
@@ -64,6 +68,10 @@ jobs:
           - os: ubuntu-22.04
             platform: linux/amd64
             suffix: linux_amd64
+            archive: tar.gz
+          - os: ubuntu-22.04-arm
+            platform: linux/arm64
+            suffix: linux_arm64
             archive: tar.gz
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
