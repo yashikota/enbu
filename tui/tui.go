@@ -11,6 +11,9 @@ import (
 )
 
 func Run(a *app.App) error {
+	if a == nil {
+		return fmt.Errorf("tui: app instance is nil")
+	}
 	dir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("tui: determining current directory: %w", err)

@@ -177,6 +177,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.envs = msg.envs
 		m.current = msg.current
 		m.repository = msg.repository
+		m.revealed = make(map[string]bool)
 		m.err = nil
 		m.clampCursor()
 		return m, nil
@@ -193,12 +194,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		return m, nil
 	case configSavedMsg:
-		m.loading = false
+		m.loading = true
 		m.configContent = m.configDraft
 		m.configEditing = false
 		m.status = "Saved enbu.toml"
 		m.err = nil
-		return m, nil
+		m.revealed = make(map[string]bool)
+		return m, m.loadWorkspace()
 	case operationDoneMsg:
 		m.status = msg.message
 		m.err = nil
@@ -377,6 +379,7 @@ func (m *model) handleConfigEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.configEditing = false
 		m.configDraft = m.configContent
 		m.configInput.Blur()
+		m.err = nil
 		return m, nil
 	case key.Matches(msg, keys.Save):
 		m.configDraft = m.configInput.Value()
@@ -499,7 +502,9 @@ func (m *model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		case hitCancel:
 			if m.configEditing {
 				m.configEditing = false
+				m.configDraft = m.configContent
 				m.configInput.Blur()
+				m.err = nil
 			} else {
 				m.closeOverlay()
 			}
@@ -512,6 +517,11 @@ func (m *model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 func (m *model) activateTab(tab tabState) (tea.Model, tea.Cmd) {
 	if m.tab == tab && ((tab == tabMembers && m.recipients != nil) || (tab == tabSettings && m.configContent != "") || tab == tabSecrets) {
 		return m, nil
+	}
+	if m.configEditing && tab != tabSettings {
+		m.configEditing = false
+		m.configDraft = m.configContent
+		m.configInput.Blur()
 	}
 	m.tab = tab
 	m.overlay = overlayNone
@@ -1105,6 +1115,9 @@ func truncate(value string, width int) string {
 		return value
 	}
 	runes := []rune(value)
+	if len(runes) > width {
+		runes = runes[:width]
+	}
 	for len(runes) > 0 && lipgloss.Width(string(runes))+1 > width {
 		runes = runes[:len(runes)-1]
 	}

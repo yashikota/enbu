@@ -16,6 +16,13 @@ default_env = "default"
 output = ".env"
 `
 
+func TestRunRejectsNilApp(t *testing.T) {
+	err := Run(nil)
+	if err == nil || !strings.Contains(err.Error(), "app instance is nil") {
+		t.Fatalf("Run(nil) error = %v", err)
+	}
+}
+
 func TestPrepareProjectAtRequiresConfigInExactDirectory(t *testing.T) {
 	parent := t.TempDir()
 	if err := os.WriteFile(filepath.Join(parent, "enbu.toml"), []byte(validProject), 0o644); err != nil {

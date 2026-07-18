@@ -153,3 +153,94 @@ func TestEnvironmentChangeRemasksSecrets(t *testing.T) {
 		t.Fatal("revealed state survived workspace-changing operation")
 	}
 }
+
+func TestWorkspaceLoadRemasksReplacedSecrets(t *testing.T) {
+	m := testModel()
+	m.revealed["API_KEY"] = true
+	_, _ = m.Update(workspaceLoadedMsg{
+		secrets: map[string]string{"API_KEY": "replacement"},
+		envs:    m.envs,
+		current: "development",
+	})
+	if m.revealed["API_KEY"] || strings.Contains(m.View(), "replacement") {
+		t.Fatal("replacement workspace data remained revealed")
+	}
+}
+
+func TestConfigSaveReloadsWorkspace(t *testing.T) {
+	originalCurrent := demoCurrent
+	originalEnvs := append([]envItem(nil), demoEnvs...)
+	t.Cleanup(func() {
+		demoCurrent = originalCurrent
+		demoEnvs = originalEnvs
+	})
+	demoCurrent = "production"
+	demoEnvs = []envItem{{name: "development"}, {name: "production", isCurrent: true}}
+
+	m := testModel()
+	m.tab = tabSettings
+	m.configDraft = demoConfigContent
+	_, cmd := m.Update(configSavedMsg{})
+	if cmd == nil || !m.loading {
+		t.Fatal("config save did not start a workspace reload")
+	}
+	_, _ = m.Update(cmd())
+	if m.current != "production" || len(m.secrets) == 0 || m.status != "Saved enbu.toml" {
+		t.Fatalf("workspace not refreshed: current=%q secrets=%d status=%q", m.current, len(m.secrets), m.status)
+	}
+}
+
+func TestConfigCancelClearsValidationError(t *testing.T) {
+	t.Run("keyboard", func(t *testing.T) {
+		m := testModel()
+		m.tab = tabSettings
+		m.configContent = "version = \"v1alpha1\"\n"
+		_, _ = m.startConfigEdit()
+		m.err = errors.New("invalid config")
+		_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+		if m.configEditing || m.err != nil {
+			t.Fatalf("keyboard cancel: editing=%v err=%v", m.configEditing, m.err)
+		}
+	})
+
+	t.Run("mouse", func(t *testing.T) {
+		m := testModel()
+		m.tab = tabSettings
+		m.configContent = "version = \"v1alpha1\"\n"
+		_, _ = m.startConfigEdit()
+		m.err = errors.New("invalid config")
+		_ = m.View()
+		cancel := findHit(t, m, hitCancel, 0)
+		_, _ = m.Update(click(cancel))
+		if m.configEditing || m.err != nil {
+			t.Fatalf("mouse cancel: editing=%v err=%v", m.configEditing, m.err)
+		}
+	})
+}
+
+func TestMouseTabNavigationCancelsConfigEditing(t *testing.T) {
+	m := testModel()
+	m.tab = tabSettings
+	m.configContent = "version = \"v1alpha1\"\n"
+	_, _ = m.startConfigEdit()
+	m.configInput.SetValue("unsaved")
+	_ = m.View()
+	secrets := findHit(t, m, hitTab, int(tabSecrets))
+	_, _ = m.Update(click(secrets))
+	if m.tab != tabSecrets || m.configEditing || m.configInput.Focused() {
+		t.Fatalf("tab navigation state: tab=%d editing=%v focused=%v", m.tab, m.configEditing, m.configInput.Focused())
+	}
+	before := m.configInput.Value()
+	_, _ = m.Update(keyMsg("x"))
+	if m.configInput.Value() != before {
+		t.Fatal("input was routed to the hidden config editor")
+	}
+}
+
+func TestTruncateHandlesLongAndWideValues(t *testing.T) {
+	value := strings.Repeat("界", 4096)
+	got := truncate(value, 12)
+	if len([]rune(got)) > 7 || !strings.HasSuffix(got, "…") {
+		t.Fatalf("truncate result has %d runes: %q", len([]rune(got)), got)
+	}
+}
