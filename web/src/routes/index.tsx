@@ -361,12 +361,9 @@ function HomePage() {
     return (
       <PageCenter>
         <VStack gap={5} w="full" maxW="480px" textAlign="center">
-          <Box>
-            <Heading size="2xl" fontWeight="extrabold" mb={2}>
-              {t("auth.welcome")}
-            </Heading>
-            <Text color="fg.muted">{t("auth.tagline")}</Text>
-          </Box>
+          <Heading size="2xl" fontWeight="extrabold">
+            {t("auth.welcome")}
+          </Heading>
           {authError && <ErrorAlert message={authError} />}
           <Button
             w="full"

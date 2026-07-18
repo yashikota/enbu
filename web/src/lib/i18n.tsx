@@ -61,7 +61,6 @@ const en = {
   },
   auth: {
     welcome: "Sign in to GitHub",
-    tagline: "Log in to GitHub.",
     connect: "Connect with GitHub",
     waiting: "Waiting for GitHub authorization...",
     userCode: "Enter this code on GitHub",
@@ -185,7 +184,6 @@ const ja: Messages = {
   },
   auth: {
     welcome: "GitHubにサインイン",
-    tagline: "GitHubにログインしてください。",
     connect: "GitHubで接続",
     waiting: "GitHubでの承認を待っています...",
     userCode: "GitHubでこのコードを入力してください",
