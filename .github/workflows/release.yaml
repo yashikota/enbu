@@ -90,6 +90,8 @@ jobs:
         with:
           aqua_version: v2.60.1
 
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
+
       - name: Install Linux Wails dependencies
         if: runner.os == 'Linux'
         run: |
