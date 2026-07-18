@@ -173,7 +173,7 @@ export function RepositoryOwnerSelect({
   );
 }
 
-function HomePage() {
+export function HomePage() {
   const { t } = useI18n();
   const { status, loading: authLoading } = useAuth();
 
@@ -242,21 +242,35 @@ function HomePage() {
   }, [status?.authenticated, oauthStart]);
 
   useEffect(() => {
+    if (!oauthStart || oauthStatus?.state !== "pending") return;
+    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [oauthStart, oauthStatus?.state]);
 
   useEffect(() => {
     if (!oauthStart || oauthStatus?.state !== "pending") return;
     const poll = window.setInterval(async () => {
-      const next = await backend.oauthStatus(oauthStart.session_id);
-      setOAuthStatus(next);
-      if (next.state === "success") {
+      try {
+        const next = await backend.oauthStatus(oauthStart.session_id);
+        if (next.state !== "success") {
+          setOAuthStatus(next);
+          return;
+        }
         window.clearInterval(poll);
-        window.dispatchEvent(new Event("enbu-auth-changed"));
-        setRepoStatus(await backend.repoStatus());
         setOAuthStart(null);
         setOAuthStatus(null);
+        window.dispatchEvent(new Event("enbu-auth-changed"));
+        try {
+          setRepoStatus(await backend.repoStatus());
+        } catch (err) {
+          setRepoError(err instanceof Error ? err.message : String(err));
+        }
+      } catch (err) {
+        setOAuthStatus({
+          state: "error",
+          message: err instanceof Error ? err.message : String(err),
+        });
       }
     }, 1000);
     return () => window.clearInterval(poll);

@@ -6,7 +6,12 @@ import (
 )
 
 func OpenBrowser(url string) error {
-	return browserCommand(runtime.GOOS, url).Start()
+	cmd := browserCommand(runtime.GOOS, url)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
 }
 
 func browserCommand(goos, url string) *exec.Cmd {

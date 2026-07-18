@@ -401,6 +401,47 @@ func TestRetryAfterAcceptsPastHTTPDate(t *testing.T) {
 	}
 }
 
+func TestRetryDelayUsesBoundedExponentialMinimum(t *testing.T) {
+	tests := []struct {
+		serverDelay time.Duration
+		attempt     int
+		want        time.Duration
+	}{
+		{attempt: 0, want: 100 * time.Millisecond},
+		{attempt: 1, want: 200 * time.Millisecond},
+		{attempt: 20, want: 5 * time.Second},
+		{serverDelay: 10 * time.Second, attempt: 20, want: 10 * time.Second},
+	}
+	for _, tt := range tests {
+		if got := retryDelay(tt.serverDelay, tt.attempt); got != tt.want {
+			t.Fatalf("retryDelay(%s, %d) = %s, want %s", tt.serverDelay, tt.attempt, got, tt.want)
+		}
+	}
+}
+
+func TestValidAuthorizeURLRequiresMatchingSingleState(t *testing.T) {
+	state := strings.Repeat("a", 32) + ":" + strings.Repeat("b", 32)
+	base := "https://github.com/login/oauth/authorize"
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{name: "valid", url: base + "?state=" + state, want: true},
+		{name: "missing", url: base},
+		{name: "duplicate", url: base + "?state=" + state + "&state=" + state},
+		{name: "mismatch", url: base + "?state=wrong"},
+		{name: "wrong host", url: "https://example.com/login/oauth/authorize?state=" + state},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := validAuthorizeURL(tt.url, state); got != tt.want {
+				t.Fatalf("validAuthorizeURL() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestValidateTokenRequiresBearerAndAllScopes(t *testing.T) {
 	valid := exchangeResponse{
 		AccessToken: "token",

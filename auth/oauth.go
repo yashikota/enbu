@@ -30,6 +30,8 @@ const (
 	loginTimeout       = 10 * time.Minute
 	maxResponseBytes   = 4 * 1024
 	maxOAuthCodeLength = 1024
+	retryBackoffStart  = 100 * time.Millisecond
+	retryBackoffMax    = 5 * time.Second
 )
 
 var (
@@ -229,16 +231,20 @@ func (c *oauthClient) createSession(ctx context.Context, body createSessionReque
 	if !expires.After(time.Now()) || expires.After(time.Now().Add(loginTimeout+time.Minute)) {
 		return nil, errors.New("creating OAuth session: invalid expiration")
 	}
-	if !validAuthorizeURL(result.AuthorizeURL) {
+	if !validAuthorizeURL(result.AuthorizeURL, result.State) {
 		return nil, errors.New("creating OAuth session: invalid authorize URL")
 	}
 	return &result, nil
 }
 
-func validAuthorizeURL(raw string) bool {
+func validAuthorizeURL(raw, expectedState string) bool {
 	u, err := url.Parse(raw)
-	return err == nil && u.Scheme == "https" && u.Host == "github.com" &&
-		u.Path == "/login/oauth/authorize" && u.User == nil && u.Fragment == ""
+	if err != nil || u.Scheme != "https" || u.Host != "github.com" ||
+		u.Path != "/login/oauth/authorize" || u.User != nil || u.Fragment != "" {
+		return false
+	}
+	state, ok := singleValue(u.Query(), "state", len(expectedState))
+	return ok && subtle.ConstantTimeCompare([]byte(state), []byte(expectedState)) == 1
 }
 
 func (c *oauthClient) exchange(
@@ -248,6 +254,7 @@ func (c *oauthClient) exchange(
 	expiresAt time.Time,
 ) (*exchangeResponse, error) {
 	path := "/v1/oauth/sessions/" + sessionID + "/exchange"
+	retryAttempt := 0
 	for {
 		var result exchangeResponse
 		resp, err := c.requestJSON(ctx, http.MethodPost, path, pollSecret, body)
@@ -257,6 +264,8 @@ func (c *oauthClient) exchange(
 		if resp.StatusCode == http.StatusTooManyRequests {
 			delay, ok := retryAfter(resp.Header.Get("Retry-After"), time.Now())
 			_ = resp.Body.Close()
+			delay = retryDelay(delay, retryAttempt)
+			retryAttempt++
 			if !ok || !time.Now().Add(delay).Before(expiresAt) {
 				return nil, errors.New("exchanging OAuth code: rate limited")
 			}
@@ -281,6 +290,21 @@ func (c *oauthClient) exchange(
 		}
 		return &result, nil
 	}
+}
+
+func retryDelay(serverDelay time.Duration, attempt int) time.Duration {
+	minimum := retryBackoffStart
+	for range attempt {
+		if minimum >= retryBackoffMax/2 {
+			minimum = retryBackoffMax
+			break
+		}
+		minimum *= 2
+	}
+	if serverDelay > minimum {
+		return serverDelay
+	}
+	return minimum
 }
 
 func validateToken(token exchangeResponse) error {

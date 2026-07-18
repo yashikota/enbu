@@ -203,11 +203,13 @@ func TestStartOAuthLogin(t *testing.T) {
 		}
 		return nil
 	})
+	cancelled := make(chan struct{})
 	s.authLogin = func(ctx context.Context, open auth.BrowserOpener) (*auth.StoredToken, error) {
 		if err := open("https://github.com/login/oauth/authorize"); err != nil {
 			return nil, err
 		}
 		<-ctx.Done()
+		close(cancelled)
 		return nil, context.Canceled
 	}
 
@@ -220,6 +222,39 @@ func TestStartOAuthLogin(t *testing.T) {
 	}
 	if err := s.CancelOAuthLogin(start.SessionID); err != nil {
 		t.Fatalf("CancelOAuthLogin: %v", err)
+	}
+	select {
+	case <-cancelled:
+	case <-time.After(time.Second):
+		t.Fatal("cancellation did not reach the login context")
+	}
+}
+
+func TestGetOAuthLoginStatus(t *testing.T) {
+	tests := []struct {
+		name      string
+		status    OAuthStatus
+		expiresAt time.Time
+		want      string
+	}{
+		{name: "success", status: OAuthStatus{State: "success"}, expiresAt: time.Now().Add(time.Minute), want: "success"},
+		{name: "denied", status: OAuthStatus{State: "denied"}, expiresAt: time.Now().Add(time.Minute), want: "denied"},
+		{name: "error", status: OAuthStatus{State: "error"}, expiresAt: time.Now().Add(time.Minute), want: "error"},
+		{name: "expired", status: OAuthStatus{State: "pending"}, expiresAt: time.Now().Add(-time.Second), want: "expired"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewService(app.New())
+			s.sessions["session"] = &oauthSession{
+				cancel:    func() {},
+				expiresAt: tt.expiresAt,
+				status:    tt.status,
+			}
+			got, err := s.GetOAuthLoginStatus("session")
+			if err != nil || got.State != tt.want {
+				t.Fatalf("GetOAuthLoginStatus() = %#v, %v; want %q", got, err, tt.want)
+			}
+		})
 	}
 }
 
