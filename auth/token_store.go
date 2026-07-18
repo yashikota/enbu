@@ -83,10 +83,14 @@ func LoadToken() (*StoredToken, error) {
 }
 
 func DeleteToken() error {
+	var deleteErrors []error
 	if err := keyringDelete(tokenKeyringService, tokenKeyringAccount); err != nil && !errors.Is(err, keyring.ErrNotFound) {
-		return fmt.Errorf("removing token from OS keyring: %w", err)
+		deleteErrors = append(deleteErrors, fmt.Errorf("removing token from OS keyring: %w", err))
 	}
-	return nil
+	if err := os.Remove(legacyTokenPath()); err != nil && !os.IsNotExist(err) {
+		deleteErrors = append(deleteErrors, fmt.Errorf("removing legacy token file: %w", err))
+	}
+	return errors.Join(deleteErrors...)
 }
 
 func validateStoredToken(token *StoredToken) error {

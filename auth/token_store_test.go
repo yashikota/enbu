@@ -121,3 +121,25 @@ func TestGitHubTokenIsEphemeral(t *testing.T) {
 		t.Fatal("GITHUB_TOKEN was persisted")
 	}
 }
+
+func TestDeleteTokenRemovesLegacyFileEvenWhenKeyringFails(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dataDir)
+	legacy := filepath.Join(dataDir, "enbu", "token.json")
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacy, []byte("legacy-secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalDelete := keyringDelete
+	keyringDelete = func(_, _ string) error { return errors.New("keyring unavailable") }
+	t.Cleanup(func() { keyringDelete = originalDelete })
+	if err := DeleteToken(); err == nil || !strings.Contains(err.Error(), "OS keyring") {
+		t.Fatalf("DeleteToken error = %v", err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy token still exists: %v", err)
+	}
+}
