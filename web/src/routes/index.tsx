@@ -215,6 +215,9 @@ export function HomePage() {
   const [environmentModalOpen, setEnvironmentModalOpen] = useState(false);
   const [environmentCreateLoading, setEnvironmentCreateLoading] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [recipientsLoading, setRecipientsLoading] = useState(false);
+  const [recipientsError, setRecipientsError] = useState("");
 
   const fetchRepoStatus = useCallback(async () => {
     if (status?.authenticated) {
@@ -279,6 +282,19 @@ export function HomePage() {
     [environments, secrets?.environment],
   );
 
+  const fetchRecipients = useCallback(async () => {
+    setRecipientsLoading(true);
+    setRecipientsError("");
+    try {
+      const list = await backend.listRecipients();
+      setRecipients((list ?? []).filter((r): r is Recipient => r != null));
+    } catch (err) {
+      setRecipientsError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRecipientsLoading(false);
+    }
+  }, []);
+
   async function refreshWorkspace(env = currentEnvironment) {
     setWorkspaceLoading(true);
     setActionError("");
@@ -297,6 +313,10 @@ export function HomePage() {
   useEffect(() => {
     if (repoStatus?.selected && repoStatus.repo?.initialized) void refreshWorkspace();
   }, [repoStatus?.selected, repoStatus?.repo?.initialized]);
+
+  useEffect(() => {
+    if (repoStatus?.selected && repoStatus.repo?.initialized) void fetchRecipients();
+  }, [repoStatus?.selected, repoStatus?.repo?.initialized, fetchRecipients]);
 
   useEffect(() => {
     const path = repoStatus?.repo?.path?.replace(/[\\/]+$/, "");
@@ -365,7 +385,7 @@ export function HomePage() {
     return (
       <PageCenter>
         <VStack gap={5} w="full" maxW="480px" textAlign="center">
-          {authError && <ErrorAlert message={authError} />}
+          {authError && <ErrorAlert message={authError} onDismiss={() => setAuthError("")} />}
           <Button
             w="full"
             bg="accent.default"
@@ -437,7 +457,7 @@ export function HomePage() {
             </Heading>
             <Text color="fg.muted">{t("repo.selectDescription")}</Text>
           </Box>
-          {repoError && <ErrorAlert message={repoError} />}
+          {repoError && <ErrorAlert message={repoError} onDismiss={() => setRepoError("")} />}
           <HStack>
             <Input
               value={repoPath}
@@ -510,7 +530,7 @@ export function HomePage() {
             </Heading>
             <Text color="fg.muted">{t("init.gitDescription")}</Text>
           </Box>
-          {actionError && <ErrorAlert message={actionError} />}
+          {actionError && <ErrorAlert message={actionError} onDismiss={() => setActionError("")} />}
           <Button
             bg="accent.default"
             color="accent.fg"
@@ -543,7 +563,7 @@ export function HomePage() {
           <Heading size="2xl" fontWeight="extrabold">
             {t("init.remoteTitle")}
           </Heading>
-          {actionError && <ErrorAlert message={actionError} />}
+          {actionError && <ErrorAlert message={actionError} onDismiss={() => setActionError("")} />}
           <RepositoryOwnerSelect
             owners={repositoryOwners}
             value={selectedRepositoryOwner}
@@ -613,7 +633,7 @@ export function HomePage() {
             </Heading>
             <Text color="fg.muted">{t("init.description")}</Text>
           </Box>
-          {actionError && <ErrorAlert message={actionError} />}
+          {actionError && <ErrorAlert message={actionError} onDismiss={() => setActionError("")} />}
           <Button
             bg="accent.default"
             color="accent.fg"
@@ -670,12 +690,12 @@ export function HomePage() {
 
         {actionError && (
           <Box mb="4">
-            <ErrorAlert message={actionError} />
+            <ErrorAlert message={actionError} onDismiss={() => setActionError("")} />
           </Box>
         )}
 
         <Tabs.Root defaultValue="secrets" lazyMount unmountOnExit variant="line">
-          <Tabs.List w="full" maxW="650px" h="auto" display="flex" gap="0" overflow="hidden">
+          <Tabs.List w="full" h="auto" display="flex" gap="0" overflow="hidden">
             <DashboardTab
               value="secrets"
               icon={<KeyRound size={16} />}
@@ -805,10 +825,15 @@ export function HomePage() {
                 loading={addLoading}
                 disabled={!secretKey.trim()}
                 onClick={async () => {
-                  if (!secretKey.trim()) return;
+                  const trimmedKey = secretKey.trim();
+                  if (!trimmedKey) return;
+                  if (secrets?.secrets.some((s) => s.key === trimmedKey)) {
+                    setActionError(t("dashboard.duplicateKey", { key: trimmedKey }));
+                    return;
+                  }
                   setAddLoading(true);
                   try {
-                    await backend.addSecret(secretKey.trim(), secretValue, currentEnvironment);
+                    await backend.addSecret(trimmedKey, secretValue, currentEnvironment);
                     setSecretKey("");
                     setSecretValue("");
                     await refreshWorkspace(currentEnvironment);
@@ -826,7 +851,13 @@ export function HomePage() {
           </DashboardTabContent>
 
           <DashboardTabContent value="members">
-            <RecipientsPanel />
+            <RecipientsPanel
+              recipients={recipients}
+              loading={recipientsLoading}
+              error={recipientsError}
+              onSync={fetchRecipients}
+              onErrorDismiss={() => setRecipientsError("")}
+            />
           </DashboardTabContent>
           <DashboardTabContent value="settings">
             <ConfigPanel environments={environments} />
@@ -1169,7 +1200,7 @@ function PageCenter({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ErrorAlert({ message }: { message: string }) {
+function ErrorAlert({ message, onDismiss }: { message: string; onDismiss?: () => void }) {
   return (
     <Alert.Root
       borderRadius="md"
@@ -1183,6 +1214,20 @@ function ErrorAlert({ message }: { message: string }) {
       <Alert.Content>
         <Text fontSize="sm">{message}</Text>
       </Alert.Content>
+      {onDismiss && (
+        <Button
+          variant="ghost"
+          w="24px"
+          h="24px"
+          p="0"
+          flexShrink="0"
+          color="status.danger"
+          aria-label="閉じる"
+          onClick={onDismiss}
+        >
+          <X size={14} />
+        </Button>
+      )}
     </Alert.Root>
   );
 }
@@ -1324,28 +1369,20 @@ export function SecretRow({
   );
 }
 
-function RecipientsPanel() {
+function RecipientsPanel({
+  recipients,
+  loading,
+  error,
+  onSync,
+  onErrorDismiss,
+}: {
+  recipients: Recipient[];
+  loading: boolean;
+  error: string;
+  onSync: () => void | Promise<void>;
+  onErrorDismiss: () => void;
+}) {
   const { t } = useI18n();
-  const [recipients, setRecipients] = useState<Recipient[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const list = await backend.listRecipients();
-      setRecipients((list ?? []).filter((r): r is Recipient => r != null));
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   return (
     <>
@@ -1355,7 +1392,7 @@ function RecipientsPanel() {
           variant="outline"
           loading={loading}
           title={t("dashboard.syncDescription")}
-          onClick={() => void load()}
+          onClick={() => void onSync()}
         >
           <RefreshCw size={14} />
           {t("dashboard.sync")}
@@ -1363,7 +1400,7 @@ function RecipientsPanel() {
       </SectionHeader>
       {error && (
         <Box mb="4">
-          <ErrorAlert message={error} />
+          <ErrorAlert message={error} onDismiss={onErrorDismiss} />
         </Box>
       )}
       {loading ? (
@@ -1603,12 +1640,12 @@ function ConfigPanel({ environments }: { environments: Environment[] }) {
       </SectionHeader>
       {loadError && (
         <Box mb="4">
-          <ErrorAlert message={loadError} />
+          <ErrorAlert message={loadError} onDismiss={() => setLoadError("")} />
         </Box>
       )}
       {saveError && (
         <Box mb="4">
-          <ErrorAlert message={saveError} />
+          <ErrorAlert message={saveError} onDismiss={() => setSaveError("")} />
         </Box>
       )}
       {loading ? (

@@ -20,11 +20,11 @@ export default defineConfig({
         fonts: {
           body: {
             value:
-              'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+              '"BIZ UDGothic", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
           },
           heading: {
             value:
-              'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+              '"BIZ UDGothic", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
           },
           mono: {
             value: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
