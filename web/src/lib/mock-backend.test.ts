@@ -13,6 +13,6 @@ describe("mockBackend preview user", () => {
     expect(status.username).toBe("yashikota");
     expect(initialized.username).toBe("yashikota");
     expect(owners).toContainEqual({ login: "yashikota", organization: false });
-    expect(recipients.some((recipient) => recipient.username === "yashikota")).toBe(true);
+    expect(recipients[0]?.username).toBe("yashikota");
   });
 });
