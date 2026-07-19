@@ -57,7 +57,9 @@ func setupLogger() *os.File {
 func main() {
 	logFile := setupLogger()
 	if logFile != nil {
-		defer logFile.Close()
+		defer func() {
+			_ = logFile.Close()
+		}()
 	}
 
 	core := desktop.NewService(app.New())
