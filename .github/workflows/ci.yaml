@@ -71,7 +71,7 @@ jobs:
           run-install: false
 
       - name: Unit test
-        run: task test
+        run: task test/unit
 
   scenario:
     name: Scenario tests
@@ -100,4 +100,4 @@ jobs:
           run-install: false
 
       - name: Scenario tests
-        run: task test:scenario
+        run: task test/scenario

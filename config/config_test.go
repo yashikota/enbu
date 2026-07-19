@@ -9,32 +9,32 @@ import (
 )
 
 func TestParseGitRemoteSSH(t *testing.T) {
-	owner, repo, err := ParseGitRemote("git@github.com:yashikota/enbu.git")
+	owner, repo, err := ParseGitRemote("git@github.com:enbu-net/enbu.git")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if owner != "yashikota" || repo != "enbu" {
-		t.Fatalf("got %s/%s, want yashikota/enbu", owner, repo)
+	if owner != "enbu-net" || repo != "enbu" {
+		t.Fatalf("got %s/%s, want enbu-net/enbu", owner, repo)
 	}
 }
 
 func TestParseGitRemoteHTTPS(t *testing.T) {
-	owner, repo, err := ParseGitRemote("https://github.com/yashikota/enbu.git")
+	owner, repo, err := ParseGitRemote("https://github.com/enbu-net/enbu.git")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if owner != "yashikota" || repo != "enbu" {
-		t.Fatalf("got %s/%s, want yashikota/enbu", owner, repo)
+	if owner != "enbu-net" || repo != "enbu" {
+		t.Fatalf("got %s/%s, want enbu-net/enbu", owner, repo)
 	}
 }
 
 func TestParseGitRemoteHTTPSNoSuffix(t *testing.T) {
-	owner, repo, err := ParseGitRemote("https://github.com/yashikota/enbu")
+	owner, repo, err := ParseGitRemote("https://github.com/enbu-net/enbu")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if owner != "yashikota" || repo != "enbu" {
-		t.Fatalf("got %s/%s, want yashikota/enbu", owner, repo)
+	if owner != "enbu-net" || repo != "enbu" {
+		t.Fatalf("got %s/%s, want enbu-net/enbu", owner, repo)
 	}
 }
 
@@ -49,12 +49,12 @@ func TestParseGitRemoteSSHNoSuffix(t *testing.T) {
 }
 
 func TestParseGitRemoteTrailingSlash(t *testing.T) {
-	owner, repo, err := ParseGitRemote("https://github.com/yashikota/enbu/")
+	owner, repo, err := ParseGitRemote("https://github.com/enbu-net/enbu/")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if owner != "yashikota" || repo != "enbu" {
-		t.Fatalf("got %s/%s, want yashikota/enbu", owner, repo)
+	if owner != "enbu-net" || repo != "enbu" {
+		t.Fatalf("got %s/%s, want enbu-net/enbu", owner, repo)
 	}
 }
 

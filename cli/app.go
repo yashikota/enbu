@@ -1,10 +1,10 @@
 package cli
 
 import (
+	"github.com/enbu-net/enbu/app"
+	gitprovider "github.com/enbu-net/enbu/provider/git"
+	"github.com/enbu-net/enbu/tui"
 	"github.com/spf13/cobra"
-	"github.com/yashikota/enbu/app"
-	gitprovider "github.com/yashikota/enbu/provider/git"
-	"github.com/yashikota/enbu/tui"
 )
 
 func New(version string) *cobra.Command {

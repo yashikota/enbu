@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { act } from "react-dom/test-utils";
 import { I18nProvider } from "../lib/i18n";
 import { backend, openURL } from "../lib/backend";
-import { AuthContext, RepositoryContextMenu, Sidebar } from "./__root";
+import { AccountMenu, AuthContext, RepositoryContextMenu, Sidebar } from "./__root";
 import {
   parseConfigDraft,
   CreateEnvironmentModal,
@@ -155,6 +155,14 @@ describe("OAuth login", () => {
     oauthMocks.repoStatus.mockResolvedValue({ selected: false });
   });
 
+  it("shows the login action and language selector without a redundant heading", () => {
+    renderUnauthenticatedHome();
+
+    expect(queryButton("Connect with GitHub")).toBeTruthy();
+    expect(container.textContent).not.toContain("Sign in to GitHub");
+    expect(container.querySelector("select")?.value).toBe("en");
+  });
+
   it("clears the OAuth panel even when repository refresh fails", async () => {
     oauthMocks.status.mockResolvedValue({ state: "success", username: "octo" });
     oauthMocks.repoStatus.mockRejectedValue(new Error("refresh failed"));
@@ -199,6 +207,23 @@ describe("OAuth login", () => {
 
     expect(oauthMocks.cancel).toHaveBeenCalledWith("session");
     expect(queryButton("Connect with GitHub")).toBeTruthy();
+  });
+});
+
+describe("AccountMenu", () => {
+  it("does not show another GitHub connect action when signed out", async () => {
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <AccountMenu status={{ authenticated: false }} loading={false} />
+        </I18nProvider>,
+      );
+    });
+
+    await act(async () => queryButton("Account menu")?.click());
+
+    expect(document.body.textContent).toContain("Language");
+    expect(document.body.textContent).not.toContain("Connect GitHub");
   });
 });
 
@@ -288,7 +313,7 @@ describe("RepositoryContextMenu", () => {
   });
 
   it("removes the final repository after confirmation", async () => {
-    let repositories = [{ path: "C:\\repo", owner: "yashikota", repo: "test", initialized: true }];
+    let repositories = [{ path: "C:\\repo", owner: "enbu-net", repo: "test", initialized: true }];
     const backendMock = vi.mocked(backend);
     backendMock.listRepositories.mockImplementation(async () => repositories);
     backendMock.removeRepository.mockImplementation(async () => {
@@ -321,13 +346,13 @@ describe("RepositoryContextMenu", () => {
     });
     const dialog = document.querySelector('[role="dialog"]');
     expect(dialog).toBeTruthy();
-    expect(dialog?.textContent).toContain("Remove yashikota/test from enbu?");
+    expect(dialog?.textContent).toContain("Remove enbu-net/test from enbu?");
     await act(async () => {
       dialog?.querySelector<HTMLButtonElement>('button[aria-label^="Remove:"]')?.click();
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(container.textContent).not.toContain("yashikota/test");
+    expect(container.textContent).not.toContain("enbu-net/test");
     expect(container.textContent).toContain("No repositories yet.");
   });
 });

@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/yashikota/enbu/config"
+	"github.com/enbu-net/enbu/config"
 	"github.com/zalando/go-keyring"
 )
 

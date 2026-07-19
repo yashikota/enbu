@@ -33,7 +33,7 @@ let mockSecretsByEnv: Record<string, { key: string; value: string }[]> = {
 
 const mockRecipients: Recipient[] = [
   {
-    username: "yashikota",
+    username: "alice",
     fingerprint: "aabbccdd",
     public_key: "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqysqqp",
   },
@@ -45,7 +45,7 @@ const mockRecipients: Recipient[] = [
 ];
 
 const mockRepoHistory: NonNullable<GUIRepoStatus["repo"]>[] = [
-  { path: "/demo/enbu", owner: "yashikota", repo: "enbu", initialized: true },
+  { path: "/demo/enbu", owner: "enbu-net", repo: "enbu", initialized: true },
 ];
 let mockSelectedRepoPath = mockRepoHistory[0]?.path ?? "";
 
@@ -64,8 +64,8 @@ export const mockBackend = {
   async authStatus(): Promise<AuthStatus> {
     return {
       authenticated: true,
-      username: "yashikota",
-      repo: { owner: "yashikota", name: "enbu" },
+      username: "alice",
+      repo: { owner: "enbu-net", name: "enbu" },
     };
   },
 
@@ -108,7 +108,7 @@ export const mockBackend = {
   },
 
   async initialize(): Promise<InitResult> {
-    return { public_key: "age1demo...", username: "yashikota", environment: "development" };
+    return { public_key: "age1demo...", username: "alice", environment: "development" };
   },
 
   async gitInit(_path: string): Promise<GUIRepoStatus> {
@@ -126,8 +126,8 @@ export const mockBackend = {
 
   async listRepositoryOwners() {
     return [
-      { login: "yashikota", organization: false },
-      { login: "enbu-demo", organization: true },
+      { login: "alice", organization: false },
+      { login: "enbu-net", organization: true },
     ];
   },
 

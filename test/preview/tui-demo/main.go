@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/yashikota/enbu/tui"
+	"github.com/enbu-net/enbu/tui"
 )
 
 func main() {

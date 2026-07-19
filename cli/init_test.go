@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yashikota/enbu/app"
-	gitprovider "github.com/yashikota/enbu/provider/git"
+	"github.com/enbu-net/enbu/app"
+	gitprovider "github.com/enbu-net/enbu/provider/git"
 )
 
 func TestEnsureGitignore_CreatesNewFile(t *testing.T) {

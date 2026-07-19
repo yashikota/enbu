@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/utils/age"
-	"github.com/yashikota/enbu/utils/bundle"
-	"github.com/yashikota/enbu/utils/oci"
+	"github.com/enbu-net/enbu/app"
+	"github.com/enbu-net/enbu/utils/age"
+	"github.com/enbu-net/enbu/utils/bundle"
+	"github.com/enbu-net/enbu/utils/oci"
 )
 
 type deleteTestTokenProvider struct{}

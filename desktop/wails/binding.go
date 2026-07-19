@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/desktop"
-	gh "github.com/yashikota/enbu/provider/github"
+	"github.com/enbu-net/enbu/app"
+	"github.com/enbu-net/enbu/desktop"
+	gh "github.com/enbu-net/enbu/provider/github"
 )
 
 type DesktopService struct {

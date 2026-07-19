@@ -15,11 +15,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/auth"
-	"github.com/yashikota/enbu/config"
-	gitprovider "github.com/yashikota/enbu/provider/git"
-	gh "github.com/yashikota/enbu/provider/github"
+	"github.com/enbu-net/enbu/app"
+	"github.com/enbu-net/enbu/auth"
+	"github.com/enbu-net/enbu/config"
+	gitprovider "github.com/enbu-net/enbu/provider/git"
+	gh "github.com/enbu-net/enbu/provider/github"
 )
 
 type DirectoryPicker func(context.Context) (string, error)

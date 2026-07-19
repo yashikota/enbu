@@ -70,6 +70,8 @@ tasks:
 
   check/go:
     desc: Format and lint Go code
+    deps:
+      - build/frontend
     cmds:
       - golangci-lint run --fix ./...
       - golangci-lint fmt ./...

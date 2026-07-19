@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"runtime/debug"
 
-	enbucli "github.com/yashikota/enbu/cli"
+	enbucli "github.com/enbu-net/enbu/cli"
 )
 
 var Version string

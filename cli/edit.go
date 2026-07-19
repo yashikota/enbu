@@ -3,8 +3,8 @@ package cli
 import (
 	"fmt"
 
+	"github.com/enbu-net/enbu/app"
 	"github.com/spf13/cobra"
-	"github.com/yashikota/enbu/app"
 )
 
 func newEditCommand(a *app.App) *cobra.Command {

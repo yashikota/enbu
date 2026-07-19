@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/enbu-net/enbu/app"
 	"github.com/spf13/cobra"
-	"github.com/yashikota/enbu/app"
 )
 
 func newSwitchCommand(a *app.App) *cobra.Command {

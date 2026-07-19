@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	gh "github.com/yashikota/enbu/provider/github"
+	gh "github.com/enbu-net/enbu/provider/github"
 )
 
 const (

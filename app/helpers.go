@@ -9,11 +9,11 @@ import (
 	"time"
 
 	agecrypto "filippo.io/age"
-	"github.com/yashikota/enbu/config"
-	"github.com/yashikota/enbu/utils/age"
-	"github.com/yashikota/enbu/utils/bundle"
-	"github.com/yashikota/enbu/utils/keystore"
-	"github.com/yashikota/enbu/utils/oci"
+	"github.com/enbu-net/enbu/config"
+	"github.com/enbu-net/enbu/utils/age"
+	"github.com/enbu-net/enbu/utils/bundle"
+	"github.com/enbu-net/enbu/utils/keystore"
+	"github.com/enbu-net/enbu/utils/oci"
 )
 
 const (

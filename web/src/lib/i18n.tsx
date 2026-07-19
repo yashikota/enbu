@@ -60,7 +60,6 @@ const en = {
     environmentSecrets: "{environment} secrets",
   },
   auth: {
-    welcome: "Sign in to GitHub",
     connect: "Connect with GitHub",
     waiting: "Waiting for GitHub authorization...",
     cancel: "Cancel",
@@ -175,7 +174,6 @@ const ja: Messages = {
     environmentSecrets: "{environment} のシークレット",
   },
   auth: {
-    welcome: "GitHubにサインイン",
     connect: "GitHubで接続",
     waiting: "GitHubでの承認を待っています...",
     cancel: "キャンセル",

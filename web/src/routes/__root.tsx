@@ -10,13 +10,13 @@ import {
 } from "react";
 import { Box, Flex, VStack, styled } from "styled-system/jsx";
 import { Button, Popover, Separator, Text } from "../components/ui";
-import { NativeSelect } from "../components/ui/native-select";
 import { Trash2 } from "lucide-react";
 import type { AuthStatus } from "../lib/api";
 import { backend, openURL } from "../lib/backend";
 import { createAuthRefresher, type AuthRefreshOptions } from "../lib/auth-refresh";
-import { I18nProvider, useI18n, type Locale } from "../lib/i18n";
+import { I18nProvider, useI18n } from "../lib/i18n";
 import { ConfirmDeleteDialog } from "../components/confirm-delete-dialog";
+import { LanguageSelector } from "../components/language-selector";
 
 export type AuthContextValue = {
   status: AuthStatus | null;
@@ -379,7 +379,7 @@ export function RepositoryContextMenu({
 }
 
 export function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: boolean }) {
-  const { locale, setLocale, t } = useI18n();
+  const { t } = useI18n();
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   const authenticated = Boolean(status?.authenticated);
@@ -462,49 +462,26 @@ export function AccountMenu({ status, loading }: { status: AuthStatus | null; lo
             )}
           </Box>
 
-          {/* Language */}
-          <Flex justifyContent="space-between" alignItems="center" py="10px">
-            <Text fontSize="sm" color="fg.muted">
-              {t("app.language")}
-            </Text>
-            <NativeSelect
-              value={locale}
-              onChange={(e) => setLocale(e.target.value as Locale)}
-              style={{ width: "118px" }}
-            >
-              <option value="en">English</option>
-              <option value="ja">日本語</option>
-            </NativeSelect>
-          </Flex>
+          <LanguageSelector justifyContent="space-between" py="10px" />
 
-          <Separator mb="2" />
-          {authenticated ? (
-            <Button
-              size="sm"
-              variant="outline"
-              w="full"
-              borderColor="border.default"
-              color="fg.default"
-              fontWeight="semibold"
-              onClick={async () => {
-                await backend.logout();
-                window.dispatchEvent(new Event("enbu-auth-changed"));
-              }}
-            >
-              {t("auth.logout")}
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              w="full"
-              borderColor="border.default"
-              color="fg.default"
-              fontWeight="semibold"
-              onClick={() => window.dispatchEvent(new Event("enbu-connect-github"))}
-            >
-              Connect GitHub
-            </Button>
+          {authenticated && (
+            <>
+              <Separator mb="2" />
+              <Button
+                size="sm"
+                variant="outline"
+                w="full"
+                borderColor="border.default"
+                color="fg.default"
+                fontWeight="semibold"
+                onClick={async () => {
+                  await backend.logout();
+                  window.dispatchEvent(new Event("enbu-auth-changed"));
+                }}
+              >
+                {t("auth.logout")}
+              </Button>
+            </>
           )}
         </Popover.Content>
       </Popover.Positioner>

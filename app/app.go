@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yashikota/enbu/auth"
-	"github.com/yashikota/enbu/config"
-	gitprovider "github.com/yashikota/enbu/provider/git"
-	"github.com/yashikota/enbu/utils/keystore"
-	"github.com/yashikota/enbu/utils/oci"
+	"github.com/enbu-net/enbu/auth"
+	"github.com/enbu-net/enbu/config"
+	gitprovider "github.com/enbu-net/enbu/provider/git"
+	"github.com/enbu-net/enbu/utils/keystore"
+	"github.com/enbu-net/enbu/utils/oci"
 )
 
 type App struct {

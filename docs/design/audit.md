@@ -120,7 +120,7 @@ Events recorded in Rekor use the in-toto attestation format.
     "event": "secret.pull",
     "environment": "production",
     "actor": {
-      "username": "yashikota",
+      "username": "alice",
       "id": 12345678
     },
     "secret_names": ["DB_PASSWORD", "API_TOKEN"],
@@ -206,7 +206,7 @@ Query the Rekor API and display audit events for the current project.
 ```bash
 enbu audit list                                    # all events
 enbu audit list --env production                   # filter by environment
-enbu audit list --actor yashikota                  # filter by actor
+enbu audit list --actor alice                      # filter by actor
 enbu audit list --from 2026-07-01 --to 2026-07-13 # filter by date range
 ```
 
