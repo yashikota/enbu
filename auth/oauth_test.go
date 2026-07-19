@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -16,24 +15,20 @@ import (
 	"time"
 )
 
-func TestNewSecrets(t *testing.T) {
-	poll1, hash1, verifier1, challenge1, err := newSecrets()
+func TestNewPKCE(t *testing.T) {
+	verifier1, challenge1, err := newPKCE()
 	if err != nil {
 		t.Fatal(err)
 	}
-	poll2, _, verifier2, _, err := newSecrets()
+	verifier2, _, err := newPKCE()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if poll1 == poll2 || verifier1 == verifier2 {
+	if verifier1 == verifier2 {
 		t.Fatal("generated secrets were reused")
 	}
-	if len(poll1) != 43 || len(verifier1) != 43 || len(challenge1) != 43 {
-		t.Fatalf("unexpected lengths: poll=%d verifier=%d challenge=%d", len(poll1), len(verifier1), len(challenge1))
-	}
-	pollSum := sha256.Sum256([]byte(poll1))
-	if hash1 != hex.EncodeToString(pollSum[:]) || len(hash1) != 64 {
-		t.Fatal("poll secret hash is invalid")
+	if len(verifier1) != 43 || len(challenge1) != 43 {
+		t.Fatalf("unexpected lengths: verifier=%d challenge=%d", len(verifier1), len(challenge1))
 	}
 	verifierSum := sha256.Sum256([]byte(verifier1))
 	if challenge1 != base64.RawURLEncoding.EncodeToString(verifierSum[:]) {
@@ -42,8 +37,7 @@ func TestNewSecrets(t *testing.T) {
 }
 
 func TestCallbackRejectsInvalidRequestsThenAcceptsValidCallback(t *testing.T) {
-	sessionID := strings.Repeat("c", 32)
-	state := sessionID + ":" + strings.Repeat("b", 32)
+	state := strings.Repeat("b", 64)
 	results := make(chan callbackResult, 1)
 	server := newCallbackServer(state, results)
 
@@ -77,7 +71,7 @@ func TestCallbackRejectsInvalidRequestsThenAcceptsValidCallback(t *testing.T) {
 		t.Fatalf("valid callback returned %d", response.Code)
 	}
 	result := <-results
-	if result.code != "secret-code" || result.state != state || result.denied {
+	if result.code != "secret-code" || result.denied {
 		t.Fatalf("unexpected callback result: %#v", result)
 	}
 	if strings.Contains(response.Body.String(), "secret-code") || strings.Contains(response.Body.String(), state) {
@@ -96,8 +90,7 @@ func TestCallbackRejectsInvalidRequestsThenAcceptsValidCallback(t *testing.T) {
 }
 
 func TestCallbackRejectsNonLoopbackAndWrongMethod(t *testing.T) {
-	sessionID := strings.Repeat("c", 32)
-	state := sessionID + ":" + strings.Repeat("b", 32)
+	state := strings.Repeat("b", 64)
 	server := newCallbackServer(state, make(chan callbackResult, 1))
 	for _, tc := range []struct {
 		method string
@@ -120,7 +113,7 @@ func TestCallbackRejectsNonLoopbackAndWrongMethod(t *testing.T) {
 }
 
 func TestCallbackDenialDoesNotLeakDescription(t *testing.T) {
-	state := strings.Repeat("a", 32) + ":" + strings.Repeat("b", 32)
+	state := strings.Repeat("a", 64)
 	results := make(chan callbackResult, 1)
 	server := newCallbackServer(state, results)
 	req := httptest.NewRequest(
@@ -146,40 +139,47 @@ func TestOAuthLoginEndToEnd(t *testing.T) {
 	getGitHubUser = func(context.Context, string) (string, int64, error) { return "octo", 123, nil }
 	t.Cleanup(func() { getGitHubUser = originalUser })
 
-	sessionID := strings.Repeat("c", 32)
-	state := sessionID + ":" + strings.Repeat("b", 32)
+	state := strings.Repeat("b", 64)
 	var redirectURI string
-	var pollSecret string
+	var challenge string
 	var mu sync.Mutex
 	broker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/oauth/sessions":
-			var body createSessionRequest
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/oauth/authorize":
+			var body authorizeRequest
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Error(err)
 			}
 			mu.Lock()
 			redirectURI = body.RedirectURI
+			challenge = body.CodeChallenge
 			mu.Unlock()
 			if !strings.HasPrefix(redirectURI, "http://127.0.0.1:") {
 				t.Errorf("redirect URI = %q", redirectURI)
 			}
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(createSessionResponse{
-				SessionID:    sessionID,
-				AuthorizeURL: "https://github.com/login/oauth/authorize?state=" + state,
+			authorizeURL := "https://github.com/login/oauth/authorize?" + url.Values{
+				"state":                 {state},
+				"code_challenge":        {body.CodeChallenge},
+				"code_challenge_method": {"S256"},
+				"redirect_uri":          {body.RedirectURI},
+			}.Encode()
+			_ = json.NewEncoder(w).Encode(authorizeResponse{
+				AuthorizeURL: authorizeURL,
 				State:        state,
-				ExpiresAt:    time.Now().Add(10 * time.Minute).UnixMilli(),
 			})
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/exchange"):
-			pollSecret = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/oauth/exchange":
 			var body exchangeRequest
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Error(err)
 			}
-			if body.Code != "github-code" || body.State != state || len(body.CodeVerifier) != 43 {
+			verifierSum := sha256.Sum256([]byte(body.CodeVerifier))
+			if body.Code != "github-code" || body.RedirectURI != redirectURI ||
+				base64.RawURLEncoding.EncodeToString(verifierSum[:]) != challenge {
 				t.Errorf("invalid exchange request")
+			}
+			if r.Header.Get("Authorization") != "" {
+				t.Error("exchange request unexpectedly used authorization header")
 			}
 			_ = json.NewEncoder(w).Encode(exchangeResponse{
 				AccessToken: "github-token",
@@ -210,35 +210,24 @@ func TestOAuthLoginEndToEnd(t *testing.T) {
 	if token.Username != "octo" || token.UserID != 123 || token.AccessToken != "github-token" {
 		t.Fatalf("stored token = %#v", token)
 	}
-	if len(pollSecret) != 43 {
-		t.Fatalf("poll secret length = %d", len(pollSecret))
-	}
 }
 
-func TestOAuthLoginCancelsSessionWhenBrowserFails(t *testing.T) {
-	sessionID := strings.Repeat("c", 32)
-	state := sessionID + ":" + strings.Repeat("b", 32)
-	cancelled := make(chan struct{}, 1)
+func TestOAuthLoginReturnsWhenBrowserFails(t *testing.T) {
+	state := strings.Repeat("b", 64)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch r.Method {
-		case http.MethodPost:
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(createSessionResponse{
-				SessionID:    sessionID,
-				AuthorizeURL: "https://github.com/login/oauth/authorize?state=" + state,
-				State:        state,
-				ExpiresAt:    time.Now().Add(10 * time.Minute).UnixMilli(),
-			})
-		case http.MethodDelete:
-			if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
-				t.Error("cancel request has no bearer token")
-			}
-			cancelled <- struct{}{}
-			_ = json.NewEncoder(w).Encode(map[string]bool{"cancelled": true})
-		default:
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/oauth/authorize" {
 			w.WriteHeader(http.StatusNotFound)
+			return
 		}
+		var body authorizeRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		_ = json.NewEncoder(w).Encode(authorizeResponse{
+			AuthorizeURL: authorizeURL(state, body.CodeChallenge, body.RedirectURI),
+			State:        state,
+		})
 	}))
 	defer server.Close()
 
@@ -247,34 +236,24 @@ func TestOAuthLoginCancelsSessionWhenBrowserFails(t *testing.T) {
 	if err == nil || err.Error() != "opening browser failed" {
 		t.Fatalf("login error = %v", err)
 	}
-	select {
-	case <-cancelled:
-	case <-time.After(time.Second):
-		t.Fatal("OAuth session was not cancelled")
-	}
 }
 
 func TestOAuthLoginCancellationWhileWaitingForCallback(t *testing.T) {
-	sessionID := strings.Repeat("c", 32)
-	state := sessionID + ":" + strings.Repeat("d", 32)
-	cancelled := make(chan struct{}, 1)
+	state := strings.Repeat("d", 64)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch r.Method {
-		case http.MethodPost:
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(createSessionResponse{
-				SessionID:    sessionID,
-				AuthorizeURL: "https://github.com/login/oauth/authorize?state=" + state,
-				State:        state,
-				ExpiresAt:    time.Now().Add(10 * time.Minute).UnixMilli(),
-			})
-		case http.MethodDelete:
-			cancelled <- struct{}{}
-			_ = json.NewEncoder(w).Encode(map[string]bool{"cancelled": true})
-		default:
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/oauth/authorize" {
 			w.WriteHeader(http.StatusNotFound)
+			return
 		}
+		var body authorizeRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		_ = json.NewEncoder(w).Encode(authorizeResponse{
+			AuthorizeURL: authorizeURL(state, body.CodeChallenge, body.RedirectURI),
+			State:        state,
+		})
 	}))
 	defer server.Close()
 
@@ -286,11 +265,6 @@ func TestOAuthLoginCancellationWhileWaitingForCallback(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), context.Canceled.Error()) {
 		t.Fatalf("login error = %v", err)
-	}
-	select {
-	case <-cancelled:
-	case <-time.After(time.Second):
-		t.Fatal("OAuth session was not cancelled")
 	}
 }
 
@@ -306,32 +280,22 @@ func TestOAuthHTTPStagesHonorTimeouts(t *testing.T) {
 	httpClient.Timeout = 25 * time.Millisecond
 	client := newOAuthClient(server.URL, httpClient)
 	started := time.Now()
-	_, err := client.createSession(context.Background(), createSessionRequest{})
+	_, err := client.authorize(context.Background(), authorizeRequest{})
 	if err == nil || time.Since(started) > 150*time.Millisecond {
-		t.Fatalf("session creation timeout err=%v elapsed=%s", err, time.Since(started))
+		t.Fatalf("authorization timeout err=%v elapsed=%s", err, time.Since(started))
 	}
 
 	started = time.Now()
-	_, err = client.exchange(
-		context.Background(),
-		strings.Repeat("a", 32),
-		"poll-secret",
-		exchangeRequest{Code: "code", State: "state", CodeVerifier: "verifier"},
-		time.Now().Add(time.Minute),
-	)
+	_, err = client.exchange(context.Background(), exchangeRequest{
+		Code: "code", CodeVerifier: "verifier", RedirectURI: "http://127.0.0.1:1234/oauth/callback",
+	})
 	if err == nil || time.Since(started) > 150*time.Millisecond {
 		t.Fatalf("exchange timeout err=%v elapsed=%s", err, time.Since(started))
-	}
-
-	started = time.Now()
-	client.cancelSession(strings.Repeat("a", 32), "poll-secret")
-	if time.Since(started) > 150*time.Millisecond {
-		t.Fatalf("cancel timeout elapsed=%s", time.Since(started))
 	}
 }
 
 func TestOAuthErrorsDoNotExposeSecrets(t *testing.T) {
-	secrets := []string{"poll-secret", "authorization-code", "state-secret", "pkce-verifier", "access-token"}
+	secrets := []string{"authorization-code", "pkce-verifier", "redirect-uri", "access-token"}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadGateway)
@@ -340,13 +304,9 @@ func TestOAuthErrorsDoNotExposeSecrets(t *testing.T) {
 	defer server.Close()
 
 	client := newOAuthClient(server.URL, server.Client())
-	_, err := client.exchange(
-		context.Background(),
-		strings.Repeat("a", 32),
-		secrets[0],
-		exchangeRequest{Code: secrets[1], State: secrets[2], CodeVerifier: secrets[3]},
-		time.Now().Add(time.Minute),
-	)
+	_, err := client.exchange(context.Background(), exchangeRequest{
+		Code: secrets[0], CodeVerifier: secrets[1], RedirectURI: secrets[2],
+	})
 	if err == nil {
 		t.Fatal("exchange unexpectedly succeeded")
 	}
@@ -375,7 +335,7 @@ func TestExchangeRetriesOnlyRateLimit(t *testing.T) {
 	}))
 	defer server.Close()
 	client := newOAuthClient(server.URL, server.Client())
-	_, err := client.exchange(context.Background(), strings.Repeat("a", 32), "poll", exchangeRequest{}, time.Now().Add(time.Minute))
+	_, err := client.exchange(context.Background(), exchangeRequest{})
 	if err != nil || calls != 2 {
 		t.Fatalf("exchange err=%v calls=%d", err, calls)
 	}
@@ -387,7 +347,7 @@ func TestExchangeRetriesOnlyRateLimit(t *testing.T) {
 	}))
 	defer badGatewayServer.Close()
 	client = newOAuthClient(badGatewayServer.URL, badGatewayServer.Client())
-	_, err = client.exchange(context.Background(), strings.Repeat("a", 32), "poll", exchangeRequest{}, time.Now().Add(time.Minute))
+	_, err = client.exchange(context.Background(), exchangeRequest{})
 	if err == nil || calls != 1 {
 		t.Fatalf("5xx exchange err=%v calls=%d", err, calls)
 	}
@@ -419,27 +379,42 @@ func TestRetryDelayUsesBoundedExponentialMinimum(t *testing.T) {
 	}
 }
 
-func TestValidAuthorizeURLRequiresMatchingSingleState(t *testing.T) {
-	state := strings.Repeat("a", 32) + ":" + strings.Repeat("b", 32)
+func TestValidAuthorizeURLRequiresMatchingOAuthParameters(t *testing.T) {
+	state := strings.Repeat("a", 64)
+	challenge := strings.Repeat("b", 43)
+	redirectURI := "http://127.0.0.1:1234/oauth/callback"
 	base := "https://github.com/login/oauth/authorize"
+	valid := authorizeURL(state, challenge, redirectURI)
 	tests := []struct {
 		name string
 		url  string
 		want bool
 	}{
-		{name: "valid", url: base + "?state=" + state, want: true},
+		{name: "valid", url: valid, want: true},
 		{name: "missing", url: base},
-		{name: "duplicate", url: base + "?state=" + state + "&state=" + state},
-		{name: "mismatch", url: base + "?state=wrong"},
-		{name: "wrong host", url: "https://example.com/login/oauth/authorize?state=" + state},
+		{name: "duplicate state", url: valid + "&state=" + state},
+		{name: "mismatched state", url: strings.Replace(valid, state, "wrong", 1)},
+		{name: "mismatched challenge", url: strings.Replace(valid, challenge, "wrong", 1)},
+		{name: "mismatched redirect", url: strings.Replace(valid, url.QueryEscape(redirectURI), url.QueryEscape("http://127.0.0.1:4321/oauth/callback"), 1)},
+		{name: "wrong method", url: strings.Replace(valid, "S256", "plain", 1)},
+		{name: "wrong host", url: strings.Replace(valid, "github.com", "example.com", 1)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := validAuthorizeURL(tt.url, state); got != tt.want {
+			if got := validAuthorizeURL(tt.url, state, challenge, redirectURI); got != tt.want {
 				t.Fatalf("validAuthorizeURL() = %v, want %v", got, tt.want)
 			}
 		})
 	}
+}
+
+func authorizeURL(state, challenge, redirectURI string) string {
+	return "https://github.com/login/oauth/authorize?" + url.Values{
+		"state":                 {state},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
+		"redirect_uri":          {redirectURI},
+	}.Encode()
 }
 
 func TestValidateTokenRequiresBearerAndAllScopes(t *testing.T) {
