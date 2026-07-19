@@ -8,6 +8,8 @@ import type {
 } from "./api";
 import type { OAuthStart, OAuthStatus } from "./backend";
 
+const previewUsername = "yashikota";
+
 let mockEnvs: Environment[] = [
   { name: "development", current: true },
   { name: "production", current: false },
@@ -33,7 +35,7 @@ let mockSecretsByEnv: Record<string, { key: string; value: string }[]> = {
 
 const mockRecipients: Recipient[] = [
   {
-    username: "alice",
+    username: previewUsername,
     fingerprint: "aabbccdd",
     public_key: "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqysqqp",
   },
@@ -64,7 +66,7 @@ export const mockBackend = {
   async authStatus(): Promise<AuthStatus> {
     return {
       authenticated: true,
-      username: "alice",
+      username: previewUsername,
       repo: { owner: "enbu-net", name: "enbu" },
     };
   },
@@ -108,7 +110,7 @@ export const mockBackend = {
   },
 
   async initialize(): Promise<InitResult> {
-    return { public_key: "age1demo...", username: "alice", environment: "development" };
+    return { public_key: "age1demo...", username: previewUsername, environment: "development" };
   },
 
   async gitInit(_path: string): Promise<GUIRepoStatus> {
@@ -126,7 +128,7 @@ export const mockBackend = {
 
   async listRepositoryOwners() {
     return [
-      { login: "alice", organization: false },
+      { login: previewUsername, organization: false },
       { login: "enbu-net", organization: true },
     ];
   },
