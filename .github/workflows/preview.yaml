@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened]
 
 permissions: {}
 
@@ -15,7 +15,6 @@ concurrency:
 jobs:
   build-web:
     name: Build Web Preview
-    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -53,7 +52,6 @@ jobs:
 
   build-tui:
     name: Build Interactive TUI Preview
-    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -110,7 +108,6 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    if: github.event.action != 'closed'
     needs: [build-web, build-tui]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -235,7 +232,7 @@ jobs:
     needs: deploy
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    if: github.event_name == 'pull_request'
     permissions:
       pull-requests: write
     steps:
@@ -260,51 +257,3 @@ jobs:
 
             > Updated at ${{ github.sha }}
           edit-mode: replace
-
-  cleanup:
-    name: Remove PR Preview
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Remove PR directory from store
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          if ! git ls-remote --exit-code "$REPO_URL" "refs/heads/_preview-store" > /dev/null 2>&1; then
-            echo "No _preview-store branch found, nothing to clean up."
-            exit 0
-          fi
-          git clone --depth 1 --branch _preview-store "$REPO_URL" store
-          cd store || exit 1
-          if [ ! -d "pr-${PR_NUMBER}" ]; then
-            echo "pr-${PR_NUMBER} not found, nothing to clean up."
-            exit 0
-          fi
-          rm -rf "pr-${PR_NUMBER}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "preview: remove pr-${PR_NUMBER}"
-          git push origin _preview-store:_preview-store
-
-      - name: Configure Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: store
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
