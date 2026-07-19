@@ -8,5 +8,14 @@
   "frontend:dev:watcher": "vp run dev",
   "frontend:dev:serverUrl": "http://localhost:5173",
   "assetdir": "../../web/dist",
-  "wailsjsdir": "../../web/src"
+  "wailsjsdir": "../../web/src",
+  "info": {
+    "protocols": [
+      {
+        "scheme": "enbu",
+        "description": "Open enbu desktop",
+        "role": "Viewer"
+      }
+    ]
+  }
 }

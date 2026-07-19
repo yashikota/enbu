@@ -23,6 +23,18 @@ import (
 
 type slogWailsLogger struct{}
 
+type windowActions struct {
+	show       func(context.Context)
+	unminimise func(context.Context)
+	center     func(context.Context)
+}
+
+var wailsWindowActions = windowActions{
+	show:       runtime.WindowShow,
+	unminimise: runtime.WindowUnminimise,
+	center:     runtime.WindowCenter,
+}
+
 func (slogWailsLogger) Print(message string) { slog.Debug("wails print", "message", message) }
 func (slogWailsLogger) Trace(message string) { slog.Debug("wails trace", "message", message) }
 func (slogWailsLogger) Debug(message string) { slog.Debug("wails debug", "message", message) }
@@ -54,6 +66,25 @@ func setupLogger() *os.File {
 	return f
 }
 
+func showWindow(ctx context.Context, actions windowActions) {
+	if ctx == nil {
+		return
+	}
+	actions.show(ctx)
+	actions.unminimise(ctx)
+	actions.center(ctx)
+}
+
+func activationHandlers(contextProvider func() context.Context, activate func(context.Context)) (func(options.SecondInstanceData), func(string)) {
+	return func(data options.SecondInstanceData) {
+			slog.Info("second instance launch", "args", data.Args, "cwd", data.WorkingDirectory)
+			activate(contextProvider())
+		}, func(_ string) {
+			slog.Info("URL opened")
+			activate(contextProvider())
+		}
+}
+
 func main() {
 	logFile := setupLogger()
 	if logFile != nil {
@@ -61,9 +92,16 @@ func main() {
 			_ = logFile.Close()
 		}()
 	}
+	if err := registerProtocolHandler(); err != nil {
+		slog.Warn("registering enbu protocol handler", "err", err)
+	}
 
 	core := desktop.NewService(app.New())
 	service := &DesktopService{service: core}
+	onSecondInstanceLaunch, onURLOpen := activationHandlers(
+		core.Context,
+		func(ctx context.Context) { showWindow(ctx, wailsWindowActions) },
+	)
 	core.SetDirectoryPicker(func(ctx context.Context) (string, error) {
 		slog.Debug("OpenDirectoryDialog called")
 		return runtime.OpenDirectoryDialog(ctx, runtime.OpenDialogOptions{
@@ -84,17 +122,8 @@ func main() {
 		LogLevel:           logger.TRACE,
 		LogLevelProduction: logger.TRACE,
 		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: "net.enbu.desktop",
-			OnSecondInstanceLaunch: func(data options.SecondInstanceData) {
-				slog.Info("second instance launch ignored", "args", data.Args, "cwd", data.WorkingDirectory)
-				ctx := core.Context()
-				if ctx == nil {
-					return
-				}
-				runtime.WindowShow(ctx)
-				runtime.WindowUnminimise(ctx)
-				runtime.WindowCenter(ctx)
-			},
+			UniqueId:               "net.enbu.desktop",
+			OnSecondInstanceLaunch: onSecondInstanceLaunch,
 		},
 		AssetServer: &assetserver.Options{
 			Assets: web.FrontendFS(),
@@ -104,6 +133,7 @@ func main() {
 				Title: "enbu",
 				Icon:  assets.Icon,
 			},
+			OnUrlOpen: onURLOpen,
 		},
 		Linux: &linux.Options{
 			Icon:        assets.Icon,

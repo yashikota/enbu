@@ -174,7 +174,7 @@ const ja: Messages = {
     environmentSecrets: "{environment} のシークレット",
   },
   auth: {
-    connect: "GitHubで接続",
+    connect: "GitHub認証",
     waiting: "GitHubでの承認を待っています...",
     cancel: "キャンセル",
     tryAgain: "再試行",

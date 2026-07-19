@@ -77,6 +77,9 @@ func TestCallbackRejectsInvalidRequestsThenAcceptsValidCallback(t *testing.T) {
 	if strings.Contains(response.Body.String(), "secret-code") || strings.Contains(response.Body.String(), state) {
 		t.Fatal("callback HTML leaked query values")
 	}
+	if !strings.Contains(response.Body.String(), `href="enbu://auth/complete"`) {
+		t.Fatal("successful callback does not link back to the desktop app")
+	}
 	second := httptest.NewRecorder()
 	server.Handler.ServeHTTP(second, req)
 	if second.Code != http.StatusConflict {
