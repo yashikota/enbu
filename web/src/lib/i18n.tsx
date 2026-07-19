@@ -80,6 +80,7 @@ const en = {
   common: {
     loading: "Loading...",
     error: "Error",
+    close: "Close",
   },
   sidebar: {
     repositories: "Repositories",
@@ -195,6 +196,7 @@ const ja: Messages = {
   common: {
     loading: "読み込み中...",
     error: "エラー",
+    close: "閉じる",
   },
   sidebar: {
     repositories: "リポジトリ",

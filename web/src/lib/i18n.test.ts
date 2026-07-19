@@ -42,4 +42,13 @@ describe("i18n", () => {
     expect(translate("ja", "dashboard.copyKey")).toBe("名前をコピー");
     expect(translate("ja", "dashboard.keyCopied")).toBe("名前をコピー済み");
   });
+
+  it("translates duplicateKey with key interpolation", () => {
+    expect(translate("en", "dashboard.duplicateKey", { key: "MY_SECRET" })).toBe(
+      'Key "MY_SECRET" already exists. Edit the existing secret instead.',
+    );
+    expect(translate("ja", "dashboard.duplicateKey", { key: "MY_SECRET" })).toBe(
+      "キー「MY_SECRET」はすでに存在します。既存のシークレットを編集してください。",
+    );
+  });
 });

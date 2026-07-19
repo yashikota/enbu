@@ -1201,6 +1201,7 @@ function PageCenter({ children }: { children: React.ReactNode }) {
 }
 
 function ErrorAlert({ message, onDismiss }: { message: string; onDismiss?: () => void }) {
+  const { t } = useI18n();
   return (
     <Alert.Root
       borderRadius="md"
@@ -1222,7 +1223,7 @@ function ErrorAlert({ message, onDismiss }: { message: string; onDismiss?: () =>
           p="0"
           flexShrink="0"
           color="status.danger"
-          aria-label="閉じる"
+          aria-label={t("common.close")}
           onClick={onDismiss}
         >
           <X size={14} />
