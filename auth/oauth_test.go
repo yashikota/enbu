@@ -417,11 +417,11 @@ func authorizeURL(state, challenge, redirectURI string) string {
 	}.Encode()
 }
 
-func TestValidateTokenRequiresBearerAndAllScopes(t *testing.T) {
+func TestValidateTokenRequiresBearerAndNormalizedScopes(t *testing.T) {
 	valid := exchangeResponse{
 		AccessToken: "token",
 		TokenType:   "BEARER",
-		Scope:       "repo read:org write:packages read:packages",
+		Scope:       "repo read:org write:packages",
 	}
 	if err := validateToken(valid); err != nil {
 		t.Fatalf("valid token rejected: %v", err)
@@ -429,7 +429,7 @@ func TestValidateTokenRequiresBearerAndAllScopes(t *testing.T) {
 	for _, mutate := range []func(*exchangeResponse){
 		func(token *exchangeResponse) { token.AccessToken = "" },
 		func(token *exchangeResponse) { token.TokenType = "mac" },
-		func(token *exchangeResponse) { token.Scope = "repo read:org write:packages" },
+		func(token *exchangeResponse) { token.Scope = "repo read:org read:packages" },
 	} {
 		token := valid
 		mutate(&token)

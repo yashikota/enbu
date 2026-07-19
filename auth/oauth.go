@@ -296,7 +296,7 @@ func validateToken(token exchangeResponse) error {
 	}) {
 		got[scope] = true
 	}
-	for _, required := range []string{"repo", "read:org", "write:packages", "read:packages"} {
+	for _, required := range []string{"repo", "read:org", "write:packages"} {
 		if !got[required] {
 			return fmt.Errorf("missing required scope %q", required)
 		}
