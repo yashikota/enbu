@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,8 +34,7 @@ const (
 )
 
 var (
-	sessionIDPattern = regexp.MustCompile(`^[a-f0-9]{32}$`)
-	statePattern     = regexp.MustCompile(`^[a-f0-9]{32}:[a-f0-9]{32}$`)
+	statePattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 	ErrAccessDenied = errors.New("access denied by user")
 	getGitHubUser   = func(ctx context.Context, token string) (string, int64, error) {
@@ -55,24 +53,20 @@ type oauthClient struct {
 	http    *http.Client
 }
 
-type createSessionRequest struct {
-	PollSecretHash string `json:"poll_secret_hash"`
-	Provider       string `json:"provider"`
-	CodeChallenge  string `json:"code_challenge"`
-	RedirectURI    string `json:"redirect_uri"`
+type authorizeRequest struct {
+	CodeChallenge string `json:"code_challenge"`
+	RedirectURI   string `json:"redirect_uri"`
 }
 
-type createSessionResponse struct {
-	SessionID    string `json:"session_id"`
+type authorizeResponse struct {
 	AuthorizeURL string `json:"authorize_url"`
 	State        string `json:"state"`
-	ExpiresAt    int64  `json:"expires_at"`
 }
 
 type exchangeRequest struct {
 	Code         string `json:"code"`
-	State        string `json:"state"`
 	CodeVerifier string `json:"code_verifier"`
+	RedirectURI  string `json:"redirect_uri"`
 }
 
 type exchangeResponse struct {
@@ -83,7 +77,6 @@ type exchangeResponse struct {
 
 type callbackResult struct {
 	code   string
-	state  string
 	denied bool
 }
 
@@ -123,30 +116,21 @@ func (c *oauthClient) login(parent context.Context, openBrowser BrowserOpener) (
 
 	port := listener.Addr().(*net.TCPAddr).Port
 	redirectURI := fmt.Sprintf("http://127.0.0.1:%d%s", port, callbackPath)
-	pollSecret, pollHash, verifier, challenge, err := newSecrets()
+	verifier, challenge, err := newPKCE()
 	if err != nil {
 		return nil, err
 	}
 
-	session, err := c.createSession(ctx, createSessionRequest{
-		PollSecretHash: pollHash,
-		Provider:       "github",
-		CodeChallenge:  challenge,
-		RedirectURI:    redirectURI,
+	authorization, err := c.authorize(ctx, authorizeRequest{
+		CodeChallenge: challenge,
+		RedirectURI:   redirectURI,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	completed := false
-	defer func() {
-		if !completed {
-			c.cancelSession(session.SessionID, pollSecret)
-		}
-	}()
-
 	callbackCh := make(chan callbackResult, 1)
-	server := newCallbackServer(session.State, callbackCh)
+	server := newCallbackServer(authorization.State, callbackCh)
 	serveErr := make(chan error, 1)
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -158,7 +142,7 @@ func (c *oauthClient) login(parent context.Context, openBrowser BrowserOpener) (
 	if openBrowser == nil {
 		return nil, errors.New("opening browser: browser opener is unavailable")
 	}
-	if err := openBrowser(session.AuthorizeURL); err != nil {
+	if err := openBrowser(authorization.AuthorizeURL); err != nil {
 		return nil, errors.New("opening browser failed")
 	}
 
@@ -174,15 +158,14 @@ func (c *oauthClient) login(parent context.Context, openBrowser BrowserOpener) (
 		return nil, ErrAccessDenied
 	}
 
-	token, err := c.exchange(ctx, session.SessionID, pollSecret, exchangeRequest{
+	token, err := c.exchange(ctx, exchangeRequest{
 		Code:         callback.code,
-		State:        callback.state,
 		CodeVerifier: verifier,
-	}, time.UnixMilli(session.ExpiresAt))
+		RedirectURI:  redirectURI,
+	})
 	if err != nil {
 		return nil, err
 	}
-	completed = true
 
 	login, userID, err := getGitHubUser(ctx, token.AccessToken)
 	if err != nil {
@@ -199,65 +182,54 @@ func (c *oauthClient) login(parent context.Context, openBrowser BrowserOpener) (
 	return stored, nil
 }
 
-func newSecrets() (pollSecret, pollHash, verifier, challenge string, err error) {
-	pollBytes := make([]byte, 32)
-	if _, err = rand.Read(pollBytes); err != nil {
-		return "", "", "", "", fmt.Errorf("generating poll secret: %w", err)
-	}
+func newPKCE() (verifier, challenge string, err error) {
 	verifierBytes := make([]byte, 32)
 	if _, err = rand.Read(verifierBytes); err != nil {
-		return "", "", "", "", fmt.Errorf("generating PKCE verifier: %w", err)
+		return "", "", fmt.Errorf("generating PKCE verifier: %w", err)
 	}
 
-	pollSecret = base64.RawURLEncoding.EncodeToString(pollBytes)
-	pollSum := sha256.Sum256([]byte(pollSecret))
-	pollHash = hex.EncodeToString(pollSum[:])
 	verifier = base64.RawURLEncoding.EncodeToString(verifierBytes)
 	challengeSum := sha256.Sum256([]byte(verifier))
 	challenge = base64.RawURLEncoding.EncodeToString(challengeSum[:])
-	return pollSecret, pollHash, verifier, challenge, nil
+	return verifier, challenge, nil
 }
 
-func (c *oauthClient) createSession(ctx context.Context, body createSessionRequest) (*createSessionResponse, error) {
-	var result createSessionResponse
-	if err := c.doJSON(ctx, http.MethodPost, "/v1/oauth/sessions", "", body, http.StatusCreated, &result); err != nil {
-		return nil, fmt.Errorf("creating OAuth session: %w", err)
+func (c *oauthClient) authorize(ctx context.Context, body authorizeRequest) (*authorizeResponse, error) {
+	var result authorizeResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/v1/oauth/authorize", body, http.StatusOK, &result); err != nil {
+		return nil, fmt.Errorf("requesting OAuth authorization: %w", err)
 	}
-	if !sessionIDPattern.MatchString(result.SessionID) || !statePattern.MatchString(result.State) ||
-		!strings.HasPrefix(result.State, result.SessionID+":") {
-		return nil, errors.New("creating OAuth session: invalid session response")
+	if !statePattern.MatchString(result.State) {
+		return nil, errors.New("requesting OAuth authorization: invalid state")
 	}
-	expires := time.UnixMilli(result.ExpiresAt)
-	if !expires.After(time.Now()) || expires.After(time.Now().Add(loginTimeout+time.Minute)) {
-		return nil, errors.New("creating OAuth session: invalid expiration")
-	}
-	if !validAuthorizeURL(result.AuthorizeURL, result.State) {
-		return nil, errors.New("creating OAuth session: invalid authorize URL")
+	if !validAuthorizeURL(result.AuthorizeURL, result.State, body.CodeChallenge, body.RedirectURI) {
+		return nil, errors.New("requesting OAuth authorization: invalid authorize URL")
 	}
 	return &result, nil
 }
 
-func validAuthorizeURL(raw, expectedState string) bool {
+func validAuthorizeURL(raw, expectedState, expectedChallenge, expectedRedirectURI string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Host != "github.com" ||
 		u.Path != "/login/oauth/authorize" || u.User != nil || u.Fragment != "" {
 		return false
 	}
-	state, ok := singleValue(u.Query(), "state", len(expectedState))
-	return ok && subtle.ConstantTimeCompare([]byte(state), []byte(expectedState)) == 1
+	query := u.Query()
+	state, stateOK := singleValue(query, "state", len(expectedState))
+	challenge, challengeOK := singleValue(query, "code_challenge", len(expectedChallenge))
+	redirectURI, redirectOK := singleValue(query, "redirect_uri", len(expectedRedirectURI))
+	method, methodOK := singleValue(query, "code_challenge_method", len("S256"))
+	return stateOK && subtle.ConstantTimeCompare([]byte(state), []byte(expectedState)) == 1 &&
+		challengeOK && subtle.ConstantTimeCompare([]byte(challenge), []byte(expectedChallenge)) == 1 &&
+		redirectOK && subtle.ConstantTimeCompare([]byte(redirectURI), []byte(expectedRedirectURI)) == 1 &&
+		methodOK && method == "S256"
 }
 
-func (c *oauthClient) exchange(
-	ctx context.Context,
-	sessionID, pollSecret string,
-	body exchangeRequest,
-	expiresAt time.Time,
-) (*exchangeResponse, error) {
-	path := "/v1/oauth/sessions/" + sessionID + "/exchange"
+func (c *oauthClient) exchange(ctx context.Context, body exchangeRequest) (*exchangeResponse, error) {
 	retryAttempt := 0
 	for {
 		var result exchangeResponse
-		resp, err := c.requestJSON(ctx, http.MethodPost, path, pollSecret, body)
+		resp, err := c.requestJSON(ctx, http.MethodPost, "/v1/oauth/exchange", body)
 		if err != nil {
 			return nil, fmt.Errorf("exchanging OAuth code: %w", err)
 		}
@@ -266,7 +238,8 @@ func (c *oauthClient) exchange(
 			_ = resp.Body.Close()
 			delay = retryDelay(delay, retryAttempt)
 			retryAttempt++
-			if !ok || !time.Now().Add(delay).Before(expiresAt) {
+			deadline, hasDeadline := ctx.Deadline()
+			if !ok || hasDeadline && !time.Now().Add(delay).Before(deadline) {
 				return nil, errors.New("exchanging OAuth code: rate limited")
 			}
 			timer := time.NewTimer(delay)
@@ -331,27 +304,14 @@ func validateToken(token exchangeResponse) error {
 	return nil
 }
 
-func (c *oauthClient) cancelSession(sessionID, pollSecret string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	resp, err := c.requestJSON(ctx, http.MethodDelete, "/v1/oauth/sessions/"+sessionID, pollSecret, nil)
-	if err != nil {
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
-		return
-	}
-}
-
 func (c *oauthClient) doJSON(
 	ctx context.Context,
-	method, path, bearer string,
+	method, path string,
 	body any,
 	wantStatus int,
 	result any,
 ) error {
-	resp, err := c.requestJSON(ctx, method, path, bearer, body)
+	resp, err := c.requestJSON(ctx, method, path, body)
 	if err != nil {
 		return err
 	}
@@ -364,7 +324,7 @@ func (c *oauthClient) doJSON(
 
 func (c *oauthClient) requestJSON(
 	ctx context.Context,
-	method, path, bearer string,
+	method, path string,
 	body any,
 ) (*http.Response, error) {
 	var reader io.Reader
@@ -383,9 +343,6 @@ func (c *oauthClient) requestJSON(
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Accept", "application/json")
-	if bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+bearer)
-	}
 	return c.http.Do(req)
 }
 
@@ -449,7 +406,7 @@ func newCallbackServer(expectedState string, result chan<- callbackResult) *http
 			delivered := false
 			once.Do(func() {
 				delivered = true
-				result <- callbackResult{state: states, denied: errorValue != ""}
+				result <- callbackResult{denied: errorValue != ""}
 			})
 			if !delivered {
 				writeCallback(w, http.StatusConflict, false)
@@ -470,7 +427,7 @@ func newCallbackServer(expectedState string, result chan<- callbackResult) *http
 		delivered := false
 		once.Do(func() {
 			delivered = true
-			result <- callbackResult{code: code, state: states}
+			result <- callbackResult{code: code}
 		})
 		if !delivered {
 			writeCallback(w, http.StatusConflict, false)
