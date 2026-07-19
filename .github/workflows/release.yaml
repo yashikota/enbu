@@ -174,14 +174,15 @@ jobs:
           set -euo pipefail
           app_path="$(find desktop/wails/build/bin -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app_path"
-          mkdir -p release dmg-root
-          ditto "$app_path" "dmg-root/$(basename "$app_path")"
-          ln -s /Applications dmg-root/Applications
-          hdiutil create \
-            -volname enbu \
-            -srcfolder dmg-root \
-            -ov \
-            -format UDZO \
+          mkdir -p release
+          python3 -m venv "$RUNNER_TEMP/dmgbuild"
+          "$RUNNER_TEMP/dmgbuild/bin/pip" install \
+            --disable-pip-version-check \
+            dmgbuild==1.6.7
+          "$RUNNER_TEMP/dmgbuild/bin/dmgbuild" \
+            -s .github/dmg-settings.py \
+            -D app="$app_path" \
+            enbu \
             "release/enbu-desktop_${GITHUB_REF_NAME}_${DESKTOP_SUFFIX}.dmg"
 
       - name: Package desktop app
