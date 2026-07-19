@@ -54,6 +54,15 @@ func setupLogger() *os.File {
 	return f
 }
 
+func showWindow(ctx context.Context) {
+	if ctx == nil {
+		return
+	}
+	runtime.WindowShow(ctx)
+	runtime.WindowUnminimise(ctx)
+	runtime.WindowCenter(ctx)
+}
+
 func main() {
 	logFile := setupLogger()
 	if logFile != nil {
@@ -86,14 +95,8 @@ func main() {
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "net.enbu.desktop",
 			OnSecondInstanceLaunch: func(data options.SecondInstanceData) {
-				slog.Info("second instance launch ignored", "args", data.Args, "cwd", data.WorkingDirectory)
-				ctx := core.Context()
-				if ctx == nil {
-					return
-				}
-				runtime.WindowShow(ctx)
-				runtime.WindowUnminimise(ctx)
-				runtime.WindowCenter(ctx)
+				slog.Info("second instance launch", "args", data.Args, "cwd", data.WorkingDirectory)
+				showWindow(core.Context())
 			},
 		},
 		AssetServer: &assetserver.Options{
@@ -103,6 +106,10 @@ func main() {
 			About: &mac.AboutInfo{
 				Title: "enbu",
 				Icon:  assets.Icon,
+			},
+			OnUrlOpen: func(_ string) {
+				slog.Info("URL opened")
+				showWindow(core.Context())
 			},
 		},
 		Linux: &linux.Options{

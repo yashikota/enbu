@@ -474,7 +474,7 @@ func setCallbackHeaders(w http.ResponseWriter) {
 func writeCallback(w http.ResponseWriter, status int, success bool) {
 	w.WriteHeader(status)
 	if success {
-		_, _ = io.WriteString(w, "<!doctype html><title>enbu</title><p>Authentication complete. You may close this window.</p>")
+		_, _ = io.WriteString(w, `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>enbu</title><body><main><h1>Authentication complete</h1><p>You can return to enbu.</p><p><a href="enbu://auth/complete">Open enbu desktop</a></p></main></body></html>`)
 		return
 	}
 	_, _ = io.WriteString(w, "<!doctype html><title>enbu</title><p>Invalid authentication callback.</p>")
