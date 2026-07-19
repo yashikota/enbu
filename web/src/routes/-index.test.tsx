@@ -56,6 +56,7 @@ let root: ReturnType<typeof createRoot>;
 let clipboardWrite: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  localStorage.clear();
   class ResizeObserverMock {
     observe() {}
     unobserve() {}
@@ -161,6 +162,20 @@ describe("OAuth login", () => {
     expect(queryButton("Connect with GitHub")).toBeTruthy();
     expect(container.textContent).not.toContain("Sign in to GitHub");
     expect(container.querySelector("select")?.value).toBe("en");
+  });
+
+  it("shows the Japanese authentication label after selecting Japanese", () => {
+    renderUnauthenticatedHome();
+
+    const language = container.querySelector("select");
+    expect(language).toBeTruthy();
+    act(() => {
+      if (!language) return;
+      language.value = "ja";
+      language.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(queryButton("GitHub認証")).toBeTruthy();
   });
 
   it("clears the OAuth panel even when repository refresh fails", async () => {
