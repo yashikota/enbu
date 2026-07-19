@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/enbu-net/enbu/app"
 	"github.com/spf13/cobra"
-	"github.com/yashikota/enbu/app"
 )
 
 func newHistoryCommand(a *app.App) *cobra.Command {

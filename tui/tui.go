@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/config"
+	"github.com/enbu-net/enbu/app"
+	"github.com/enbu-net/enbu/config"
 )
 
 func Run(a *app.App) error {

@@ -35,6 +35,7 @@ import { useI18n } from "../lib/i18n";
 import { useAuth } from "./__root";
 import { TomlCodeEditor } from "../components/toml-code-editor";
 import { ConfirmDeleteDialog } from "../components/confirm-delete-dialog";
+import { LanguageSelector } from "../components/language-selector";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 
 export const Route = createFileRoute("/")({
@@ -234,14 +235,6 @@ export function HomePage() {
   }, [fetchRepoStatus]);
 
   useEffect(() => {
-    const onConnect = () => {
-      if (!oauthStart) void handleStartAuth();
-    };
-    window.addEventListener("enbu-connect-github", onConnect);
-    return () => window.removeEventListener("enbu-connect-github", onConnect);
-  }, [status?.authenticated, oauthStart]);
-
-  useEffect(() => {
     if (!oauthStart || oauthStatus?.state !== "pending") return;
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -372,9 +365,6 @@ export function HomePage() {
     return (
       <PageCenter>
         <VStack gap={5} w="full" maxW="480px" textAlign="center">
-          <Heading size="2xl" fontWeight="extrabold">
-            {t("auth.welcome")}
-          </Heading>
           {authError && <ErrorAlert message={authError} />}
           <Button
             w="full"
@@ -387,6 +377,7 @@ export function HomePage() {
             <SiGithub size={16} />
             {t("auth.connect")}
           </Button>
+          <LanguageSelector w="full" justifyContent="flex-end" pt="3" />
         </VStack>
       </PageCenter>
     );

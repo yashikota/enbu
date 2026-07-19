@@ -6,11 +6,11 @@ import (
 	"fmt"
 
 	agecrypto "filippo.io/age"
-	"github.com/yashikota/enbu/config"
-	gh "github.com/yashikota/enbu/provider/github"
-	"github.com/yashikota/enbu/utils/age"
-	"github.com/yashikota/enbu/utils/keystore"
-	"github.com/yashikota/enbu/utils/oci"
+	"github.com/enbu-net/enbu/config"
+	gh "github.com/enbu-net/enbu/provider/github"
+	"github.com/enbu-net/enbu/utils/age"
+	"github.com/enbu-net/enbu/utils/keystore"
+	"github.com/enbu-net/enbu/utils/oci"
 )
 
 type InitResult struct {

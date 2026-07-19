@@ -256,7 +256,7 @@ jobs:
             <!-- enbu-preview -->
             ## Preview
 
-            https://yashikota.github.io/enbu/pr-${{ github.event.pull_request.number }}/
+            https://enbu-net.github.io/enbu/pr-${{ github.event.pull_request.number }}/
 
             > Updated at ${{ github.sha }}
           edit-mode: replace

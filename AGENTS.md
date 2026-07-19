@@ -10,16 +10,22 @@ Keyless `.env` management powered by GitHub. Encrypts secrets with age, stores c
 
 - After writing code, always write tests for the relevant areas.
 - Force-pushes are prohibited.
-- After changing code, always run `task build`, `task test:all`, and `task check`.
+- After changing code, always run `task build`, `task test`, and `task check`.
 - When a Linear task is provided, use a branch name like `feat/enbu-01`.
 
 ## Commands
 
 ```bash
-task build          # Build binary
-task test           # Unit tests
-task test:scenario  # Scenario tests
-task check          # lint + test
+task build          # Build CLI and GUI
+task build/cli      # Build CLI
+task build/gui      # Build GUI desktop app
+task test           # All tests
+task test/unit      # Unit tests
+task test/scenario  # Scenario tests
+task test/web       # Web tests
+task check          # format + lint
+task check/go       # format + lint Go code
+task check/web      # format + lint web code
 ```
 
 ## Architecture

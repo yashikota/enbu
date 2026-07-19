@@ -1,4 +1,5 @@
 enbu
+tui-demo
 dist/
 .env
 .worktrees/

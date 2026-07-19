@@ -12,8 +12,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/config"
+	"github.com/enbu-net/enbu/app"
+	"github.com/enbu-net/enbu/config"
 )
 
 type tabState int
@@ -943,7 +943,7 @@ func (m *model) loadWorkspace() tea.Cmd {
 			for _, entry := range demoSecretsByEnv[demoCurrent] {
 				secrets[entry.key] = entry.value
 			}
-			return workspaceLoadedMsg{secrets: secrets, envs: demoEnvs, current: demoCurrent, repository: "yashikota/enbu"}
+			return workspaceLoadedMsg{secrets: secrets, envs: demoEnvs, current: demoCurrent, repository: "enbu-net/enbu"}
 		}
 		envs, err := m.app.ListEnvironments()
 		if err != nil {

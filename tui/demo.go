@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yashikota/enbu/app"
+	"github.com/enbu-net/enbu/app"
 )
 
 var (
@@ -48,7 +48,7 @@ func RunDemo() error {
 	m := newModel(nil)
 	m.loading = false
 	m.current = demoCurrent
-	m.repository = "yashikota/enbu"
+	m.repository = "enbu-net/enbu"
 	m.secrets = append([]secretEntry(nil), demoSecretsByEnv[demoCurrent]...)
 	m.envs = append([]envItem(nil), demoEnvs...)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseAllMotion())

@@ -9,14 +9,14 @@ import (
 	"strings"
 
 	agecrypto "filippo.io/age"
+	"github.com/enbu-net/enbu/app"
+	"github.com/enbu-net/enbu/config"
+	gitprovider "github.com/enbu-net/enbu/provider/git"
+	gh "github.com/enbu-net/enbu/provider/github"
+	"github.com/enbu-net/enbu/utils/age"
+	"github.com/enbu-net/enbu/utils/keystore"
+	"github.com/enbu-net/enbu/utils/oci"
 	"github.com/spf13/cobra"
-	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/config"
-	gitprovider "github.com/yashikota/enbu/provider/git"
-	gh "github.com/yashikota/enbu/provider/github"
-	"github.com/yashikota/enbu/utils/age"
-	"github.com/yashikota/enbu/utils/keystore"
-	"github.com/yashikota/enbu/utils/oci"
 )
 
 func newInitCommand(a *app.App) *cobra.Command {

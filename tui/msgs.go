@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/yashikota/enbu/app"
+import "github.com/enbu-net/enbu/app"
 
 type workspaceLoadedMsg struct {
 	secrets    map[string]string

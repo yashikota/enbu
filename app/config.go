@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/yashikota/enbu/config"
+	"github.com/enbu-net/enbu/config"
 )
 
 func (a *App) ReadConfig() (string, error) {

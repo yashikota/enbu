@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/yashikota/enbu/config"
+	"github.com/enbu-net/enbu/config"
 )
 
 type EnvInfo struct {

@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	agecrypto "filippo.io/age"
+	"github.com/enbu-net/enbu/app"
+	"github.com/enbu-net/enbu/auth"
+	"github.com/enbu-net/enbu/config"
+	"github.com/enbu-net/enbu/utils/keystore"
 	"github.com/spf13/cobra"
-	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/auth"
-	"github.com/yashikota/enbu/config"
-	"github.com/yashikota/enbu/utils/keystore"
 )
 
 func newAuthCommand(a *app.App) *cobra.Command {

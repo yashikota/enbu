@@ -31,10 +31,10 @@ Development requires sensitive information like API keys and database passwords,
 ## Install
 
 ```bash
-go install github.com/yashikota/enbu@latest
+go install github.com/enbu-net/enbu@latest
 ```
 
-Or download a binary from [Releases](https://github.com/yashikota/enbu/releases).
+Or download a binary from [Releases](https://github.com/enbu-net/enbu/releases).
 
 ## Quick Start
 

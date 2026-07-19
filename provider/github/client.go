@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/enbu-net/enbu/provider"
 	githubsdk "github.com/google/go-github/v89/github"
-	"github.com/yashikota/enbu/provider"
 )
 
 type Client struct {

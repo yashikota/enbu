@@ -8,6 +8,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/enbu-net/enbu/app"
+	"github.com/enbu-net/enbu/assets"
+	"github.com/enbu-net/enbu/desktop"
+	"github.com/enbu-net/enbu/web"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -15,10 +19,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
-	"github.com/yashikota/enbu/app"
-	"github.com/yashikota/enbu/assets"
-	"github.com/yashikota/enbu/desktop"
-	"github.com/yashikota/enbu/web"
 )
 
 type slogWailsLogger struct{}
@@ -57,7 +57,9 @@ func setupLogger() *os.File {
 func main() {
 	logFile := setupLogger()
 	if logFile != nil {
-		defer logFile.Close()
+		defer func() {
+			_ = logFile.Close()
+		}()
 	}
 
 	core := desktop.NewService(app.New())
@@ -82,7 +84,7 @@ func main() {
 		LogLevel:           logger.TRACE,
 		LogLevelProduction: logger.TRACE,
 		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: "com.yashikota.enbu.desktop",
+			UniqueId: "net.enbu.desktop",
 			OnSecondInstanceLaunch: func(data options.SecondInstanceData) {
 				slog.Info("second instance launch ignored", "args", data.Args, "cwd", data.WorkingDirectory)
 				ctx := core.Context()

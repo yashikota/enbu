@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	agecrypto "filippo.io/age"
-	"github.com/yashikota/enbu/utils/age"
-	"github.com/yashikota/enbu/utils/keystore"
-	"github.com/yashikota/enbu/utils/oci"
+	"github.com/enbu-net/enbu/utils/age"
+	"github.com/enbu-net/enbu/utils/keystore"
+	"github.com/enbu-net/enbu/utils/oci"
 )
 
 // --- minimal test doubles ---

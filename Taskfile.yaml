@@ -1,70 +1,61 @@
 version: '3'
 
 tasks:
-  test:
-    deps:
-      - build:frontend
+  default:
+    desc: List all available tasks
+    silent: true
     cmds:
-      - sh -c "go list ./... | grep -v '/desktop/wails$' | xargs go test -v -shuffle=on -race"
+      - task --list-all --sort alphanumeric
 
-  test:scenario:
+  test:
+    desc: Run all tests
     deps:
-      - build:frontend
+      - test/unit
+      - test/scenario
+      - test/web
+
+  test/unit:
+    desc: Run unit tests
+    deps:
+      - build/frontend
+    cmds:
+      - go test -v -shuffle=on -race ./...
+
+  test/scenario:
+    desc: Run scenario tests
+    deps:
+      - build/frontend
     cmds:
       - docker compose up -d --wait
       - defer: docker compose down
-      - sh -c "go list ./... | grep -v '/desktop/wails$' | xargs go test -v -shuffle=on -race -tags=scenario"
+      - curl --fail --silent --show-error --retry 50 --retry-delay 0 --retry-connrefused --retry-max-time 30 http://localhost:5000/v2/
+      - go test -v -shuffle=on -race -tags=scenario ./...
 
-  test:all:
-    cmds:
-      - task: test
-      - task: test:scenario
-
-  lint:
-    cmds:
-      - sh -c "go list ./... | grep -v '/desktop/wails$' | sed 's#^github.com/yashikota/enbu#.#' | xargs golangci-lint run --fix"
-
-  fmt:
-    cmds:
-      - sh -c "go list ./... | grep -v '/desktop/wails$' | sed 's#^github.com/yashikota/enbu#.#' | xargs golangci-lint fmt"
-
-  frontend:lint:
-    dir: web
-    cmds:
-      - vp lint
-
-  frontend:fmt:
-    dir: web
-    cmds:
-      - vp fmt
-
-  frontend:test:
+  test/web:
+    desc: Run web tests
+    deps:
+      - build/frontend
     dir: web
     cmds:
       - vp test
-
-  frontend:check:
-    dir: web
-    cmds:
-      - vp install --frozen-lockfile
-      - vp run build
-      - vp check
-      - vp test
-
-  build:frontend:
-    dir: web
-    cmds:
-      - vp install --frozen-lockfile
-      - vp run build
 
   build:
+    desc: Build CLI and GUI
+    deps:
+      - build/cli
+      - build/gui
+
+  build/cli:
+    desc: Build CLI
+    deps:
+      - build/frontend
     cmds:
-      - task: build:frontend
       - go build -o enbu .
 
-  build:desktop:
+  build/gui:
+    desc: Build GUI desktop app
     deps:
-      - build:frontend
+      - build/frontend
     dir: desktop/wails
     cmds:
       - mkdir -p build
@@ -72,21 +63,36 @@ tasks:
       - go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build -nosyncgomod -m
 
   check:
+    desc: Format and lint all code
     deps:
-      - build:frontend
-    cmds:
-      - task: lint
-      - task: fmt
-      - task: frontend:check
+      - check/go
+      - check/web
 
-  preview:web:
-    desc: Build web frontend in mock/preview mode
+  check/go:
+    desc: Format and lint Go code
+    deps:
+      - build/frontend
+    cmds:
+      - golangci-lint run --fix ./...
+      - golangci-lint fmt ./...
+
+  check/web:
+    desc: Format and lint web code
+    deps:
+      - web/install
     dir: web
     cmds:
-      - vp install --frozen-lockfile
+      - vp check
+
+  preview/web:
+    desc: Build web frontend in mock/preview mode
+    deps:
+      - web/install
+    dir: web
+    cmds:
       - vp run build:preview
 
-  preview:tui:
+  preview/tui:
     desc: Build TUI demo and run VHS tapes locally
     cmds:
       - go build -o tui-demo ./test/preview/tui-demo
@@ -95,3 +101,19 @@ tasks:
     preconditions:
       - sh: command -v vhs
         msg: "VHS not installed. Install with: go install github.com/charmbracelet/vhs@latest"
+
+  web/install:
+    internal: true
+    run: once
+    dir: web
+    cmds:
+      - vp install --frozen-lockfile
+
+  build/frontend:
+    internal: true
+    run: once
+    deps:
+      - web/install
+    dir: web
+    cmds:
+      - vp run build

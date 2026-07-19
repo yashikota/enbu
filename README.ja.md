@@ -32,10 +32,10 @@ GitHubだけで完結する `.env` 管理ツール
 ## インストール
 
 ```bash
-go install github.com/yashikota/enbu@latest
+go install github.com/enbu-net/enbu@latest
 ```
 
-または [Releases](https://github.com/yashikota/enbu/releases) からバイナリをダウンロード  
+または [Releases](https://github.com/enbu-net/enbu/releases) からバイナリをダウンロード  
 
 ## クイックスタート
 
