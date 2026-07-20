@@ -759,8 +759,8 @@ export function HomePage() {
               </HStack>
             </SectionHeader>
             {workspaceLoading ? (
-              <HStack py="8" justify="center">
-                <Spinner size="sm" />
+              <HStack role="status" py="8" justify="center">
+                <Spinner size="sm" aria-hidden="true" />
                 <Text color="fg.muted">{t("common.loading")}</Text>
               </HStack>
             ) : (
@@ -1388,7 +1388,7 @@ export function SecretRow({
   );
 }
 
-function RecipientsPanel({
+export function RecipientsPanel({
   recipients,
   loading,
   error,
@@ -1423,8 +1423,8 @@ function RecipientsPanel({
         </Box>
       )}
       {loading ? (
-        <HStack py="8" justify="center">
-          <Spinner size="sm" />
+        <HStack role="status" py="8" justify="center">
+          <Spinner size="sm" aria-hidden="true" />
           <Text color="fg.muted">{t("common.loading")}</Text>
         </HStack>
       ) : recipients.length === 0 ? (
@@ -1669,8 +1669,8 @@ function ConfigPanel({ environments }: { environments: Environment[] }) {
         </Box>
       )}
       {loading ? (
-        <HStack py="8" justify="center">
-          <Spinner size="sm" />
+        <HStack role="status" py="8" justify="center">
+          <Spinner size="sm" aria-hidden="true" />
           <Text color="fg.muted">{t("common.loading")}</Text>
         </HStack>
       ) : view === "code" ? (

@@ -12,6 +12,7 @@ import {
   MemberAvatar,
   MemberRow,
   RepositoryOwnerSelect,
+  RecipientsPanel,
   resolveWorkspaceEnvironment,
   SecretRow,
   serializeConfigDraft,
@@ -649,5 +650,28 @@ describe("accessibility: CreateEnvironmentModal focus", () => {
     expect(dialog?.getAttribute("aria-labelledby")).toBeTruthy();
     const titleId = dialog?.getAttribute("aria-labelledby");
     expect(container.querySelector(`[id="${titleId ?? ""}"]`)).toBeTruthy();
+  });
+});
+
+describe("accessibility: live regions", () => {
+  it("loading state has role=status", async () => {
+    vi.mocked(backend.listRecipients).mockImplementation(
+      () => new Promise(() => {}), // never resolves
+    );
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <RecipientsPanel
+            recipients={[]}
+            loading={true}
+            error=""
+            onSync={() => {}}
+            onErrorDismiss={() => {}}
+          />
+        </I18nProvider>,
+      );
+    });
+    const status = container.querySelector('[role="status"]');
+    expect(status).toBeTruthy();
   });
 });
