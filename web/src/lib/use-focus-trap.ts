@@ -3,7 +3,11 @@ import { type RefObject, useEffect } from "react";
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function useFocusTrap(active: boolean, ref: RefObject<HTMLElement | null>): void {
+export function useFocusTrap(
+  active: boolean,
+  ref: RefObject<HTMLElement | null>,
+  triggerRef?: RefObject<HTMLElement | null>,
+): void {
   useEffect(() => {
     if (!active) return;
     const container = ref.current;
@@ -39,7 +43,8 @@ export function useFocusTrap(active: boolean, ref: RefObject<HTMLElement | null>
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      previousFocus?.focus();
+      const restoreTarget = triggerRef?.current ?? previousFocus;
+      restoreTarget?.focus();
     };
-  }, [active, ref]);
+  }, [active, ref, triggerRef]);
 }

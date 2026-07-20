@@ -86,7 +86,6 @@ export function RepositoryOwnerSelect({
             bg="bg.surface"
             boxShadow="xs"
             disabled={loading || owners.length === 0}
-            aria-label={t("init.repositoryOwner")}
             _hover={{ borderColor: "accent.default", bg: "bg.muted" }}
           >
             <HStack gap="3" minW="0">
@@ -1156,12 +1155,7 @@ function DashboardTab({
       <Box as="span" aria-hidden="true">
         {icon}
       </Box>
-      <Text
-        as="span"
-        display={{ base: "none", sm: "inline" }}
-        fontSize="inherit"
-        aria-hidden="true"
-      >
+      <Text as="span" display={{ base: "none", sm: "inline" }} fontSize="inherit">
         {label}
       </Text>
     </Tabs.Trigger>
