@@ -12,7 +12,7 @@ import { Box, Flex, VStack, styled } from "styled-system/jsx";
 import { Button, Popover, Separator, Text } from "../components/ui";
 import { Trash2 } from "lucide-react";
 import type { AuthStatus } from "../lib/api";
-import { backend, openURL } from "../lib/backend";
+import { backend } from "../lib/backend";
 import { createAuthRefresher, type AuthRefreshOptions } from "../lib/auth-refresh";
 import { I18nProvider, useI18n } from "../lib/i18n";
 import { ConfirmDeleteDialog } from "../components/confirm-delete-dialog";
@@ -200,6 +200,7 @@ export function Sidebar({ activePath }: { activePath: string }) {
 
   return (
     <styled.nav
+      aria-label={t("sidebar.navigation")}
       w="248px"
       minH="calc(100vh - 72px)"
       display={{ base: "none", lg: "block" }}
@@ -349,6 +350,7 @@ export function RepositoryContextMenu({
   return (
     <Box
       role="menu"
+      aria-label={t("sidebar.repositoryOptions")}
       position="fixed"
       style={{ left: x, top: y }}
       zIndex="40"
@@ -371,7 +373,7 @@ export function RepositoryContextMenu({
         loading={removing}
         onClick={() => void onRemove()}
       >
-        <Trash2 size={15} />
+        <Trash2 size={15} aria-hidden="true" />
         {t("sidebar.remove")}
       </Button>
     </Box>
@@ -446,15 +448,17 @@ export function AccountMenu({ status, loading }: { status: AuthStatus | null; lo
           {/* Account name */}
           <Box pb="2" mb="1" borderBottomWidth="1px" borderColor="border.default">
             {authenticated ? (
-              <Text
+              <styled.a
+                href={`https://github.com/${username}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 fontWeight="bold"
                 fontSize="sm"
-                cursor="pointer"
+                color="fg.default"
                 _hover={{ textDecoration: "underline", color: "accent.default" }}
-                onClick={() => openURL(`https://github.com/${username}`)}
               >
                 {username}
-              </Text>
+              </styled.a>
             ) : (
               <Text fontWeight="bold" fontSize="sm">
                 Account

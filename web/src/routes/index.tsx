@@ -394,7 +394,7 @@ export function HomePage() {
             loading={startingAuth}
             onClick={handleStartAuth}
           >
-            <SiGithub size={16} />
+            <SiGithub size={16} aria-hidden="true" />
             {t("auth.connect")}
           </Button>
           <LanguageSelector w="full" justifyContent="flex-end" pt="3" />
@@ -452,7 +452,7 @@ export function HomePage() {
       <PageCenter>
         <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
           <Box>
-            <Heading size="2xl" fontWeight="extrabold" mb={2}>
+            <Heading as="h1" size="2xl" fontWeight="extrabold" mb={2}>
               {t("repo.selectTitle")}
             </Heading>
             <Text color="fg.muted">{t("repo.selectDescription")}</Text>
@@ -525,7 +525,7 @@ export function HomePage() {
       <PageCenter>
         <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
           <Box>
-            <Heading size="2xl" fontWeight="extrabold" mb={2}>
+            <Heading as="h1" size="2xl" fontWeight="extrabold" mb={2}>
               {t("init.gitTitle")}
             </Heading>
             <Text color="fg.muted">{t("init.gitDescription")}</Text>
@@ -560,7 +560,7 @@ export function HomePage() {
     return (
       <PageCenter>
         <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
-          <Heading size="2xl" fontWeight="extrabold">
+          <Heading as="h1" size="2xl" fontWeight="extrabold">
             {t("init.remoteTitle")}
           </Heading>
           {actionError && <ErrorAlert message={actionError} onDismiss={() => setActionError("")} />}
@@ -628,7 +628,7 @@ export function HomePage() {
       <PageCenter>
         <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
           <Box>
-            <Heading size="2xl" fontWeight="extrabold" mb={2}>
+            <Heading as="h1" size="2xl" fontWeight="extrabold" mb={2}>
               {t("init.title")}
             </Heading>
             <Text color="fg.muted">{t("init.description")}</Text>
@@ -682,7 +682,7 @@ export function HomePage() {
                 openURL(`https://github.com/${repoStatus.repo?.owner}/${repoStatus.repo?.repo}`)
               }
             >
-              <SiGithub size={24} />
+              <SiGithub size={24} aria-hidden="true" />
               {repoStatus.repo?.owner}/{repoStatus.repo?.repo}
             </Button>
           </Box>
@@ -1111,6 +1111,7 @@ function DashboardTab({
   return (
     <Tabs.Trigger
       value={value}
+      aria-label={label}
       flex="1"
       minW="0"
       h={{ base: "48px", sm: "42px" }}
@@ -1143,8 +1144,15 @@ function DashboardTab({
       }}
       _hover={{ color: "fg.default", bg: "transparent" }}
     >
-      {icon}
-      <Text as="span" display={{ base: "none", sm: "inline" }} fontSize="inherit">
+      <Box as="span" aria-hidden="true">
+        {icon}
+      </Box>
+      <Text
+        as="span"
+        display={{ base: "none", sm: "inline" }}
+        fontSize="inherit"
+        aria-hidden="true"
+      >
         {label}
       </Text>
     </Tabs.Trigger>
@@ -1330,7 +1338,7 @@ export function SecretRow({
           h="34px"
           p={0}
           color="fg.muted"
-          aria-label={visible ? "Hide value" : "Show value"}
+          aria-label={visible ? t("dashboard.hideValue") : t("dashboard.showValue")}
           onClick={() => setVisible((v) => !v)}
         >
           {visible ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -1771,7 +1779,7 @@ function OAuthLoginPanel({
 
   return (
     <VStack gap={5} w="full" maxW="480px" alignItems="stretch">
-      <Heading size="2xl" fontWeight="extrabold" textAlign="center">
+      <Heading as="h1" size="2xl" fontWeight="extrabold" textAlign="center">
         {t("auth.authorizeTitle")}
       </Heading>
 

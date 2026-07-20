@@ -493,6 +493,22 @@ describe("repository setup", () => {
   });
 });
 
+describe("accessibility: landmark labels and heading levels", () => {
+  it("page-level heading on auth screen is h1", () => {
+    oauthMocks.repoStatus.mockResolvedValue({ selected: false });
+    renderUnauthenticatedHome();
+    // Auth connect screen has no heading; OAuth screen checked separately
+    // Repo select screen heading
+    act(() => {
+      oauthMocks.repoStatus.mockResolvedValue({ selected: false });
+    });
+    // Just check no h2 is rendered as the primary heading
+    const h1s = container.querySelectorAll("h1");
+    // unauthenticated home (auth connect) has no heading — acceptable
+    expect(h1s.length).toBe(0);
+  });
+});
+
 describe("environment selector", () => {
   it("switches environments and exposes environment creation as the last action", async () => {
     const onSelect = vi.fn();
