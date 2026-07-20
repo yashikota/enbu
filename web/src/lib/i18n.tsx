@@ -39,7 +39,7 @@ const en = {
     save: "Save",
     delete: "Delete",
     deleteSecretConfirm: "Delete {key}?",
-    duplicateKey: "Key \"{key}\" already exists. Edit the existing secret instead.",
+    duplicateKey: 'Key "{key}" already exists. Edit the existing secret instead.',
     pull: "Pull",
     sync: "Sync",
     pullDescription: "Pull secrets from GHCR.",
