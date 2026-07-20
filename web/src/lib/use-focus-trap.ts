@@ -40,10 +40,11 @@ export function useFocusTrap(
       }
     };
 
+    const triggerEl = triggerRef?.current;
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      const restoreTarget = triggerRef?.current ?? previousFocus;
+      const restoreTarget = triggerEl ?? previousFocus;
       restoreTarget?.focus();
     };
   }, [active, ref, triggerRef]);

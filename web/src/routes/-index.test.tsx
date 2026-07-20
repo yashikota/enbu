@@ -526,7 +526,7 @@ describe("accessibility: landmark labels and heading levels", () => {
 
 describe("accessibility: sidebar keyboard", () => {
   it("sidebar repo items have role=button and tabIndex", async () => {
-    vi.mocked(backend.listRepositories).mockResolvedValue([
+    vi.spyOn(backend, "listRepositories").mockResolvedValue([
       { path: "/a", owner: "acme", repo: "app" },
     ]);
     act(() => {
@@ -654,7 +654,7 @@ describe("accessibility: CreateEnvironmentModal focus", () => {
 
 describe("accessibility: live regions", () => {
   it("loading state has role=status", async () => {
-    vi.mocked(backend.listRecipients).mockImplementation(
+    vi.spyOn(backend, "listRecipients").mockImplementation(
       () => new Promise(() => {}), // never resolves
     );
     act(() => {

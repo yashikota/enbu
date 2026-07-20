@@ -1,6 +1,6 @@
 import type { Messages } from "./lang";
 
-export const ja: Messages = {
+export const ja = {
   app: {
     name: "enbu",
     language: "言語",
@@ -133,4 +133,4 @@ export const ja: Messages = {
     done: "完了 ✓",
     error: "エラー",
   },
-};
+} satisfies Messages;
