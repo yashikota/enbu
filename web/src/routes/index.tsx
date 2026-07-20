@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Box, Flex, HStack, VStack, styled } from "styled-system/jsx";
 import { Alert, Button, Heading, Input, Popover, Spinner, Tabs, Text } from "../components/ui";
 import {
@@ -460,6 +460,7 @@ export function HomePage() {
           {repoError && <ErrorAlert message={repoError} onDismiss={() => setRepoError("")} />}
           <HStack>
             <Input
+              aria-label={t("repo.pathPlaceholder")}
               value={repoPath}
               onChange={(e) => setRepoPath(e.target.value)}
               placeholder={t("repo.pathPlaceholder")}
@@ -571,6 +572,7 @@ export function HomePage() {
             onChange={setSelectedRepositoryOwner}
           />
           <Input
+            aria-label={t("init.repositoryName")}
             value={remoteRepoName}
             onChange={(event) => setRemoteRepoName(event.target.value)}
             placeholder={t("init.repositoryName")}
@@ -811,11 +813,13 @@ export function HomePage() {
               borderRadius="lg"
             >
               <Input
+                aria-label={t("dashboard.key")}
                 placeholder={t("dashboard.key")}
                 value={secretKey}
                 onChange={(event) => setSecretKey(event.target.value)}
               />
               <Input
+                aria-label={t("dashboard.value")}
                 placeholder={t("dashboard.value")}
                 value={secretValue}
                 onChange={(event) => setSecretValue(event.target.value)}
@@ -1305,6 +1309,7 @@ export function SecretRow({
         </Button>
       </HStack>
       <Input
+        aria-label={`${t("dashboard.value")}: ${secretKey}`}
         value={editValue}
         type={visible ? "text" : "password"}
         h="38px"
@@ -1565,6 +1570,7 @@ export function serializeConfigDraft(config: EnbuConfigDraft): string {
 
 function ConfigPanel({ environments }: { environments: Environment[] }) {
   const { t } = useI18n();
+  const defaultEnvId = useId();
   const [content, setContent] = useState("");
   const [draft, setDraft] = useState("");
   const [gui, setGui] = useState<EnbuConfigDraft>();
@@ -1672,8 +1678,9 @@ function ConfigPanel({ environments }: { environments: Environment[] }) {
       ) : gui ? (
         <VStack alignItems="stretch" gap="4">
           <SettingsGroup title={t("config.general")}>
-            <SettingRow label={t("config.defaultEnvironment")}>
+            <SettingRow label={t("config.defaultEnvironment")} htmlFor={defaultEnvId}>
               <styled.select
+                id={defaultEnvId}
                 value={gui.default_env}
                 {...settingControlStyles}
                 onChange={(event) => updateGui({ ...gui, default_env: event.target.value })}
@@ -1687,20 +1694,24 @@ function ConfigPanel({ environments }: { environments: Environment[] }) {
             </SettingRow>
           </SettingsGroup>
           <SettingsGroup title={t("config.outputFileNames")}>
-            {Object.entries(gui.env).map(([name, config]) => (
-              <SettingRow key={name} label={name}>
-                <styled.input
-                  value={config.output}
-                  {...settingControlStyles}
-                  onChange={(event) =>
-                    updateGui({
-                      ...gui,
-                      env: { ...gui.env, [name]: { output: event.target.value } },
-                    })
-                  }
-                />
-              </SettingRow>
-            ))}
+            {Object.entries(gui.env).map(([name, config]) => {
+              const inputId = `config-output-${name}`;
+              return (
+                <SettingRow key={name} label={name} htmlFor={inputId}>
+                  <styled.input
+                    id={inputId}
+                    value={config.output}
+                    {...settingControlStyles}
+                    onChange={(event) =>
+                      updateGui({
+                        ...gui,
+                        env: { ...gui.env, [name]: { output: event.target.value } },
+                      })
+                    }
+                  />
+                </SettingRow>
+              );
+            })}
           </SettingsGroup>
         </VStack>
       ) : null}
@@ -1741,7 +1752,15 @@ function SettingsGroup({ title, children }: { title: string; children: React.Rea
   );
 }
 
-function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
+function SettingRow({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  children: React.ReactNode;
+}) {
   return (
     <Box
       minH="60px"
@@ -1755,9 +1774,15 @@ function SettingRow({ label, children }: { label: string; children: React.ReactN
       borderColor="border.default"
       _last={{ borderBottomWidth: "0" }}
     >
-      <Text fontSize="sm" fontWeight="semibold">
-        {label}
-      </Text>
+      {htmlFor ? (
+        <styled.label htmlFor={htmlFor} fontSize="sm" fontWeight="semibold">
+          {label}
+        </styled.label>
+      ) : (
+        <Text fontSize="sm" fontWeight="semibold">
+          {label}
+        </Text>
+      )}
       {children}
     </Box>
   );

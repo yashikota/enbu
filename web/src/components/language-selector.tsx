@@ -1,6 +1,5 @@
 import type { ComponentProps } from "react";
-import { Flex } from "styled-system/jsx";
-import { Text } from "./ui";
+import { Flex, styled } from "styled-system/jsx";
 import { NativeSelect } from "./ui/native-select";
 import { useI18n, type Locale } from "../lib/i18n";
 
@@ -11,10 +10,11 @@ export function LanguageSelector(props: LanguageSelectorProps) {
 
   return (
     <Flex alignItems="center" gap="2" {...props}>
-      <Text fontSize="sm" color="fg.muted">
+      <styled.label htmlFor="language-select" fontSize="sm" color="fg.muted">
         {t("app.language")}
-      </Text>
+      </styled.label>
       <NativeSelect
+        id="language-select"
         value={locale}
         onChange={(event) => setLocale(event.target.value as Locale)}
         style={{ width: "118px" }}
