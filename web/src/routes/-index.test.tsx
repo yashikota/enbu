@@ -524,6 +524,35 @@ describe("accessibility: landmark labels and heading levels", () => {
   });
 });
 
+describe("accessibility: sidebar keyboard", () => {
+  it("sidebar repo items have role=button and tabIndex", async () => {
+    vi.mocked(backend.listRepositories).mockResolvedValue([
+      { path: "/a", owner: "acme", repo: "app" },
+    ]);
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <AuthContext.Provider
+            value={{
+              status: { authenticated: true, username: "u" },
+              loading: false,
+              repoPath: "/b",
+              refresh: async () => {},
+            }}
+          >
+            <Sidebar activePath="/b" />
+          </AuthContext.Provider>
+        </I18nProvider>,
+      );
+    });
+    await act(async () => {});
+    const items = container.querySelectorAll('[role="button"]');
+    expect(items.length).toBeGreaterThan(0);
+    const item = items[0] as HTMLElement;
+    expect(item.getAttribute("tabindex")).toBe("0");
+  });
+});
+
 describe("environment selector", () => {
   it("switches environments and exposes environment creation as the last action", async () => {
     const onSelect = vi.fn();

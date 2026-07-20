@@ -222,6 +222,8 @@ export function Sidebar({ activePath }: { activePath: string }) {
             <Flex
               key={repo.path}
               data-repository-path={repo.path}
+              role={isActive ? undefined : "button"}
+              tabIndex={isActive ? undefined : 0}
               alignItems="center"
               px="2"
               py="9px"
@@ -247,6 +249,19 @@ export function Sidebar({ activePath }: { activePath: string }) {
                   window.dispatchEvent(new Event("enbu-auth-changed"));
                 } catch {
                   // ignore
+                }
+              }}
+              onKeyDown={async (event) => {
+                if (isActive) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  try {
+                    await backend.selectRepository(repo.path ?? "");
+                    window.dispatchEvent(new Event("enbu-repo-changed"));
+                    window.dispatchEvent(new Event("enbu-auth-changed"));
+                  } catch {
+                    // ignore
+                  }
                 }
               }}
             >
