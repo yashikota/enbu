@@ -51,4 +51,15 @@ describe("i18n", () => {
       "キー「MY_SECRET」はすでに存在します。既存のシークレットを編集してください。",
     );
   });
+
+  it("has ARIA label keys", () => {
+    expect(translate("en", "sidebar.navigation")).toBe("Navigation");
+    expect(translate("ja", "sidebar.navigation")).toBe("ナビゲーション");
+    expect(translate("en", "sidebar.repositoryOptions")).toBe("Repository options");
+    expect(translate("ja", "sidebar.repositoryOptions")).toBe("リポジトリオプション");
+    expect(translate("en", "dashboard.showValue")).toBe("Show value");
+    expect(translate("ja", "dashboard.showValue")).toBe("値を表示");
+    expect(translate("en", "dashboard.hideValue")).toBe("Hide value");
+    expect(translate("ja", "dashboard.hideValue")).toBe("値を非表示");
+  });
 });
