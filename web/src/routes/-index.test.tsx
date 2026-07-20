@@ -500,7 +500,6 @@ describe("accessibility: form labels", () => {
     renderUnauthenticatedHome();
     // Can only test if authenticated — render a stub that shows the repo select screen
     // The input is only shown when authenticated + repo not selected, tested via aria-label query
-    const inputs = container.querySelectorAll("input[aria-label]");
     // At minimum the language selector's accessible label check passes
     const selects = container.querySelectorAll("select");
     selects.forEach((s) => {
