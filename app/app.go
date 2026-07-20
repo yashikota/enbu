@@ -74,6 +74,16 @@ func (a *App) emitRetry(attempt, max int) {
 	}
 }
 
+func (a *App) emitStepProgress(op, step, status string) {
+	if a.Events != nil {
+		a.Events.OnStepProgress(ProgressStep{
+			Op:     op,
+			Step:   step,
+			Status: status,
+		})
+	}
+}
+
 func New() *App {
 	gitClient := gitprovider.NewCLIClient()
 	ks, err := keystore.New()

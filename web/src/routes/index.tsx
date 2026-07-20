@@ -35,6 +35,7 @@ import { useI18n } from "../lib/i18n";
 import { useAuth } from "./__root";
 import { TomlCodeEditor } from "../components/toml-code-editor";
 import { ConfirmDeleteDialog } from "../components/confirm-delete-dialog";
+import { TransferModal } from "../components/transfer-modal";
 import { useFocusTrap } from "../lib/use-focus-trap";
 import { LanguageSelector } from "../components/language-selector";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
@@ -218,6 +219,29 @@ export function HomePage() {
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [recipientsLoading, setRecipientsLoading] = useState(false);
   const [recipientsError, setRecipientsError] = useState("");
+  const [transferModal, setTransferModal] = useState<{
+    open: boolean;
+    op: "add" | "pull" | "sync" | "delete" | null;
+    error: string | null;
+  }>({ open: false, op: null, error: null });
+
+  const runWithTransferAnimation = useCallback(
+    async (op: "add" | "pull" | "sync" | "delete", task: () => Promise<void>) => {
+      setTransferModal({ open: true, op, error: null });
+      try {
+        await task();
+        await new Promise((r) => setTimeout(r, 1200));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setTransferModal({ open: true, op, error: msg });
+        await new Promise((r) => setTimeout(r, 2200));
+        throw err;
+      } finally {
+        setTransferModal({ open: false, op: null, error: null });
+      }
+    },
+    [],
+  );
 
   const fetchRepoStatus = useCallback(async () => {
     if (status?.authenticated) {
@@ -743,8 +767,10 @@ export function HomePage() {
                   onClick={async () => {
                     setPullLoading(true);
                     try {
-                      await backend.pullSecrets(currentEnvironment);
-                      await refreshWorkspace(currentEnvironment);
+                      await runWithTransferAnimation("pull", async () => {
+                        await backend.pullSecrets(currentEnvironment);
+                        await refreshWorkspace(currentEnvironment);
+                      });
                     } catch (err) {
                       setActionError(err instanceof Error ? err.message : String(err));
                     } finally {
@@ -784,8 +810,10 @@ export function HomePage() {
                     }}
                     onDelete={async () => {
                       try {
-                        await backend.deleteSecret(secret.key, currentEnvironment);
-                        await refreshWorkspace(currentEnvironment);
+                        await runWithTransferAnimation("delete", async () => {
+                          await backend.deleteSecret(secret.key, currentEnvironment);
+                          await refreshWorkspace(currentEnvironment);
+                        });
                       } catch (err) {
                         setActionError(err instanceof Error ? err.message : String(err));
                       }
@@ -837,10 +865,12 @@ export function HomePage() {
                   }
                   setAddLoading(true);
                   try {
-                    await backend.addSecret(trimmedKey, secretValue, currentEnvironment);
-                    setSecretKey("");
-                    setSecretValue("");
-                    await refreshWorkspace(currentEnvironment);
+                    await runWithTransferAnimation("add", async () => {
+                      await backend.addSecret(trimmedKey, secretValue, currentEnvironment);
+                      setSecretKey("");
+                      setSecretValue("");
+                      await refreshWorkspace(currentEnvironment);
+                    });
                   } catch (err) {
                     setActionError(err instanceof Error ? err.message : String(err));
                   } finally {
@@ -859,7 +889,19 @@ export function HomePage() {
               recipients={recipients}
               loading={recipientsLoading}
               error={recipientsError}
-              onSync={fetchRecipients}
+              onSync={async () => {
+                setRecipientsLoading(true);
+                try {
+                  await runWithTransferAnimation("sync", async () => {
+                    await backend.syncSecrets(currentEnvironment);
+                    await fetchRecipients();
+                  });
+                } catch (err) {
+                  setRecipientsError(err instanceof Error ? err.message : String(err));
+                } finally {
+                  setRecipientsLoading(false);
+                }
+              }}
               onErrorDismiss={() => setRecipientsError("")}
             />
           </DashboardTabContent>
@@ -894,6 +936,11 @@ export function HomePage() {
               setEnvironmentCreateLoading(false);
             }
           }}
+        />
+        <TransferModal
+          open={transferModal.open}
+          operation={transferModal.op}
+          error={transferModal.error}
         />
       </Box>
     </Box>

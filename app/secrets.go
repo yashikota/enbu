@@ -81,6 +81,7 @@ func (a *App) AddSecret(ctx context.Context, env, key, value string) error {
 	secretsRef := a.secretsRef(owner, repo, resolved.Name)
 	recipientsRef := a.registryRef(owner, repo)
 
+	a.emitStepProgress("add", "pull_recipients", "start")
 	publicKeys, err := PullAllRecipients(ctx, a.Registry, recipientsRef, accessToken)
 	if err != nil {
 		return fmt.Errorf("pulling recipients: %w", err)
@@ -94,6 +95,7 @@ func (a *App) AddSecret(ctx context.Context, env, key, value string) error {
 	}
 
 	for attempt := range maxRetries {
+		a.emitStepProgress("add", "pull_secrets", "start")
 		secrets, baseDigest, err := PullSecretsWithDigest(ctx, a.Registry, secretsRef, accessToken, identities...)
 		if err != nil {
 			if !IsNotFoundError(err) {
@@ -110,12 +112,14 @@ func (a *App) AddSecret(ctx context.Context, env, key, value string) error {
 
 		pushOpts.ExpectedDigest = baseDigest
 
+		a.emitStepProgress("add", "encrypt", "start")
 		plaintext := bundle.Marshal(secrets)
 		ciphertext, err := age.EncryptForPublicKeys(plaintext, publicKeys)
 		if err != nil {
 			return fmt.Errorf("encrypting secrets: %w", err)
 		}
 
+		a.emitStepProgress("add", "push", "start")
 		if err := a.Registry.Push(ctx, secretsRef, "application/vnd.enbu.secrets.age.v1", ciphertext, accessToken, pushOpts); err != nil {
 			if errors.Is(err, oci.ErrConflict) {
 				if attempt < maxRetries-1 {
@@ -129,6 +133,7 @@ func (a *App) AddSecret(ctx context.Context, env, key, value string) error {
 		}
 
 		_ = a.Registry.Push(ctx, fmt.Sprintf("%s:%s", a.registryRef(owner, repo), snapshotTag(resolved.Name)), "application/vnd.enbu.secrets.age.v1", ciphertext, accessToken, &oci.PushOptions{SourceRepo: a.sourceRepoURL(owner, repo)})
+		a.emitStepProgress("add", "push", "done")
 		a.emit(fmt.Sprintf("Added %s (%d secrets total)", key, len(secrets)))
 		return nil
 	}
@@ -238,6 +243,7 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 	secretsRef := a.secretsRef(owner, repo, resolved.Name)
 	recipientsRef := a.registryRef(owner, repo)
 
+	a.emitStepProgress("delete", "pull_recipients", "start")
 	publicKeys, err := PullAllRecipients(ctx, a.Registry, recipientsRef, accessToken)
 	if err != nil {
 		return fmt.Errorf("pulling recipients: %w", err)
@@ -251,6 +257,7 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 	}
 
 	for attempt := range maxRetries {
+		a.emitStepProgress("delete", "pull_secrets", "start")
 		secrets, baseDigest, err := PullSecretsWithDigest(ctx, a.Registry, secretsRef, accessToken, identities...)
 		if err != nil {
 			if IsNotFoundError(err) {
@@ -266,12 +273,14 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 
 		pushOpts.ExpectedDigest = baseDigest
 
+		a.emitStepProgress("delete", "encrypt", "start")
 		plaintext := bundle.Marshal(secrets)
 		ciphertext, err := age.EncryptForPublicKeys(plaintext, publicKeys)
 		if err != nil {
 			return fmt.Errorf("encrypting secrets: %w", err)
 		}
 
+		a.emitStepProgress("delete", "push", "start")
 		if err := a.Registry.Push(ctx, secretsRef, "application/vnd.enbu.secrets.age.v1", ciphertext, accessToken, pushOpts); err != nil {
 			if errors.Is(err, oci.ErrConflict) {
 				if attempt < maxRetries-1 {
@@ -284,6 +293,7 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 		}
 
 		_ = a.Registry.Push(ctx, fmt.Sprintf("%s:%s", a.registryRef(owner, repo), snapshotTag(resolved.Name)), "application/vnd.enbu.secrets.age.v1", ciphertext, accessToken, &oci.PushOptions{SourceRepo: a.sourceRepoURL(owner, repo)})
+		a.emitStepProgress("delete", "push", "done")
 		a.emit(fmt.Sprintf("Deleted %s (%d secrets remaining)", key, len(secrets)))
 		return nil
 	}
@@ -308,6 +318,7 @@ func (a *App) PullSecrets(ctx context.Context, env string) ([]byte, string, int,
 
 	ref := a.secretsRef(owner, repo, resolved.Name)
 
+	a.emitStepProgress("pull", "pull_secrets", "start")
 	ciphertext, err := a.Registry.Pull(ctx, ref, accessToken)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("pulling secrets: %w", err)
@@ -321,6 +332,7 @@ func (a *App) PullSecrets(ctx context.Context, env string) ([]byte, string, int,
 		return nil, "", 0, fmt.Errorf("no decryption keys found (run 'enbu init' first)")
 	}
 
+	a.emitStepProgress("pull", "decrypt", "start")
 	plaintext, err := age.Decrypt(ciphertext, identities...)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("decrypting secrets: %w", err)
@@ -345,10 +357,12 @@ func (a *App) PullSecretsToFile(ctx context.Context, env string) error {
 	if a.RepositoryDir != "" && !filepath.IsAbs(output) {
 		outputPath = filepath.Join(a.RepositoryDir, output)
 	}
+	a.emitStepProgress("pull", "write", "start")
 	if err := os.WriteFile(outputPath, dotenv, 0o600); err != nil {
 		return fmt.Errorf("writing %s: %w", output, err)
 	}
 
+	a.emitStepProgress("pull", "write", "done")
 	a.emit(fmt.Sprintf("Written %s (%d secrets)", output, count))
 	return nil
 }
@@ -416,6 +430,7 @@ func (a *App) SyncSecrets(ctx context.Context, env string) error {
 }
 
 func (a *App) doSync(ctx context.Context, secretsRef, recipientsRef, token string, identities []agecrypto.Identity, pushOpts *oci.PushOptions) error {
+	a.emitStepProgress("sync", "pull_secrets", "start")
 	secrets, baseDigest, err := PullSecretsWithDigest(ctx, a.Registry, secretsRef, token, identities...)
 	if err != nil {
 		if IsNotFoundError(err) {
@@ -425,6 +440,7 @@ func (a *App) doSync(ctx context.Context, secretsRef, recipientsRef, token strin
 		return fmt.Errorf("pulling secrets: %w", err)
 	}
 
+	a.emitStepProgress("sync", "pull_recipients", "start")
 	publicKeys, err := PullAllRecipients(ctx, a.Registry, recipientsRef, token)
 	if err != nil {
 		return fmt.Errorf("pulling recipients: %w", err)
@@ -440,16 +456,19 @@ func (a *App) doSync(ctx context.Context, secretsRef, recipientsRef, token strin
 		}
 	}
 
+	a.emitStepProgress("sync", "reencrypt", "start")
 	plaintext := bundle.Marshal(secrets)
 	ciphertext, err := age.EncryptForPublicKeys(plaintext, publicKeys)
 	if err != nil {
 		return fmt.Errorf("encrypting secrets: %w", err)
 	}
 
+	a.emitStepProgress("sync", "push", "start")
 	if err := a.Registry.Push(ctx, secretsRef, "application/vnd.enbu.secrets.age.v1", ciphertext, token, pushOpts); err != nil {
 		return fmt.Errorf("pushing encrypted secrets: %w", err)
 	}
 
+	a.emitStepProgress("sync", "push", "done")
 	a.emit(fmt.Sprintf("Synchronized secrets for %d recipients (%d secrets)", len(publicKeys), len(secrets)))
 	return nil
 }

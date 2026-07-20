@@ -20,6 +20,7 @@ import (
 	"github.com/enbu-net/enbu/config"
 	gitprovider "github.com/enbu-net/enbu/provider/git"
 	gh "github.com/enbu-net/enbu/provider/github"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type DirectoryPicker func(context.Context) (string, error)
@@ -64,8 +65,30 @@ func NewService(a *app.App) *Service {
 	if s.git == nil {
 		s.git = gitprovider.NewCLIClient()
 	}
+	a.Events = s
 	s.loadSelectedRepo()
 	return s
+}
+
+func (s *Service) OnProgress(msg string) {
+	if s.ctx != nil {
+		wailsruntime.EventsEmit(s.ctx, "enbu:progress_message", msg)
+	}
+}
+
+func (s *Service) OnStepProgress(step app.ProgressStep) {
+	if s.ctx != nil {
+		wailsruntime.EventsEmit(s.ctx, "enbu:progress", step)
+	}
+}
+
+func (s *Service) OnConflictRetry(attempt, maxAttempts int) {
+	if s.ctx != nil {
+		wailsruntime.EventsEmit(s.ctx, "enbu:conflict_retry", map[string]int{
+			"attempt":      attempt,
+			"max_attempts": maxAttempts,
+		})
+	}
 }
 
 func (s *Service) Startup(ctx context.Context) {
