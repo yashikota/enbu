@@ -34,3 +34,4 @@ web/package.json.md5
 web/src/routeTree.gen.ts
 web/src/wailsjs/
 desktop/wails/build/
+.superpowers/
