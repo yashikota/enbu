@@ -627,3 +627,27 @@ describe("environment selector", () => {
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("accessibility: CreateEnvironmentModal focus", () => {
+  it("dialog has aria-modal and aria-labelledby", () => {
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <CreateEnvironmentModal
+            open={true}
+            value=""
+            loading={false}
+            onValueChange={() => {}}
+            onClose={() => {}}
+            onCreate={() => {}}
+          />
+        </I18nProvider>,
+      );
+    });
+    const dialog = container.querySelector('[role="dialog"]');
+    expect(dialog?.getAttribute("aria-modal")).toBe("true");
+    expect(dialog?.getAttribute("aria-labelledby")).toBeTruthy();
+    const titleId = dialog?.getAttribute("aria-labelledby");
+    expect(container.querySelector(`[id="${titleId ?? ""}"]`)).toBeTruthy();
+  });
+});

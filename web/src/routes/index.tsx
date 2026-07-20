@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Box, Flex, HStack, VStack, styled } from "styled-system/jsx";
 import { Alert, Button, Heading, Input, Popover, Spinner, Tabs, Text } from "../components/ui";
 import {
@@ -35,6 +35,7 @@ import { useI18n } from "../lib/i18n";
 import { useAuth } from "./__root";
 import { TomlCodeEditor } from "../components/toml-code-editor";
 import { ConfirmDeleteDialog } from "../components/confirm-delete-dialog";
+import { useFocusTrap } from "../lib/use-focus-trap";
 import { LanguageSelector } from "../components/language-selector";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 
@@ -1010,6 +1011,9 @@ export function CreateEnvironmentModal({
   onCreate: () => void | Promise<void>;
 }) {
   const { t } = useI18n();
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(open, dialogRef);
 
   useEffect(() => {
     if (!open) return;
@@ -1035,9 +1039,10 @@ export function CreateEnvironmentModal({
       }}
     >
       <Box
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="create-environment-title"
+        aria-labelledby={titleId}
         w="full"
         maxW="440px"
         p="5"
@@ -1048,7 +1053,7 @@ export function CreateEnvironmentModal({
         boxShadow="xl"
       >
         <Flex justify="space-between" align="start" gap="4" mb="5">
-          <Heading id="create-environment-title" size="lg" fontWeight="extrabold">
+          <Heading id={titleId} size="lg" fontWeight="extrabold">
             {t("dashboard.createEnvironmentTitle")}
           </Heading>
           <Button
@@ -1061,7 +1066,7 @@ export function CreateEnvironmentModal({
             disabled={loading}
             onClick={onClose}
           >
-            <X size={16} />
+            <X size={16} aria-hidden="true" />
           </Button>
         </Flex>
         <styled.label
