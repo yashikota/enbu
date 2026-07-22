@@ -38,14 +38,14 @@ jobs:
           run-install: false
 
       - name: Check
-        run: task check
+        run: task all/check
 
       - name: Verify no diff
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             git status --short
             git diff --exit-code || true
-            echo "::error::CI checks produced file changes. Run 'task check' locally and commit the result."
+            echo "::error::CI checks produced file changes. Run 'task all/check' locally and commit the result."
             exit 1
           fi
 
@@ -79,4 +79,4 @@ jobs:
           run-install: false
 
       - name: Test
-        run: task test
+        run: task all/test
