@@ -300,6 +300,22 @@ jobs:
           test "$(find release-assets -maxdepth 1 -type f -name '*.sigstore.json' | wc -l)" -gt 0
           (cd release-assets && sha256sum -c checksums.txt)
 
+      - name: Generate release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f tag_name="$GITHUB_REF_NAME" \
+            --jq .body > generated-notes.md
+          python3 scripts/generate_release_notes.py \
+            --assets-dir release-assets \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
+            --generated-notes generated-notes.md \
+            > release-notes.md
+
       - name: Create draft release with all assets
         shell: bash
         env:
@@ -310,7 +326,7 @@ jobs:
             --draft \
             --verify-tag \
             --title "$GITHUB_REF_NAME" \
-            --generate-notes
+            --notes-file release-notes.md
 
       - name: Publish release
         shell: bash
