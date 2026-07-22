@@ -56,7 +56,7 @@ describe("i18n", () => {
     expect(translate("en", "sidebar.navigation")).toBe("Navigation");
     expect(translate("ja", "sidebar.navigation")).toBe("ナビゲーション");
     expect(translate("en", "sidebar.repositoryOptions")).toBe("Repository options");
-    expect(translate("ja", "sidebar.repositoryOptions")).toBe("リポジトリオプション");
+    expect(translate("ja", "sidebar.repositoryOptions")).toBe("リポジトリの操作");
     expect(translate("en", "dashboard.showValue")).toBe("Show value");
     expect(translate("ja", "dashboard.showValue")).toBe("値を表示");
     expect(translate("en", "dashboard.hideValue")).toBe("Hide value");

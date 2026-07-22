@@ -261,12 +261,14 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 		secrets, baseDigest, err := PullSecretsWithDigest(ctx, a.Registry, secretsRef, accessToken, identities...)
 		if err != nil {
 			if IsNotFoundError(err) {
+				a.emitStepProgress("delete", "pull_secrets", "done")
 				return nil
 			}
 			return fmt.Errorf("pulling secrets: %w", err)
 		}
 
 		if _, ok := secrets[key]; !ok {
+			a.emitStepProgress("delete", "pull_secrets", "done")
 			return nil
 		}
 		delete(secrets, key)
@@ -301,6 +303,10 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 }
 
 func (a *App) PullSecrets(ctx context.Context, env string) ([]byte, string, int, error) {
+	return a.pullSecrets(ctx, env, true)
+}
+
+func (a *App) pullSecrets(ctx context.Context, env string, emitDone bool) ([]byte, string, int, error) {
 	resolved, err := a.resolveEnvironment(env)
 	if err != nil {
 		return nil, "", 0, err
@@ -344,11 +350,14 @@ func (a *App) PullSecrets(ctx context.Context, env string) ([]byte, string, int,
 	}
 
 	dotenv := bundle.ToDotEnv(secrets)
+	if emitDone {
+		a.emitStepProgress("pull", "decrypt", "done")
+	}
 	return dotenv, resolved.Output, len(secrets), nil
 }
 
 func (a *App) PullSecretsToFile(ctx context.Context, env string) error {
-	dotenv, output, count, err := a.PullSecrets(ctx, env)
+	dotenv, output, count, err := a.pullSecrets(ctx, env, false)
 	if err != nil {
 		return err
 	}
@@ -434,6 +443,7 @@ func (a *App) doSync(ctx context.Context, secretsRef, recipientsRef, token strin
 	secrets, baseDigest, err := PullSecretsWithDigest(ctx, a.Registry, secretsRef, token, identities...)
 	if err != nil {
 		if IsNotFoundError(err) {
+			a.emitStepProgress("sync", "pull_secrets", "done")
 			a.emit("No secrets found, nothing to sync.")
 			return nil
 		}

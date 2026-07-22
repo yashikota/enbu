@@ -149,6 +149,7 @@ export function Sidebar({ activePath }: { activePath: string }) {
   const [addLoading, setAddLoading] = useState(false);
   const [removingRepository, setRemovingRepository] = useState(false);
   const [repositoryPendingRemoval, setRepositoryPendingRemoval] = useState<RepoItem | null>(null);
+  const removeTriggerRef = useRef<HTMLElement>(null);
   const [contextMenu, setContextMenu] = useState<{
     repo: RepoItem;
     x: number;
@@ -223,7 +224,7 @@ export function Sidebar({ activePath }: { activePath: string }) {
               key={repo.path}
               data-repository-path={repo.path}
               role={isActive ? undefined : "button"}
-              tabIndex={isActive ? undefined : 0}
+              tabIndex={isActive ? -1 : 0}
               alignItems="center"
               px="2"
               py="9px"
@@ -235,6 +236,7 @@ export function Sidebar({ activePath }: { activePath: string }) {
               cursor={isActive ? "default" : "pointer"}
               onContextMenu={(event) => {
                 event.preventDefault();
+                removeTriggerRef.current = event.currentTarget;
                 setContextMenu({
                   repo,
                   x: Math.max(8, Math.min(event.clientX, window.innerWidth - 180)),
@@ -299,6 +301,7 @@ export function Sidebar({ activePath }: { activePath: string }) {
         cancelLabel={t("config.cancel")}
         confirmLabel={t("sidebar.remove")}
         loading={removingRepository}
+        triggerRef={removeTriggerRef}
         onClose={() => setRepositoryPendingRemoval(null)}
         onConfirm={async () => {
           if (!repositoryPendingRemoval) return;

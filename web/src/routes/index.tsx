@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Box, Flex, HStack, VStack, styled } from "styled-system/jsx";
 import { Alert, Button, Heading, Input, Popover, Spinner, Tabs, Text } from "../components/ui";
 import {
@@ -219,6 +219,8 @@ export function HomePage() {
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [recipientsLoading, setRecipientsLoading] = useState(false);
   const [recipientsError, setRecipientsError] = useState("");
+  const recipientsRequestRef = useRef(0);
+  const addEnvironmentTriggerRef = useRef<HTMLButtonElement>(null);
   const [transferModal, setTransferModal] = useState<{
     open: boolean;
     op: "add" | "pull" | "sync" | "delete" | null;
@@ -306,18 +308,23 @@ export function HomePage() {
     [environments, secrets?.environment],
   );
 
+  const recipientRepoPath = repoStatus?.repo?.path ?? "";
   const fetchRecipients = useCallback(async () => {
+    if (!recipientRepoPath) return;
+    const request = ++recipientsRequestRef.current;
     setRecipientsLoading(true);
     setRecipientsError("");
     try {
       const list = await backend.listRecipients();
+      if (request !== recipientsRequestRef.current) return;
       setRecipients((list ?? []).filter((r): r is Recipient => r != null));
     } catch (err) {
+      if (request !== recipientsRequestRef.current) return;
       setRecipientsError(err instanceof Error ? err.message : String(err));
     } finally {
-      setRecipientsLoading(false);
+      if (request === recipientsRequestRef.current) setRecipientsLoading(false);
     }
-  }, []);
+  }, [recipientRepoPath]);
 
   async function refreshWorkspace(env = currentEnvironment) {
     setWorkspaceLoading(true);
@@ -339,8 +346,14 @@ export function HomePage() {
   }, [repoStatus?.selected, repoStatus?.repo?.initialized]);
 
   useEffect(() => {
-    if (repoStatus?.selected && repoStatus.repo?.initialized) void fetchRecipients();
-  }, [repoStatus?.selected, repoStatus?.repo?.initialized, fetchRecipients]);
+    if (repoStatus?.selected && repoStatus.repo?.initialized && recipientRepoPath) {
+      void fetchRecipients();
+      return;
+    }
+    recipientsRequestRef.current++;
+    setRecipients([]);
+    setRecipientsLoading(false);
+  }, [repoStatus?.selected, repoStatus?.repo?.initialized, recipientRepoPath, fetchRecipients]);
 
   useEffect(() => {
     const path = repoStatus?.repo?.path?.replace(/[\\/]+$/, "");
@@ -745,6 +758,7 @@ export function HomePage() {
                 <EnvironmentSelector
                   environments={environments}
                   value={currentEnvironment}
+                  addTriggerRef={addEnvironmentTriggerRef}
                   onSelect={async (environment) => {
                     if (environment === currentEnvironment) return;
                     try {
@@ -913,6 +927,7 @@ export function HomePage() {
           open={environmentModalOpen}
           value={newEnv}
           loading={environmentCreateLoading}
+          triggerRef={addEnvironmentTriggerRef}
           onValueChange={setNewEnv}
           onClose={() => {
             if (environmentCreateLoading) return;
@@ -941,6 +956,7 @@ export function HomePage() {
           open={transferModal.open}
           operation={transferModal.op}
           error={transferModal.error}
+          onClose={() => setTransferModal({ open: false, op: null, error: null })}
         />
       </Box>
     </Box>
@@ -952,11 +968,13 @@ export function HomePage() {
 export function EnvironmentSelector({
   environments,
   value,
+  addTriggerRef,
   onSelect,
   onAdd,
 }: {
   environments: Environment[];
   value: string;
+  addTriggerRef?: RefObject<HTMLButtonElement | null>;
   onSelect: (environment: string) => void | Promise<void>;
   onAdd: () => void;
 }) {
@@ -966,6 +984,7 @@ export function EnvironmentSelector({
       <Popover.Root positioning={{ placement: "bottom-start", gutter: 6 }}>
         <Popover.Trigger asChild>
           <Button
+            ref={addTriggerRef}
             type="button"
             variant="outline"
             h="40px"
@@ -1045,6 +1064,7 @@ export function CreateEnvironmentModal({
   open,
   value,
   loading,
+  triggerRef,
   onValueChange,
   onClose,
   onCreate,
@@ -1052,6 +1072,7 @@ export function CreateEnvironmentModal({
   open: boolean;
   value: string;
   loading: boolean;
+  triggerRef?: RefObject<HTMLElement | null>;
   onValueChange: (value: string) => void;
   onClose: () => void;
   onCreate: () => void | Promise<void>;
@@ -1059,7 +1080,7 @@ export function CreateEnvironmentModal({
   const { t } = useI18n();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(open, dialogRef);
+  useFocusTrap(open, dialogRef, triggerRef);
 
   useEffect(() => {
     if (!open) return;
@@ -1310,6 +1331,7 @@ export function SecretRow({
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [editValue, setEditValue] = useState(secretValue);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setEditValue(secretValue);
@@ -1395,6 +1417,7 @@ export function SecretRow({
           {visible ? <EyeOff size={16} /> : <Eye size={16} />}
         </Button>
         <Button
+          ref={deleteTriggerRef}
           variant="ghost"
           w="34px"
           h="34px"
@@ -1414,6 +1437,7 @@ export function SecretRow({
         cancelLabel={t("config.cancel")}
         confirmLabel={deleteLabel}
         loading={deleting}
+        triggerRef={deleteTriggerRef}
         onClose={() => setDeleteConfirmationOpen(false)}
         onConfirm={async () => {
           setDeleting(true);

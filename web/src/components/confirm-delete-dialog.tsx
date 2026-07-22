@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { type RefObject, useEffect, useId, useRef } from "react";
 import { Box, HStack } from "styled-system/jsx";
 import { Button, Heading } from "./ui";
 import { Trash2 } from "lucide-react";
@@ -10,6 +10,7 @@ export function ConfirmDeleteDialog({
   cancelLabel,
   confirmLabel,
   loading,
+  triggerRef,
   onClose,
   onConfirm,
 }: {
@@ -18,12 +19,13 @@ export function ConfirmDeleteDialog({
   cancelLabel: string;
   confirmLabel: string;
   loading: boolean;
+  triggerRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
 }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(open, dialogRef);
+  useFocusTrap(open, dialogRef, triggerRef);
 
   useEffect(() => {
     if (!open) return;

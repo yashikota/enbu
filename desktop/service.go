@@ -43,6 +43,7 @@ type Service struct {
 	repoPath  string
 	sessions  map[string]*oauthSession
 	authLogin func(context.Context, auth.BrowserOpener) (*auth.StoredToken, error)
+	emitEvent func(context.Context, string, ...interface{})
 }
 
 type oauthSession struct {
@@ -61,6 +62,7 @@ func NewService(a *app.App) *Service {
 		},
 		sessions:  make(map[string]*oauthSession),
 		authLogin: auth.Login,
+		emitEvent: wailsruntime.EventsEmit,
 	}
 	if s.git == nil {
 		s.git = gitprovider.NewCLIClient()
@@ -72,19 +74,19 @@ func NewService(a *app.App) *Service {
 
 func (s *Service) OnProgress(msg string) {
 	if s.ctx != nil {
-		wailsruntime.EventsEmit(s.ctx, "enbu:progress_message", msg)
+		s.emitEvent(s.ctx, "enbu:progress_message", msg)
 	}
 }
 
 func (s *Service) OnStepProgress(step app.ProgressStep) {
 	if s.ctx != nil {
-		wailsruntime.EventsEmit(s.ctx, "enbu:progress", step)
+		s.emitEvent(s.ctx, "enbu:progress", step)
 	}
 }
 
 func (s *Service) OnConflictRetry(attempt, maxAttempts int) {
 	if s.ctx != nil {
-		wailsruntime.EventsEmit(s.ctx, "enbu:conflict_retry", map[string]int{
+		s.emitEvent(s.ctx, "enbu:conflict_retry", map[string]int{
 			"attempt":      attempt,
 			"max_attempts": maxAttempts,
 		})

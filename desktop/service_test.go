@@ -103,6 +103,25 @@ func TestValidateRepoPath(t *testing.T) {
 	}
 }
 
+func TestOnStepProgressEmitsWailsEvent(t *testing.T) {
+	s := NewService(app.New())
+	s.ctx = context.Background()
+	var eventName string
+	var payload []interface{}
+	s.emitEvent = func(_ context.Context, name string, data ...interface{}) {
+		eventName = name
+		payload = data
+	}
+	want := app.ProgressStep{Op: "pull", Step: "decrypt", Status: "done"}
+	s.OnStepProgress(want)
+	if eventName != "enbu:progress" {
+		t.Fatalf("event name = %q", eventName)
+	}
+	if len(payload) != 1 || !reflect.DeepEqual(payload[0], want) {
+		t.Fatalf("payload = %#v, want %#v", payload, want)
+	}
+}
+
 func TestValidateRepoPathRejectsMissingPath(t *testing.T) {
 	if _, err := ValidateRepoPath(filepath.Join(t.TempDir(), "missing")); err == nil {
 		t.Fatal("ValidateRepoPath succeeded for missing path")

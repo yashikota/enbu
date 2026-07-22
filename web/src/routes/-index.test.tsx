@@ -104,6 +104,25 @@ function renderUnauthenticatedHome() {
   });
 }
 
+function renderAuthenticatedHome() {
+  act(() => {
+    root.render(
+      <I18nProvider>
+        <AuthContext.Provider
+          value={{
+            status: { authenticated: true, username: "u" },
+            loading: false,
+            repoPath: "",
+            refresh: async () => {},
+          }}
+        >
+          <HomePage />
+        </AuthContext.Provider>
+      </I18nProvider>,
+    );
+  });
+}
+
 function renderSecretRow(props: {
   secretKey: string;
   secretValue: string;
@@ -495,32 +514,22 @@ describe("repository setup", () => {
 });
 
 describe("accessibility: form labels", () => {
-  it("repo path input has aria-label", () => {
+  it("repo path input has aria-label", async () => {
     oauthMocks.repoStatus.mockResolvedValue({ selected: false });
-    renderUnauthenticatedHome();
-    // Can only test if authenticated — render a stub that shows the repo select screen
-    // The input is only shown when authenticated + repo not selected, tested via aria-label query
-    // At minimum the language selector's accessible label check passes
-    const selects = container.querySelectorAll("select");
-    selects.forEach((s) => {
-      expect(s.getAttribute("aria-label") ?? s.id).toBeTruthy();
-    });
+    renderAuthenticatedHome();
+    await act(async () => Promise.resolve());
+    expect(container.querySelector("input[aria-label]")?.getAttribute("aria-label")).toBe(
+      "C:\\Users\\you\\src\\your-repo",
+    );
   });
 });
 
 describe("accessibility: landmark labels and heading levels", () => {
-  it("page-level heading on auth screen is h1", () => {
+  it("repository selection title is h1", async () => {
     oauthMocks.repoStatus.mockResolvedValue({ selected: false });
-    renderUnauthenticatedHome();
-    // Auth connect screen has no heading; OAuth screen checked separately
-    // Repo select screen heading
-    act(() => {
-      oauthMocks.repoStatus.mockResolvedValue({ selected: false });
-    });
-    // Just check no h2 is rendered as the primary heading
-    const h1s = container.querySelectorAll("h1");
-    // unauthenticated home (auth connect) has no heading — acceptable
-    expect(h1s.length).toBe(0);
+    renderAuthenticatedHome();
+    await act(async () => Promise.resolve());
+    expect(container.querySelector("h1")?.textContent).toContain("Select repository");
   });
 });
 
@@ -550,6 +559,19 @@ describe("accessibility: sidebar keyboard", () => {
     expect(items.length).toBeGreaterThan(0);
     const item = items[0] as HTMLElement;
     expect(item.getAttribute("tabindex")).toBe("0");
+    const selectRepository = vi.mocked(backend).selectRepository;
+    selectRepository.mockClear();
+    await act(async () => {
+      item.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(selectRepository).toHaveBeenLastCalledWith("/a");
+    selectRepository.mockClear();
+    await act(async () => {
+      item.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(selectRepository).toHaveBeenLastCalledWith("/a");
   });
 });
 
@@ -672,5 +694,132 @@ describe("accessibility: live regions", () => {
     });
     const status = container.querySelector('[role="status"]');
     expect(status).toBeTruthy();
+  });
+});
+
+describe("dashboard review regressions", () => {
+  const backendMock = vi.mocked(backend);
+  const initializedRepo = (path: string) => ({
+    selected: true,
+    repo: {
+      path,
+      owner: "acme",
+      repo: path.slice(1),
+      initialized: true,
+      has_git: true,
+      has_remote: true,
+    },
+  });
+
+  beforeEach(() => {
+    backendMock.listEnvironments.mockResolvedValue([{ name: "default", current: true }]);
+    backendMock.listSecrets.mockResolvedValue({
+      environment: "default",
+      secrets: [{ key: "KEY", value: "value" }],
+    });
+  });
+
+  it("trims duplicate keys before validation and does not call the backend", async () => {
+    oauthMocks.repoStatus.mockResolvedValue(initializedRepo("/a"));
+    backendMock.listRecipients.mockResolvedValue([]);
+    backendMock.addSecret.mockClear();
+    renderAuthenticatedHome();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const keyInput = container.querySelector<HTMLInputElement>('input[aria-label="Key"]');
+    act(() => {
+      if (!keyInput) return;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        keyInput,
+        " KEY ",
+      );
+      keyInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => queryButton("Add")?.click());
+
+    expect(backendMock.addSecret).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Key "KEY" already exists');
+  });
+
+  it("reloads recipients by repository path and ignores stale completions", async () => {
+    let resolveA!: (
+      value: Array<{ username: string; fingerprint: string; public_key: string }>,
+    ) => void;
+    let resolveB!: (
+      value: Array<{ username: string; fingerprint: string; public_key: string }>,
+    ) => void;
+    const recipientsA = new Promise<
+      Array<{ username: string; fingerprint: string; public_key: string }>
+    >((resolve) => {
+      resolveA = resolve;
+    });
+    const recipientsB = new Promise<
+      Array<{ username: string; fingerprint: string; public_key: string }>
+    >((resolve) => {
+      resolveB = resolve;
+    });
+    oauthMocks.repoStatus
+      .mockResolvedValueOnce(initializedRepo("/a"))
+      .mockResolvedValue(initializedRepo("/b"));
+    backendMock.listRecipients.mockReset();
+    backendMock.listRecipients
+      .mockImplementationOnce(() => recipientsA)
+      .mockImplementationOnce(() => recipientsB);
+
+    renderAuthenticatedHome();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(backendMock.listRecipients).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      window.dispatchEvent(new Event("enbu-auth-changed"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(backendMock.listRecipients).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveB([{ username: "new-repo-user", fingerprint: "b", public_key: "age1b" }]);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      queryButton("Members")?.click();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("new-repo-user");
+
+    await act(async () => {
+      resolveA([{ username: "stale-user", fingerprint: "a", public_key: "age1a" }]);
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("new-repo-user");
+    expect(container.textContent).not.toContain("stale-user");
+  });
+
+  it("delegates recipient sync and error dismissal", async () => {
+    const onSync = vi.fn();
+    const onErrorDismiss = vi.fn();
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <RecipientsPanel
+            recipients={[]}
+            loading={false}
+            error="failed"
+            onSync={onSync}
+            onErrorDismiss={onErrorDismiss}
+          />
+        </I18nProvider>,
+      );
+    });
+    act(() => queryButton("Sync")?.click());
+    expect(onSync).toHaveBeenCalledTimes(1);
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Close"]')?.click());
+    expect(onErrorDismiss).toHaveBeenCalledTimes(1);
   });
 });

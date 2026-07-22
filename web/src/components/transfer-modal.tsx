@@ -1,14 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { User, Cloud, Lock, KeyRound, CheckCircle2, AlertCircle } from "lucide-react";
 import { Box, HStack, VStack } from "../../styled-system/jsx";
-import { Text } from "./ui";
+import { Button, Text } from "./ui";
 import { useI18n } from "../lib/i18n";
+import { useFocusTrap } from "../lib/use-focus-trap";
 
 export interface ProgressStep {
   op: "add" | "pull" | "sync" | "delete";
   step: string;
-  action: string;
-  detail: string;
   status: "start" | "done";
 }
 
@@ -16,6 +15,7 @@ interface TransferModalProps {
   open: boolean;
   operation: "add" | "pull" | "sync" | "delete" | null;
   error?: string | null;
+  onClose: () => void;
 }
 
 const DEFAULT_STEPS: Record<"add" | "pull" | "sync" | "delete", string[]> = {
@@ -25,16 +25,22 @@ const DEFAULT_STEPS: Record<"add" | "pull" | "sync" | "delete", string[]> = {
   delete: ["pull_recipients", "pull_secrets", "encrypt", "push"],
 };
 
-export function TransferModal({ open, operation, error }: TransferModalProps) {
+export function TransferModal({ open, operation, error, onClose }: TransferModalProps) {
   const { t } = useI18n();
   const [currentStep, setCurrentStep] = useState<ProgressStep | null>(null);
   const [isDone, setIsDone] = useState(false);
+  const isDoneRef = useRef(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  isDoneRef.current = isDone;
+  useFocusTrap(open, dialogRef);
 
   // Event listener & Fallback simulation
   useEffect(() => {
     if (!open || !operation) {
       setCurrentStep(null);
       setIsDone(false);
+      isDoneRef.current = false;
       return;
     }
 
@@ -70,15 +76,13 @@ export function TransferModal({ open, operation, error }: TransferModalProps) {
     let stepIdx = 0;
 
     const timer = setInterval(() => {
-      if (!hasRealEvents && !isDone) {
+      if (!hasRealEvents && !isDoneRef.current) {
         if (stepIdx < fallbackSteps.length - 1) {
           stepIdx++;
           const stepName = fallbackSteps[stepIdx];
           setCurrentStep({
             op: operation,
             step: stepName,
-            action: "",
-            detail: "",
             status: "start",
           });
         }
@@ -89,8 +93,6 @@ export function TransferModal({ open, operation, error }: TransferModalProps) {
     setCurrentStep({
       op: operation,
       step: firstStep,
-      action: "",
-      detail: "",
       status: "start",
     });
 
@@ -101,7 +103,16 @@ export function TransferModal({ open, operation, error }: TransferModalProps) {
       }
       clearInterval(timer);
     };
-  }, [open, operation, isDone]);
+  }, [open, operation]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose, open]);
 
   if (!open || !operation) return null;
 
@@ -128,7 +139,7 @@ export function TransferModal({ open, operation, error }: TransferModalProps) {
     ? t("transfer.done")
     : stepTranslated !== stepKey
     ? stepTranslated
-    : currentStep?.detail || currentStep?.action || t("common.loading");
+    : t("common.loading");
 
   return (
     <Box
@@ -141,8 +152,12 @@ export function TransferModal({ open, operation, error }: TransferModalProps) {
       alignItems="center"
       justifyContent="center"
       p="4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
     >
       <Box
+        ref={dialogRef}
         bg="bg.surface"
         borderWidth="1px"
         borderColor="border.default"
@@ -158,7 +173,7 @@ export function TransferModal({ open, operation, error }: TransferModalProps) {
       >
         {/* Header */}
         <HStack justify="space-between" w="100%" px="2">
-          <Text fontSize="sm" fontWeight="extrabold" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
+          <Text id={titleId} fontSize="sm" fontWeight="extrabold" textTransform="uppercase" letterSpacing="wider" color="fg.muted">
             {modalTitle}
           </Text>
         </HStack>
@@ -216,6 +231,9 @@ export function TransferModal({ open, operation, error }: TransferModalProps) {
           {/* Transfer Packet */}
           {!error && !isDone && (
             <Box
+              data-transfer-direction={
+                isRightToLeft ? "download" : isLeftToRight ? "upload" : "local"
+              }
               position="absolute"
               top="calc(50% - 16px)"
               left="50%"
@@ -303,6 +321,11 @@ export function TransferModal({ open, operation, error }: TransferModalProps) {
           >
             {statusText}
           </Text>
+          {error && (
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t("common.close")}
+            </Button>
+          )}
         </VStack>
 
         <style>{`
