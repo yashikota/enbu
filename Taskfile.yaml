@@ -7,92 +7,97 @@ tasks:
     cmds:
       - task --list-all --sort alphanumeric
 
-  test:
+  all/test:
     desc: Run all tests
     deps:
-      - test/unit
-      - test/scenario
-      - test/web
+      - cli/test
+      - gui/test
 
-  test/unit:
+  cli/test:
+    desc: Run all CLI tests
+    deps:
+      - cli/test/unit
+      - cli/test/scenario
+
+  cli/test/unit:
     desc: Run unit tests
     deps:
-      - build/frontend
+      - gui/build/frontend
     cmds:
       - go test -v -shuffle=on -race ./...
 
-  test/scenario:
+  cli/test/scenario:
     desc: Run scenario tests
     deps:
-      - build/frontend
+      - gui/build/frontend
     cmds:
       - docker compose up -d --wait
       - defer: docker compose down
       - curl --fail --silent --show-error --retry 50 --retry-delay 0 --retry-connrefused --retry-max-time 30 http://localhost:5000/v2/
       - go test -v -shuffle=on -race -tags=scenario ./...
 
-  test/web:
-    desc: Run web tests
+  gui/test:
+    desc: Run GUI tests
     deps:
-      - build/frontend
+      - gui/build/frontend
     dir: web
     cmds:
       - vp test
 
-  build:
+  all/build:
     desc: Build CLI and GUI
     deps:
-      - build/cli
-      - build/gui
+      - cli/build
+      - gui/build
 
-  build/cli:
+  cli/build:
     desc: Build CLI
     deps:
-      - build/frontend
+      - gui/build/frontend
     cmds:
       - go build -o enbu .
 
-  build/gui:
+  gui/build:
     desc: Build GUI desktop app
     deps:
-      - build/frontend
+      - gui/build/frontend
     dir: desktop/wails
     cmds:
       - mkdir -p build
       - cp ../../assets/icon.png build/appicon.png
       - go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build -nosyncgomod -m
 
-  check:
+  all/check:
     desc: Format and lint all code
     deps:
-      - check/go
-      - check/web
+      - cli/check
+      - gui/check
 
-  check/go:
-    desc: Format and lint Go code
+  cli/check:
+    desc: Format and lint CLI code
     deps:
-      - build/frontend
+      - gui/build/frontend
     cmds:
       - golangci-lint run --fix ./...
       - golangci-lint fmt ./...
 
-  check/web:
-    desc: Format and lint web code
+  gui/check:
+    desc: Format and lint GUI code
     deps:
-      - web/install
+      - gui/install
     dir: web
     cmds:
       - vp check
 
-  preview/web:
-    desc: Build web frontend in mock/preview mode
+  gui/preview:
+    desc: Build GUI frontend in mock/preview mode
     deps:
-      - web/install
+      - gui/install
     dir: web
     cmds:
       - vp run build:preview
 
-  preview/tui:
+  cli/preview:
     desc: Build TUI demo and run VHS tapes locally
     cmds:
       - go build -o tui-demo ./test/preview/tui-demo
@@ -102,18 +107,18 @@ tasks:
       - sh: command -v vhs
         msg: "VHS not installed. Install with: go install github.com/charmbracelet/vhs@latest"
 
-  web/install:
+  gui/install:
     internal: true
     run: once
     dir: web
     cmds:
       - vp install --frozen-lockfile
 
-  build/frontend:
+  gui/build/frontend:
     internal: true
     run: once
     deps:
-      - web/install
+      - gui/install
     dir: web
     cmds:
       - vp run build
