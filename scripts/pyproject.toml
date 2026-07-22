@@ -1,0 +1,24 @@
+[project]
+name = "scripts"
+version = "0.1.0"
+description = "Release automation for enbu"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.14.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+ignore = ["E501"]
+select = ["B", "E", "F", "I", "SIM", "UP"]
