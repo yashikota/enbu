@@ -13,6 +13,7 @@ tasks:
       - test/unit
       - test/scenario
       - test/web
+      - test/scripts
 
   test/unit:
     desc: Run unit tests
@@ -38,6 +39,12 @@ tasks:
     dir: web
     cmds:
       - vp test
+
+  test/scripts:
+    desc: Run release automation tests
+    dir: scripts
+    cmds:
+      - uv run pytest
 
   build:
     desc: Build CLI and GUI
@@ -66,6 +73,7 @@ tasks:
     desc: Format and lint all code
     deps:
       - check/go
+      - check/scripts
       - check/web
 
   check/go:
@@ -83,6 +91,26 @@ tasks:
     dir: web
     cmds:
       - vp check
+
+  check/scripts:
+    desc: Check Python formatting and lint
+    dir: scripts
+    cmds:
+      - uv run ruff format --check .
+      - uv run ruff check .
+
+  fmt/scripts:
+    desc: Format Python release automation
+    dir: scripts
+    cmds:
+      - uv run ruff check --fix .
+      - uv run ruff format .
+
+  lint/scripts:
+    desc: Lint Python release automation
+    dir: scripts
+    cmds:
+      - uv run ruff check .
 
   preview/web:
     desc: Build web frontend in mock/preview mode
