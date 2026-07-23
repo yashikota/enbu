@@ -12,6 +12,7 @@ import {
   MemberAvatar,
   MemberRow,
   RepositoryOwnerSelect,
+  RecipientsPanel,
   resolveWorkspaceEnvironment,
   SecretRow,
   serializeConfigDraft,
@@ -91,6 +92,25 @@ function renderUnauthenticatedHome() {
         <AuthContext.Provider
           value={{
             status: { authenticated: false },
+            loading: false,
+            repoPath: "",
+            refresh: async () => {},
+          }}
+        >
+          <HomePage />
+        </AuthContext.Provider>
+      </I18nProvider>,
+    );
+  });
+}
+
+function renderAuthenticatedHome() {
+  act(() => {
+    root.render(
+      <I18nProvider>
+        <AuthContext.Provider
+          value={{
+            status: { authenticated: true, username: "u" },
             loading: false,
             repoPath: "",
             refresh: async () => {},
@@ -493,6 +513,68 @@ describe("repository setup", () => {
   });
 });
 
+describe("accessibility: form labels", () => {
+  it("repo path input has aria-label", async () => {
+    oauthMocks.repoStatus.mockResolvedValue({ selected: false });
+    renderAuthenticatedHome();
+    await act(async () => Promise.resolve());
+    expect(container.querySelector("input[aria-label]")?.getAttribute("aria-label")).toBe(
+      "C:\\Users\\you\\src\\your-repo",
+    );
+  });
+});
+
+describe("accessibility: landmark labels and heading levels", () => {
+  it("repository selection title is h1", async () => {
+    oauthMocks.repoStatus.mockResolvedValue({ selected: false });
+    renderAuthenticatedHome();
+    await act(async () => Promise.resolve());
+    expect(container.querySelector("h1")?.textContent).toContain("Select repository");
+  });
+});
+
+describe("accessibility: sidebar keyboard", () => {
+  it("sidebar repo items have role=button and tabIndex", async () => {
+    vi.spyOn(backend, "listRepositories").mockResolvedValue([
+      { path: "/a", owner: "acme", repo: "app" },
+    ]);
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <AuthContext.Provider
+            value={{
+              status: { authenticated: true, username: "u" },
+              loading: false,
+              repoPath: "/b",
+              refresh: async () => {},
+            }}
+          >
+            <Sidebar activePath="/b" />
+          </AuthContext.Provider>
+        </I18nProvider>,
+      );
+    });
+    await act(async () => {});
+    const items = container.querySelectorAll('[role="button"]');
+    expect(items.length).toBeGreaterThan(0);
+    const item = items[0] as HTMLElement;
+    expect(item.getAttribute("tabindex")).toBe("0");
+    const selectRepository = vi.mocked(backend).selectRepository;
+    selectRepository.mockClear();
+    await act(async () => {
+      item.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(selectRepository).toHaveBeenLastCalledWith("/a");
+    selectRepository.mockClear();
+    await act(async () => {
+      item.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(selectRepository).toHaveBeenLastCalledWith("/a");
+  });
+});
+
 describe("environment selector", () => {
   it("switches environments and exposes environment creation as the last action", async () => {
     const onSelect = vi.fn();
@@ -565,5 +647,179 @@ describe("environment selector", () => {
       queryButton("Create")?.click();
     });
     expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("accessibility: CreateEnvironmentModal focus", () => {
+  it("dialog has aria-modal and aria-labelledby", () => {
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <CreateEnvironmentModal
+            open={true}
+            value=""
+            loading={false}
+            onValueChange={() => {}}
+            onClose={() => {}}
+            onCreate={() => {}}
+          />
+        </I18nProvider>,
+      );
+    });
+    const dialog = container.querySelector('[role="dialog"]');
+    expect(dialog?.getAttribute("aria-modal")).toBe("true");
+    expect(dialog?.getAttribute("aria-labelledby")).toBeTruthy();
+    const titleId = dialog?.getAttribute("aria-labelledby");
+    expect(container.querySelector(`[id="${titleId ?? ""}"]`)).toBeTruthy();
+  });
+});
+
+describe("accessibility: live regions", () => {
+  it("loading state has role=status", async () => {
+    vi.spyOn(backend, "listRecipients").mockImplementation(
+      () => new Promise(() => {}), // never resolves
+    );
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <RecipientsPanel
+            recipients={[]}
+            loading={true}
+            error=""
+            onSync={() => {}}
+            onErrorDismiss={() => {}}
+          />
+        </I18nProvider>,
+      );
+    });
+    const status = container.querySelector('[role="status"]');
+    expect(status).toBeTruthy();
+  });
+});
+
+describe("dashboard review regressions", () => {
+  const backendMock = vi.mocked(backend);
+  const initializedRepo = (path: string) => ({
+    selected: true,
+    repo: {
+      path,
+      owner: "acme",
+      repo: path.slice(1),
+      initialized: true,
+      has_git: true,
+      has_remote: true,
+    },
+  });
+
+  beforeEach(() => {
+    backendMock.listEnvironments.mockResolvedValue([{ name: "default", current: true }]);
+    backendMock.listSecrets.mockResolvedValue({
+      environment: "default",
+      secrets: [{ key: "KEY", value: "value" }],
+    });
+  });
+
+  it("trims duplicate keys before validation and does not call the backend", async () => {
+    oauthMocks.repoStatus.mockResolvedValue(initializedRepo("/a"));
+    backendMock.listRecipients.mockResolvedValue([]);
+    backendMock.addSecret.mockClear();
+    renderAuthenticatedHome();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const keyInput = container.querySelector<HTMLInputElement>('input[aria-label="Key"]');
+    act(() => {
+      if (!keyInput) return;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        keyInput,
+        " KEY ",
+      );
+      keyInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => queryButton("Add")?.click());
+
+    expect(backendMock.addSecret).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Key "KEY" already exists');
+  });
+
+  it("reloads recipients by repository path and ignores stale completions", async () => {
+    let resolveA!: (
+      value: Array<{ username: string; fingerprint: string; public_key: string }>,
+    ) => void;
+    let resolveB!: (
+      value: Array<{ username: string; fingerprint: string; public_key: string }>,
+    ) => void;
+    const recipientsA = new Promise<
+      Array<{ username: string; fingerprint: string; public_key: string }>
+    >((resolve) => {
+      resolveA = resolve;
+    });
+    const recipientsB = new Promise<
+      Array<{ username: string; fingerprint: string; public_key: string }>
+    >((resolve) => {
+      resolveB = resolve;
+    });
+    oauthMocks.repoStatus
+      .mockResolvedValueOnce(initializedRepo("/a"))
+      .mockResolvedValue(initializedRepo("/b"));
+    backendMock.listRecipients.mockReset();
+    backendMock.listRecipients
+      .mockImplementationOnce(() => recipientsA)
+      .mockImplementationOnce(() => recipientsB);
+
+    renderAuthenticatedHome();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(backendMock.listRecipients).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      window.dispatchEvent(new Event("enbu-auth-changed"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(backendMock.listRecipients).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveB([{ username: "new-repo-user", fingerprint: "b", public_key: "age1b" }]);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      queryButton("Members")?.click();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("new-repo-user");
+
+    await act(async () => {
+      resolveA([{ username: "stale-user", fingerprint: "a", public_key: "age1a" }]);
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("new-repo-user");
+    expect(container.textContent).not.toContain("stale-user");
+  });
+
+  it("delegates recipient sync and error dismissal", async () => {
+    const onSync = vi.fn();
+    const onErrorDismiss = vi.fn();
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <RecipientsPanel
+            recipients={[]}
+            loading={false}
+            error="failed"
+            onSync={onSync}
+            onErrorDismiss={onErrorDismiss}
+          />
+        </I18nProvider>,
+      );
+    });
+    act(() => queryButton("Sync")?.click());
+    expect(onSync).toHaveBeenCalledTimes(1);
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Close"]')?.click());
+    expect(onErrorDismiss).toHaveBeenCalledTimes(1);
   });
 });

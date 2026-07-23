@@ -33,7 +33,14 @@ type PlatformClient interface {
 	SourceRepoURL(owner, repo string) string
 }
 
+type ProgressStep struct {
+	Op     string `json:"op"`     // "add" | "pull" | "sync" | "delete"
+	Step   string `json:"step"`   // "encrypt" | "push" | "pull_secrets" | "pull_recipients" | "reencrypt" | "decrypt" | "write"
+	Status string `json:"status"` // "start" | "done"
+}
+
 type EventHandler interface {
 	OnProgress(msg string)
+	OnStepProgress(step ProgressStep)
 	OnConflictRetry(attempt, maxAttempts int)
 }

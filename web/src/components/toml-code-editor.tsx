@@ -128,8 +128,15 @@ export function TomlCodeEditor({
           enbu.toml
         </Text>
         <Flex align="center" gap="2">
-          <Box w="6px" h="6px" borderRadius="full" bg={errorCount ? "status.danger" : "status.success"} />
-          <Text color={errorCount ? "status.danger" : "editor.accent"} fontFamily="mono" fontSize="2xs">
+          <Box aria-hidden="true" w="6px" h="6px" borderRadius="full" bg={errorCount ? "status.danger" : "status.success"} />
+          <Text
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            color={errorCount ? "status.danger" : "editor.accent"}
+            fontFamily="mono"
+            fontSize="2xs"
+          >
             {loading ? "Starting TOML LSP" : `TOML LSP · ${errorCount} problems`}
           </Text>
         </Flex>

@@ -42,4 +42,24 @@ describe("i18n", () => {
     expect(translate("ja", "dashboard.copyKey")).toBe("名前をコピー");
     expect(translate("ja", "dashboard.keyCopied")).toBe("名前をコピー済み");
   });
+
+  it("translates duplicateKey with key interpolation", () => {
+    expect(translate("en", "dashboard.duplicateKey", { key: "MY_SECRET" })).toBe(
+      'Key "MY_SECRET" already exists. Edit the existing secret instead.',
+    );
+    expect(translate("ja", "dashboard.duplicateKey", { key: "MY_SECRET" })).toBe(
+      "キー「MY_SECRET」はすでに存在します。既存のシークレットを編集してください。",
+    );
+  });
+
+  it("has ARIA label keys", () => {
+    expect(translate("en", "sidebar.navigation")).toBe("Navigation");
+    expect(translate("ja", "sidebar.navigation")).toBe("ナビゲーション");
+    expect(translate("en", "sidebar.repositoryOptions")).toBe("Repository options");
+    expect(translate("ja", "sidebar.repositoryOptions")).toBe("リポジトリの操作");
+    expect(translate("en", "dashboard.showValue")).toBe("Show value");
+    expect(translate("ja", "dashboard.showValue")).toBe("値を表示");
+    expect(translate("en", "dashboard.hideValue")).toBe("Hide value");
+    expect(translate("ja", "dashboard.hideValue")).toBe("値を非表示");
+  });
 });

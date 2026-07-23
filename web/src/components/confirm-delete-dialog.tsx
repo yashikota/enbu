@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { type RefObject, useEffect, useId, useRef } from "react";
 import { Box, HStack } from "styled-system/jsx";
 import { Button, Heading } from "./ui";
 import { Trash2 } from "lucide-react";
+import { useFocusTrap } from "../lib/use-focus-trap";
 
 export function ConfirmDeleteDialog({
   open,
@@ -9,6 +10,7 @@ export function ConfirmDeleteDialog({
   cancelLabel,
   confirmLabel,
   loading,
+  triggerRef,
   onClose,
   onConfirm,
 }: {
@@ -17,9 +19,14 @@ export function ConfirmDeleteDialog({
   cancelLabel: string;
   confirmLabel: string;
   loading: boolean;
+  triggerRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
 }) {
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(open, dialogRef, triggerRef);
+
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -44,9 +51,10 @@ export function ConfirmDeleteDialog({
       }}
     >
       <Box
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="confirm-delete-title"
+        aria-labelledby={titleId}
         w="full"
         maxW="440px"
         p="5"
@@ -56,7 +64,7 @@ export function ConfirmDeleteDialog({
         borderRadius="2xl"
         boxShadow="xl"
       >
-        <Heading id="confirm-delete-title" size="lg" fontWeight="extrabold">
+        <Heading id={titleId} size="lg" fontWeight="extrabold">
           {title}
         </Heading>
         <HStack justify="end" gap="2" mt="6">
@@ -71,7 +79,7 @@ export function ConfirmDeleteDialog({
             aria-label={`${confirmLabel}: ${title}`}
             onClick={() => void onConfirm()}
           >
-            <Trash2 size={15} />
+            <Trash2 size={15} aria-hidden="true" />
             {confirmLabel}
           </Button>
         </HStack>

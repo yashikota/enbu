@@ -18,7 +18,7 @@ func registerProtocolHandler() error {
 	if err != nil {
 		return fmt.Errorf("creating protocol key: %w", err)
 	}
-	defer protocolKey.Close()
+	defer func() { _ = protocolKey.Close() }()
 	if err := protocolKey.SetStringValue("", "URL:enbu protocol"); err != nil {
 		return fmt.Errorf("setting protocol description: %w", err)
 	}
@@ -29,7 +29,7 @@ func registerProtocolHandler() error {
 	if err != nil {
 		return fmt.Errorf("creating protocol command key: %w", err)
 	}
-	defer commandKey.Close()
+	defer func() { _ = commandKey.Close() }()
 	if err := commandKey.SetStringValue("", fmt.Sprintf(`"%s" "%%1"`, executable)); err != nil {
 		return fmt.Errorf("setting protocol command: %w", err)
 	}

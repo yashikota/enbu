@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type RefObject, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Box, Flex, HStack, VStack, styled } from "styled-system/jsx";
 import { Alert, Button, Heading, Input, Popover, Spinner, Tabs, Text } from "../components/ui";
 import {
@@ -35,6 +35,8 @@ import { useI18n } from "../lib/i18n";
 import { useAuth } from "./__root";
 import { TomlCodeEditor } from "../components/toml-code-editor";
 import { ConfirmDeleteDialog } from "../components/confirm-delete-dialog";
+import { TransferModal } from "../components/transfer-modal";
+import { useFocusTrap } from "../lib/use-focus-trap";
 import { LanguageSelector } from "../components/language-selector";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 
@@ -85,7 +87,6 @@ export function RepositoryOwnerSelect({
             bg="bg.surface"
             boxShadow="xs"
             disabled={loading || owners.length === 0}
-            aria-label={t("init.repositoryOwner")}
             _hover={{ borderColor: "accent.default", bg: "bg.muted" }}
           >
             <HStack gap="3" minW="0">
@@ -215,6 +216,34 @@ export function HomePage() {
   const [environmentModalOpen, setEnvironmentModalOpen] = useState(false);
   const [environmentCreateLoading, setEnvironmentCreateLoading] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [recipientsLoading, setRecipientsLoading] = useState(false);
+  const [recipientsError, setRecipientsError] = useState("");
+  const recipientsRequestRef = useRef(0);
+  const addEnvironmentTriggerRef = useRef<HTMLButtonElement>(null);
+  const [transferModal, setTransferModal] = useState<{
+    open: boolean;
+    op: "add" | "pull" | "sync" | "delete" | null;
+    error: string | null;
+  }>({ open: false, op: null, error: null });
+
+  const runWithTransferAnimation = useCallback(
+    async (op: "add" | "pull" | "sync" | "delete", task: () => Promise<void>) => {
+      setTransferModal({ open: true, op, error: null });
+      try {
+        await task();
+        await new Promise((r) => setTimeout(r, 1200));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setTransferModal({ open: true, op, error: msg });
+        await new Promise((r) => setTimeout(r, 2200));
+        throw err;
+      } finally {
+        setTransferModal({ open: false, op: null, error: null });
+      }
+    },
+    [],
+  );
 
   const fetchRepoStatus = useCallback(async () => {
     if (status?.authenticated) {
@@ -279,6 +308,24 @@ export function HomePage() {
     [environments, secrets?.environment],
   );
 
+  const recipientRepoPath = repoStatus?.repo?.path ?? "";
+  const fetchRecipients = useCallback(async () => {
+    if (!recipientRepoPath) return;
+    const request = ++recipientsRequestRef.current;
+    setRecipientsLoading(true);
+    setRecipientsError("");
+    try {
+      const list = await backend.listRecipients();
+      if (request !== recipientsRequestRef.current) return;
+      setRecipients((list ?? []).filter((r): r is Recipient => r != null));
+    } catch (err) {
+      if (request !== recipientsRequestRef.current) return;
+      setRecipientsError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (request === recipientsRequestRef.current) setRecipientsLoading(false);
+    }
+  }, [recipientRepoPath]);
+
   async function refreshWorkspace(env = currentEnvironment) {
     setWorkspaceLoading(true);
     setActionError("");
@@ -297,6 +344,16 @@ export function HomePage() {
   useEffect(() => {
     if (repoStatus?.selected && repoStatus.repo?.initialized) void refreshWorkspace();
   }, [repoStatus?.selected, repoStatus?.repo?.initialized]);
+
+  useEffect(() => {
+    if (repoStatus?.selected && repoStatus.repo?.initialized && recipientRepoPath) {
+      void fetchRecipients();
+      return;
+    }
+    recipientsRequestRef.current++;
+    setRecipients([]);
+    setRecipientsLoading(false);
+  }, [repoStatus?.selected, repoStatus?.repo?.initialized, recipientRepoPath, fetchRecipients]);
 
   useEffect(() => {
     const path = repoStatus?.repo?.path?.replace(/[\\/]+$/, "");
@@ -365,7 +422,7 @@ export function HomePage() {
     return (
       <PageCenter>
         <VStack gap={5} w="full" maxW="480px" textAlign="center">
-          {authError && <ErrorAlert message={authError} />}
+          {authError && <ErrorAlert message={authError} onDismiss={() => setAuthError("")} />}
           <Button
             w="full"
             bg="accent.default"
@@ -374,7 +431,7 @@ export function HomePage() {
             loading={startingAuth}
             onClick={handleStartAuth}
           >
-            <SiGithub size={16} />
+            <SiGithub size={16} aria-hidden="true" />
             {t("auth.connect")}
           </Button>
           <LanguageSelector w="full" justifyContent="flex-end" pt="3" />
@@ -432,14 +489,15 @@ export function HomePage() {
       <PageCenter>
         <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
           <Box>
-            <Heading size="2xl" fontWeight="extrabold" mb={2}>
+            <Heading as="h1" size="2xl" fontWeight="extrabold" mb={2}>
               {t("repo.selectTitle")}
             </Heading>
             <Text color="fg.muted">{t("repo.selectDescription")}</Text>
           </Box>
-          {repoError && <ErrorAlert message={repoError} />}
+          {repoError && <ErrorAlert message={repoError} onDismiss={() => setRepoError("")} />}
           <HStack>
             <Input
+              aria-label={t("repo.pathPlaceholder")}
               value={repoPath}
               onChange={(e) => setRepoPath(e.target.value)}
               placeholder={t("repo.pathPlaceholder")}
@@ -505,12 +563,12 @@ export function HomePage() {
       <PageCenter>
         <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
           <Box>
-            <Heading size="2xl" fontWeight="extrabold" mb={2}>
+            <Heading as="h1" size="2xl" fontWeight="extrabold" mb={2}>
               {t("init.gitTitle")}
             </Heading>
             <Text color="fg.muted">{t("init.gitDescription")}</Text>
           </Box>
-          {actionError && <ErrorAlert message={actionError} />}
+          {actionError && <ErrorAlert message={actionError} onDismiss={() => setActionError("")} />}
           <Button
             bg="accent.default"
             color="accent.fg"
@@ -540,10 +598,10 @@ export function HomePage() {
     return (
       <PageCenter>
         <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
-          <Heading size="2xl" fontWeight="extrabold">
+          <Heading as="h1" size="2xl" fontWeight="extrabold">
             {t("init.remoteTitle")}
           </Heading>
-          {actionError && <ErrorAlert message={actionError} />}
+          {actionError && <ErrorAlert message={actionError} onDismiss={() => setActionError("")} />}
           <RepositoryOwnerSelect
             owners={repositoryOwners}
             value={selectedRepositoryOwner}
@@ -551,6 +609,7 @@ export function HomePage() {
             onChange={setSelectedRepositoryOwner}
           />
           <Input
+            aria-label={t("init.repositoryName")}
             value={remoteRepoName}
             onChange={(event) => setRemoteRepoName(event.target.value)}
             placeholder={t("init.repositoryName")}
@@ -608,12 +667,12 @@ export function HomePage() {
       <PageCenter>
         <VStack gap={5} w="full" maxW="540px" alignItems="stretch">
           <Box>
-            <Heading size="2xl" fontWeight="extrabold" mb={2}>
+            <Heading as="h1" size="2xl" fontWeight="extrabold" mb={2}>
               {t("init.title")}
             </Heading>
             <Text color="fg.muted">{t("init.description")}</Text>
           </Box>
-          {actionError && <ErrorAlert message={actionError} />}
+          {actionError && <ErrorAlert message={actionError} onDismiss={() => setActionError("")} />}
           <Button
             bg="accent.default"
             color="accent.fg"
@@ -662,7 +721,7 @@ export function HomePage() {
                 openURL(`https://github.com/${repoStatus.repo?.owner}/${repoStatus.repo?.repo}`)
               }
             >
-              <SiGithub size={24} />
+              <SiGithub size={24} aria-hidden="true" />
               {repoStatus.repo?.owner}/{repoStatus.repo?.repo}
             </Button>
           </Box>
@@ -670,12 +729,12 @@ export function HomePage() {
 
         {actionError && (
           <Box mb="4">
-            <ErrorAlert message={actionError} />
+            <ErrorAlert message={actionError} onDismiss={() => setActionError("")} />
           </Box>
         )}
 
         <Tabs.Root defaultValue="secrets" lazyMount unmountOnExit variant="line">
-          <Tabs.List w="full" maxW="650px" h="auto" display="flex" gap="0" overflow="hidden">
+          <Tabs.List w="full" h="auto" display="flex" gap="0" overflow="hidden">
             <DashboardTab
               value="secrets"
               icon={<KeyRound size={16} />}
@@ -699,6 +758,7 @@ export function HomePage() {
                 <EnvironmentSelector
                   environments={environments}
                   value={currentEnvironment}
+                  addTriggerRef={addEnvironmentTriggerRef}
                   onSelect={async (environment) => {
                     if (environment === currentEnvironment) return;
                     try {
@@ -721,8 +781,10 @@ export function HomePage() {
                   onClick={async () => {
                     setPullLoading(true);
                     try {
-                      await backend.pullSecrets(currentEnvironment);
-                      await refreshWorkspace(currentEnvironment);
+                      await runWithTransferAnimation("pull", async () => {
+                        await backend.pullSecrets(currentEnvironment);
+                        await refreshWorkspace(currentEnvironment);
+                      });
                     } catch (err) {
                       setActionError(err instanceof Error ? err.message : String(err));
                     } finally {
@@ -736,8 +798,8 @@ export function HomePage() {
               </HStack>
             </SectionHeader>
             {workspaceLoading ? (
-              <HStack py="8" justify="center">
-                <Spinner size="sm" />
+              <HStack role="status" py="8" justify="center">
+                <Spinner size="sm" aria-hidden="true" />
                 <Text color="fg.muted">{t("common.loading")}</Text>
               </HStack>
             ) : (
@@ -762,8 +824,10 @@ export function HomePage() {
                     }}
                     onDelete={async () => {
                       try {
-                        await backend.deleteSecret(secret.key, currentEnvironment);
-                        await refreshWorkspace(currentEnvironment);
+                        await runWithTransferAnimation("delete", async () => {
+                          await backend.deleteSecret(secret.key, currentEnvironment);
+                          await refreshWorkspace(currentEnvironment);
+                        });
                       } catch (err) {
                         setActionError(err instanceof Error ? err.message : String(err));
                       }
@@ -791,11 +855,13 @@ export function HomePage() {
               borderRadius="lg"
             >
               <Input
+                aria-label={t("dashboard.key")}
                 placeholder={t("dashboard.key")}
                 value={secretKey}
                 onChange={(event) => setSecretKey(event.target.value)}
               />
               <Input
+                aria-label={t("dashboard.value")}
                 placeholder={t("dashboard.value")}
                 value={secretValue}
                 onChange={(event) => setSecretValue(event.target.value)}
@@ -805,13 +871,20 @@ export function HomePage() {
                 loading={addLoading}
                 disabled={!secretKey.trim()}
                 onClick={async () => {
-                  if (!secretKey.trim()) return;
+                  const trimmedKey = secretKey.trim();
+                  if (!trimmedKey) return;
+                  if (secrets?.secrets.some((s) => s.key === trimmedKey)) {
+                    setActionError(t("dashboard.duplicateKey", { key: trimmedKey }));
+                    return;
+                  }
                   setAddLoading(true);
                   try {
-                    await backend.addSecret(secretKey.trim(), secretValue, currentEnvironment);
-                    setSecretKey("");
-                    setSecretValue("");
-                    await refreshWorkspace(currentEnvironment);
+                    await runWithTransferAnimation("add", async () => {
+                      await backend.addSecret(trimmedKey, secretValue, currentEnvironment);
+                      setSecretKey("");
+                      setSecretValue("");
+                      await refreshWorkspace(currentEnvironment);
+                    });
                   } catch (err) {
                     setActionError(err instanceof Error ? err.message : String(err));
                   } finally {
@@ -826,7 +899,25 @@ export function HomePage() {
           </DashboardTabContent>
 
           <DashboardTabContent value="members">
-            <RecipientsPanel />
+            <RecipientsPanel
+              recipients={recipients}
+              loading={recipientsLoading}
+              error={recipientsError}
+              onSync={async () => {
+                setRecipientsLoading(true);
+                try {
+                  await runWithTransferAnimation("sync", async () => {
+                    await backend.syncSecrets(currentEnvironment);
+                    await fetchRecipients();
+                  });
+                } catch (err) {
+                  setRecipientsError(err instanceof Error ? err.message : String(err));
+                } finally {
+                  setRecipientsLoading(false);
+                }
+              }}
+              onErrorDismiss={() => setRecipientsError("")}
+            />
           </DashboardTabContent>
           <DashboardTabContent value="settings">
             <ConfigPanel environments={environments} />
@@ -836,6 +927,7 @@ export function HomePage() {
           open={environmentModalOpen}
           value={newEnv}
           loading={environmentCreateLoading}
+          triggerRef={addEnvironmentTriggerRef}
           onValueChange={setNewEnv}
           onClose={() => {
             if (environmentCreateLoading) return;
@@ -860,6 +952,12 @@ export function HomePage() {
             }
           }}
         />
+        <TransferModal
+          open={transferModal.open}
+          operation={transferModal.op}
+          error={transferModal.error}
+          onClose={() => setTransferModal({ open: false, op: null, error: null })}
+        />
       </Box>
     </Box>
   );
@@ -870,11 +968,13 @@ export function HomePage() {
 export function EnvironmentSelector({
   environments,
   value,
+  addTriggerRef,
   onSelect,
   onAdd,
 }: {
   environments: Environment[];
   value: string;
+  addTriggerRef?: RefObject<HTMLButtonElement | null>;
   onSelect: (environment: string) => void | Promise<void>;
   onAdd: () => void;
 }) {
@@ -884,6 +984,7 @@ export function EnvironmentSelector({
       <Popover.Root positioning={{ placement: "bottom-start", gutter: 6 }}>
         <Popover.Trigger asChild>
           <Button
+            ref={addTriggerRef}
             type="button"
             variant="outline"
             h="40px"
@@ -963,6 +1064,7 @@ export function CreateEnvironmentModal({
   open,
   value,
   loading,
+  triggerRef,
   onValueChange,
   onClose,
   onCreate,
@@ -970,11 +1072,15 @@ export function CreateEnvironmentModal({
   open: boolean;
   value: string;
   loading: boolean;
+  triggerRef?: RefObject<HTMLElement | null>;
   onValueChange: (value: string) => void;
   onClose: () => void;
   onCreate: () => void | Promise<void>;
 }) {
   const { t } = useI18n();
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(open, dialogRef, triggerRef);
 
   useEffect(() => {
     if (!open) return;
@@ -1000,9 +1106,10 @@ export function CreateEnvironmentModal({
       }}
     >
       <Box
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="create-environment-title"
+        aria-labelledby={titleId}
         w="full"
         maxW="440px"
         p="5"
@@ -1013,7 +1120,7 @@ export function CreateEnvironmentModal({
         boxShadow="xl"
       >
         <Flex justify="space-between" align="start" gap="4" mb="5">
-          <Heading id="create-environment-title" size="lg" fontWeight="extrabold">
+          <Heading id={titleId} size="lg" fontWeight="extrabold">
             {t("dashboard.createEnvironmentTitle")}
           </Heading>
           <Button
@@ -1026,7 +1133,7 @@ export function CreateEnvironmentModal({
             disabled={loading}
             onClick={onClose}
           >
-            <X size={16} />
+            <X size={16} aria-hidden="true" />
           </Button>
         </Flex>
         <styled.label
@@ -1080,6 +1187,7 @@ function DashboardTab({
   return (
     <Tabs.Trigger
       value={value}
+      aria-label={label}
       flex="1"
       minW="0"
       h={{ base: "48px", sm: "42px" }}
@@ -1112,7 +1220,9 @@ function DashboardTab({
       }}
       _hover={{ color: "fg.default", bg: "transparent" }}
     >
-      {icon}
+      <Box as="span" aria-hidden="true">
+        {icon}
+      </Box>
       <Text as="span" display={{ base: "none", sm: "inline" }} fontSize="inherit">
         {label}
       </Text>
@@ -1169,7 +1279,8 @@ function PageCenter({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ErrorAlert({ message }: { message: string }) {
+function ErrorAlert({ message, onDismiss }: { message: string; onDismiss?: () => void }) {
+  const { t } = useI18n();
   return (
     <Alert.Root
       borderRadius="md"
@@ -1183,6 +1294,20 @@ function ErrorAlert({ message }: { message: string }) {
       <Alert.Content>
         <Text fontSize="sm">{message}</Text>
       </Alert.Content>
+      {onDismiss && (
+        <Button
+          variant="ghost"
+          w="24px"
+          h="24px"
+          p="0"
+          flexShrink="0"
+          color="status.danger"
+          aria-label={t("common.close")}
+          onClick={onDismiss}
+        >
+          <X size={14} />
+        </Button>
+      )}
     </Alert.Root>
   );
 }
@@ -1206,6 +1331,7 @@ export function SecretRow({
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [editValue, setEditValue] = useState(secretValue);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setEditValue(secretValue);
@@ -1251,6 +1377,7 @@ export function SecretRow({
         </Button>
       </HStack>
       <Input
+        aria-label={`${t("dashboard.value")}: ${secretKey}`}
         value={editValue}
         type={visible ? "text" : "password"}
         h="38px"
@@ -1284,12 +1411,13 @@ export function SecretRow({
           h="34px"
           p={0}
           color="fg.muted"
-          aria-label={visible ? "Hide value" : "Show value"}
+          aria-label={visible ? t("dashboard.hideValue") : t("dashboard.showValue")}
           onClick={() => setVisible((v) => !v)}
         >
           {visible ? <EyeOff size={16} /> : <Eye size={16} />}
         </Button>
         <Button
+          ref={deleteTriggerRef}
           variant="ghost"
           w="34px"
           h="34px"
@@ -1309,6 +1437,7 @@ export function SecretRow({
         cancelLabel={t("config.cancel")}
         confirmLabel={deleteLabel}
         loading={deleting}
+        triggerRef={deleteTriggerRef}
         onClose={() => setDeleteConfirmationOpen(false)}
         onConfirm={async () => {
           setDeleting(true);
@@ -1324,28 +1453,20 @@ export function SecretRow({
   );
 }
 
-function RecipientsPanel() {
+export function RecipientsPanel({
+  recipients,
+  loading,
+  error,
+  onSync,
+  onErrorDismiss,
+}: {
+  recipients: Recipient[];
+  loading: boolean;
+  error: string;
+  onSync: () => void | Promise<void>;
+  onErrorDismiss: () => void;
+}) {
   const { t } = useI18n();
-  const [recipients, setRecipients] = useState<Recipient[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const list = await backend.listRecipients();
-      setRecipients((list ?? []).filter((r): r is Recipient => r != null));
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   return (
     <>
@@ -1355,7 +1476,7 @@ function RecipientsPanel() {
           variant="outline"
           loading={loading}
           title={t("dashboard.syncDescription")}
-          onClick={() => void load()}
+          onClick={() => void onSync()}
         >
           <RefreshCw size={14} />
           {t("dashboard.sync")}
@@ -1363,12 +1484,12 @@ function RecipientsPanel() {
       </SectionHeader>
       {error && (
         <Box mb="4">
-          <ErrorAlert message={error} />
+          <ErrorAlert message={error} onDismiss={onErrorDismiss} />
         </Box>
       )}
       {loading ? (
-        <HStack py="8" justify="center">
-          <Spinner size="sm" />
+        <HStack role="status" py="8" justify="center">
+          <Spinner size="sm" aria-hidden="true" />
           <Text color="fg.muted">{t("common.loading")}</Text>
         </HStack>
       ) : recipients.length === 0 ? (
@@ -1519,6 +1640,7 @@ export function serializeConfigDraft(config: EnbuConfigDraft): string {
 
 function ConfigPanel({ environments }: { environments: Environment[] }) {
   const { t } = useI18n();
+  const defaultEnvId = useId();
   const [content, setContent] = useState("");
   const [draft, setDraft] = useState("");
   const [gui, setGui] = useState<EnbuConfigDraft>();
@@ -1603,17 +1725,17 @@ function ConfigPanel({ environments }: { environments: Environment[] }) {
       </SectionHeader>
       {loadError && (
         <Box mb="4">
-          <ErrorAlert message={loadError} />
+          <ErrorAlert message={loadError} onDismiss={() => setLoadError("")} />
         </Box>
       )}
       {saveError && (
         <Box mb="4">
-          <ErrorAlert message={saveError} />
+          <ErrorAlert message={saveError} onDismiss={() => setSaveError("")} />
         </Box>
       )}
       {loading ? (
-        <HStack py="8" justify="center">
-          <Spinner size="sm" />
+        <HStack role="status" py="8" justify="center">
+          <Spinner size="sm" aria-hidden="true" />
           <Text color="fg.muted">{t("common.loading")}</Text>
         </HStack>
       ) : view === "code" ? (
@@ -1626,8 +1748,9 @@ function ConfigPanel({ environments }: { environments: Environment[] }) {
       ) : gui ? (
         <VStack alignItems="stretch" gap="4">
           <SettingsGroup title={t("config.general")}>
-            <SettingRow label={t("config.defaultEnvironment")}>
+            <SettingRow label={t("config.defaultEnvironment")} htmlFor={defaultEnvId}>
               <styled.select
+                id={defaultEnvId}
                 value={gui.default_env}
                 {...settingControlStyles}
                 onChange={(event) => updateGui({ ...gui, default_env: event.target.value })}
@@ -1641,20 +1764,24 @@ function ConfigPanel({ environments }: { environments: Environment[] }) {
             </SettingRow>
           </SettingsGroup>
           <SettingsGroup title={t("config.outputFileNames")}>
-            {Object.entries(gui.env).map(([name, config]) => (
-              <SettingRow key={name} label={name}>
-                <styled.input
-                  value={config.output}
-                  {...settingControlStyles}
-                  onChange={(event) =>
-                    updateGui({
-                      ...gui,
-                      env: { ...gui.env, [name]: { output: event.target.value } },
-                    })
-                  }
-                />
-              </SettingRow>
-            ))}
+            {Object.entries(gui.env).map(([name, config]) => {
+              const inputId = `config-output-${name}`;
+              return (
+                <SettingRow key={name} label={name} htmlFor={inputId}>
+                  <styled.input
+                    id={inputId}
+                    value={config.output}
+                    {...settingControlStyles}
+                    onChange={(event) =>
+                      updateGui({
+                        ...gui,
+                        env: { ...gui.env, [name]: { output: event.target.value } },
+                      })
+                    }
+                  />
+                </SettingRow>
+              );
+            })}
           </SettingsGroup>
         </VStack>
       ) : null}
@@ -1695,7 +1822,15 @@ function SettingsGroup({ title, children }: { title: string; children: React.Rea
   );
 }
 
-function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
+function SettingRow({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  children: React.ReactNode;
+}) {
   return (
     <Box
       minH="60px"
@@ -1709,9 +1844,15 @@ function SettingRow({ label, children }: { label: string; children: React.ReactN
       borderColor="border.default"
       _last={{ borderBottomWidth: "0" }}
     >
-      <Text fontSize="sm" fontWeight="semibold">
-        {label}
-      </Text>
+      {htmlFor ? (
+        <styled.label htmlFor={htmlFor} fontSize="sm" fontWeight="semibold">
+          {label}
+        </styled.label>
+      ) : (
+        <Text fontSize="sm" fontWeight="semibold">
+          {label}
+        </Text>
+      )}
       {children}
     </Box>
   );
@@ -1733,7 +1874,7 @@ function OAuthLoginPanel({
 
   return (
     <VStack gap={5} w="full" maxW="480px" alignItems="stretch">
-      <Heading size="2xl" fontWeight="extrabold" textAlign="center">
+      <Heading as="h1" size="2xl" fontWeight="extrabold" textAlign="center">
         {t("auth.authorizeTitle")}
       </Heading>
 

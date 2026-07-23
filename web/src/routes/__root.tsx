@@ -12,7 +12,7 @@ import { Box, Flex, VStack, styled } from "styled-system/jsx";
 import { Button, Popover, Separator, Text } from "../components/ui";
 import { Trash2 } from "lucide-react";
 import type { AuthStatus } from "../lib/api";
-import { backend, openURL } from "../lib/backend";
+import { backend } from "../lib/backend";
 import { createAuthRefresher, type AuthRefreshOptions } from "../lib/auth-refresh";
 import { I18nProvider, useI18n } from "../lib/i18n";
 import { ConfirmDeleteDialog } from "../components/confirm-delete-dialog";
@@ -149,6 +149,7 @@ export function Sidebar({ activePath }: { activePath: string }) {
   const [addLoading, setAddLoading] = useState(false);
   const [removingRepository, setRemovingRepository] = useState(false);
   const [repositoryPendingRemoval, setRepositoryPendingRemoval] = useState<RepoItem | null>(null);
+  const removeTriggerRef = useRef<HTMLElement>(null);
   const [contextMenu, setContextMenu] = useState<{
     repo: RepoItem;
     x: number;
@@ -200,6 +201,7 @@ export function Sidebar({ activePath }: { activePath: string }) {
 
   return (
     <styled.nav
+      aria-label={t("sidebar.navigation")}
       w="248px"
       minH="calc(100vh - 72px)"
       display={{ base: "none", lg: "block" }}
@@ -221,6 +223,8 @@ export function Sidebar({ activePath }: { activePath: string }) {
             <Flex
               key={repo.path}
               data-repository-path={repo.path}
+              role={isActive ? undefined : "button"}
+              tabIndex={isActive ? -1 : 0}
               alignItems="center"
               px="2"
               py="9px"
@@ -232,6 +236,7 @@ export function Sidebar({ activePath }: { activePath: string }) {
               cursor={isActive ? "default" : "pointer"}
               onContextMenu={(event) => {
                 event.preventDefault();
+                removeTriggerRef.current = event.currentTarget;
                 setContextMenu({
                   repo,
                   x: Math.max(8, Math.min(event.clientX, window.innerWidth - 180)),
@@ -246,6 +251,19 @@ export function Sidebar({ activePath }: { activePath: string }) {
                   window.dispatchEvent(new Event("enbu-auth-changed"));
                 } catch {
                   // ignore
+                }
+              }}
+              onKeyDown={async (event) => {
+                if (isActive) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  try {
+                    await backend.selectRepository(repo.path ?? "");
+                    window.dispatchEvent(new Event("enbu-repo-changed"));
+                    window.dispatchEvent(new Event("enbu-auth-changed"));
+                  } catch {
+                    // ignore
+                  }
                 }
               }}
             >
@@ -283,6 +301,7 @@ export function Sidebar({ activePath }: { activePath: string }) {
         cancelLabel={t("config.cancel")}
         confirmLabel={t("sidebar.remove")}
         loading={removingRepository}
+        triggerRef={removeTriggerRef}
         onClose={() => setRepositoryPendingRemoval(null)}
         onConfirm={async () => {
           if (!repositoryPendingRemoval) return;
@@ -349,6 +368,7 @@ export function RepositoryContextMenu({
   return (
     <Box
       role="menu"
+      aria-label={t("sidebar.repositoryOptions")}
       position="fixed"
       style={{ left: x, top: y }}
       zIndex="40"
@@ -371,7 +391,7 @@ export function RepositoryContextMenu({
         loading={removing}
         onClick={() => void onRemove()}
       >
-        <Trash2 size={15} />
+        <Trash2 size={15} aria-hidden="true" />
         {t("sidebar.remove")}
       </Button>
     </Box>
@@ -446,15 +466,17 @@ export function AccountMenu({ status, loading }: { status: AuthStatus | null; lo
           {/* Account name */}
           <Box pb="2" mb="1" borderBottomWidth="1px" borderColor="border.default">
             {authenticated ? (
-              <Text
+              <styled.a
+                href={`https://github.com/${username}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 fontWeight="bold"
                 fontSize="sm"
-                cursor="pointer"
+                color="fg.default"
                 _hover={{ textDecoration: "underline", color: "accent.default" }}
-                onClick={() => openURL(`https://github.com/${username}`)}
               >
                 {username}
-              </Text>
+              </styled.a>
             ) : (
               <Text fontWeight="bold" fontSize="sm">
                 Account
