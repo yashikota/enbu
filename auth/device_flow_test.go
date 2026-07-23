@@ -107,6 +107,14 @@ func TestDeviceLoginErrors(t *testing.T) {
 		{name: "access denied", response: deviceTokenResponse{Error: "access_denied"}, want: ErrAccessDenied},
 		{name: "expired", response: deviceTokenResponse{Error: "expired_token"}, want: errors.New("device code expired")},
 		{name: "disabled", response: deviceTokenResponse{Error: "device_flow_disabled"}, want: errors.New("not enabled")},
+		{
+			name: "unknown",
+			response: deviceTokenResponse{
+				Error:            "future_error",
+				ErrorDescription: "new failure",
+			},
+			want: errors.New(`"future_error" ("new failure")`),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -131,6 +139,23 @@ func TestDeviceLoginErrors(t *testing.T) {
 				t.Fatalf("error = %v, want containing %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestDeviceLoginReportsExpiredWhenDeviceDeadlineElapses(t *testing.T) {
+	server := newDeviceFlowServer(t, deviceTokenResponse{})
+	defer server.Close()
+	client := &deviceFlowClient{
+		deviceCodeURL: server.URL + "/device/code",
+		tokenURL:      server.URL + "/access_token",
+		http:          server.Client(),
+		wait: func(context.Context, time.Duration) error {
+			return context.DeadlineExceeded
+		},
+	}
+	_, err := client.login(context.Background(), "client-id", func(DeviceAuthorization) error { return nil })
+	if err == nil || err.Error() != "device code expired, please try again" {
+		t.Fatalf("error = %v", err)
 	}
 }
 

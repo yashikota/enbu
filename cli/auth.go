@@ -62,18 +62,23 @@ func newAuthLoginCommandWithDeps(deps authLoginDeps) *cobra.Command {
 				}
 				token, err = deps.deviceLogin(ctx, clientID, func(device auth.DeviceAuthorization) error {
 					cmd.Printf("Code: %s\n", device.UserCode)
-					cmd.Printf("→ Opening %s in your browser...\n", device.VerificationURI)
+					cmd.Printf("Verification URL: %s\n", device.VerificationURI)
 					if err := deps.openBrowser(device.VerificationURI); err != nil {
 						cmd.PrintErrln("Could not open the browser automatically; open the URL above manually.")
+					} else {
+						cmd.Println("→ Opened in your browser.")
 					}
 					cmd.Println("Waiting for authorization...")
 					return nil
 				})
 			} else {
 				token, err = deps.browserLogin(ctx, func(authorizeURL string) error {
-					cmd.Println("→ Opening GitHub in your browser...")
+					if err := deps.openBrowser(authorizeURL); err != nil {
+						return err
+					}
+					cmd.Println("→ Opened GitHub in your browser.")
 					cmd.Println("Waiting for authorization...")
-					return deps.openBrowser(authorizeURL)
+					return nil
 				})
 			}
 			if err != nil {

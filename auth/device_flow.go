@@ -90,6 +90,9 @@ func (c *deviceFlowClient) login(
 	interval := time.Duration(device.Interval) * time.Second
 	for {
 		if err := c.wait(ctx, interval); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) && parent.Err() == nil {
+				return nil, errors.New("device code expired, please try again")
+			}
 			return nil, fmt.Errorf("waiting for device authorization: %w", err)
 		}
 
@@ -131,7 +134,11 @@ func (c *deviceFlowClient) login(
 		case "unsupported_grant_type":
 			return nil, errors.New("GitHub rejected the Device Flow grant type")
 		default:
-			return nil, errors.New("device authorization failed")
+			return nil, fmt.Errorf(
+				"device authorization failed: %q (%q)",
+				response.Error,
+				response.ErrorDescription,
+			)
 		}
 	}
 }
