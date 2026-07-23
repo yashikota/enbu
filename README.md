@@ -45,6 +45,7 @@ enbu auth login
 ```
 
 Log in to GitHub.
+For a headless environment, use `enbu auth login --device` and enter the displayed code on GitHub.
 
 ### 2. Initialize the repository
 

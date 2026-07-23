@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"os"
 
 	agecrypto "filippo.io/age"
 	"github.com/enbu-net/enbu/app"
@@ -10,6 +12,14 @@ import (
 	"github.com/enbu-net/enbu/utils/keystore"
 	"github.com/spf13/cobra"
 )
+
+const defaultDeviceClientID = "Ov23li6nFmfdF4FW9ikd"
+
+type authLoginDeps struct {
+	browserLogin func(context.Context, auth.BrowserOpener) (*auth.StoredToken, error)
+	deviceLogin  func(context.Context, string, auth.DevicePrompter) (*auth.StoredToken, error)
+	openBrowser  auth.BrowserOpener
+}
 
 func newAuthCommand(a *app.App) *cobra.Command {
 	cmd := &cobra.Command{
@@ -27,26 +37,54 @@ func newAuthCommand(a *app.App) *cobra.Command {
 }
 
 func newAuthLoginCommand() *cobra.Command {
+	return newAuthLoginCommandWithDeps(authLoginDeps{
+		browserLogin: auth.Login,
+		deviceLogin:  auth.LoginDevice,
+		openBrowser:  auth.OpenBrowser,
+	})
+}
+
+func newAuthLoginCommandWithDeps(deps authLoginDeps) *cobra.Command {
+	var deviceFlow bool
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Authenticate with GitHub",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			fmt.Println("Initiating GitHub authentication...")
-			token, err := auth.Login(ctx, func(authorizeURL string) error {
-				fmt.Println("→ Opening GitHub in your browser...")
-				fmt.Println("Waiting for authorization...")
-				return auth.OpenBrowser(authorizeURL)
-			})
+			cmd.Println("Initiating GitHub authentication...")
+			var token *auth.StoredToken
+			var err error
+			if deviceFlow {
+				clientID := os.Getenv("ENBU_CLIENT_ID")
+				if clientID == "" {
+					clientID = defaultDeviceClientID
+				}
+				token, err = deps.deviceLogin(ctx, clientID, func(device auth.DeviceAuthorization) error {
+					cmd.Printf("Code: %s\n", device.UserCode)
+					cmd.Printf("→ Opening %s in your browser...\n", device.VerificationURI)
+					if err := deps.openBrowser(device.VerificationURI); err != nil {
+						cmd.PrintErrln("Could not open the browser automatically; open the URL above manually.")
+					}
+					cmd.Println("Waiting for authorization...")
+					return nil
+				})
+			} else {
+				token, err = deps.browserLogin(ctx, func(authorizeURL string) error {
+					cmd.Println("→ Opening GitHub in your browser...")
+					cmd.Println("Waiting for authorization...")
+					return deps.openBrowser(authorizeURL)
+				})
+			}
 			if err != nil {
 				return err
 			}
 
-			fmt.Printf("✓ Authenticated as: %s\n", token.Username)
+			cmd.Printf("✓ Authenticated as: %s\n", token.Username)
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&deviceFlow, "device", false, "Authenticate with GitHub Device Flow")
 
 	return cmd
 }
