@@ -72,3 +72,37 @@ output = ".env.staging"
 		t.Fatalf("warnings = %q, want cache cleanup warning", events.messages)
 	}
 }
+
+func TestRenameEnvironmentInvalidatesOldCache(t *testing.T) {
+	dir := t.TempDir()
+	origDir, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	_ = os.Chdir(dir)
+
+	cfg := `version = "v1alpha1"
+default_env = "dev"
+
+[env.dev]
+output = ".env.dev"
+`
+	if err := os.WriteFile("enbu.toml", []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cache := newMemorySecretCache()
+	a := &App{
+		RepoDetector: &staticRepoDetector{owner: "owner", repo: "repo"},
+		SecretCache:  cache,
+	}
+	oldRef := a.secretsRef("owner", "repo", "dev")
+	if err := cache.Store(oldRef, []byte("stale ciphertext")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := a.RenameEnvironment("dev", "staging"); err != nil {
+		t.Fatalf("RenameEnvironment: %v", err)
+	}
+	if _, err := cache.Load(oldRef); !errors.Is(err, ErrSecretCacheMiss) {
+		t.Fatalf("old cache load error = %v, want ErrSecretCacheMiss", err)
+	}
+}
