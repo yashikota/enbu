@@ -74,27 +74,32 @@ func PullAllRecipients(ctx context.Context, reg Registry, ref string, token stri
 }
 
 func PullSecretsWithDigest(ctx context.Context, reg Registry, ref, token string, identities ...agecrypto.Identity) (map[string]string, string, error) {
+	secrets, digest, _, err := pullSecretsWithDigestAndCiphertext(ctx, reg, ref, token, identities...)
+	return secrets, digest, err
+}
+
+func pullSecretsWithDigestAndCiphertext(ctx context.Context, reg Registry, ref, token string, identities ...agecrypto.Identity) (map[string]string, string, []byte, error) {
 	digest, err := reg.GetDigest(ctx, ref, token)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 
 	ciphertext, err := reg.Pull(ctx, ref, token)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 
 	plaintext, err := age.Decrypt(ciphertext, identities...)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 
 	secrets, err := bundle.Unmarshal(plaintext)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 
-	return secrets, digest, nil
+	return secrets, digest, ciphertext, nil
 }
 
 func SecretsExists(ctx context.Context, reg Registry, ref, token string) bool {

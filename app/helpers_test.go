@@ -54,3 +54,23 @@ func TestPullAllRecipients_RegistryFailureIsNotHidden(t *testing.T) {
 		t.Fatal("expected registry error")
 	}
 }
+
+func TestPullAllRecipients_SkipsRecipientRemovedAfterListing(t *testing.T) {
+	base := newMemRegistry()
+	ref := "ghcr.io/owner/repo-enbu"
+	if err := base.Push(context.Background(), ref+":recipient-alice-aabbccdd", "", nil, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	reg := &pullErrorRegistry{
+		memRegistry: base,
+		err:         fmt.Errorf("pulling recipient: %w", oci.ErrNotFound),
+	}
+
+	recipients, err := PullAllRecipients(context.Background(), reg, ref, "token")
+	if err != nil {
+		t.Fatalf("PullAllRecipients: %v", err)
+	}
+	if len(recipients) != 0 {
+		t.Fatalf("recipients = %v, want empty", recipients)
+	}
+}

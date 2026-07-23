@@ -123,7 +123,7 @@ output = ".env.dev"
 output = ".env.prod"
 ```
 
-Use `-e`/`--env` with `add`, `edit`, `delete`, `pull`, `export`, and `sync` to override the current environment. Recipients are shared across all environments — access control is handled by OPA/Rego policy at sync time. Without `-e`, enbu uses the environment set by `switch`.
+Use `-e`/`--env` with `add`, `edit`, `delete`, `pull`, `export`, and `sync` to override the current environment. Recipients are shared across all environments. Per-environment access control is not currently enforced; OPA/Rego policy evaluation at sync time is planned. Without `-e`, enbu uses the environment set by `switch`.
 
 ## Key Storage
 
@@ -141,7 +141,7 @@ For environments without a keychain (containers, headless servers), specify a fa
 export ENBU_BACKEND=text  # Plaintext file (0600 permissions)
 ```
 
-Pulled secret bundles are not stored in the keychain. They remain age-encrypted in the OS user cache directory and are only decrypted in memory when displayed or exported.
+Pulled secret bundles are not stored in the keychain. They remain age-encrypted at rest in the OS user cache directory. Pull transiently decrypts them in memory to validate the bundle, and listing or export decrypts them in memory when needed.
 
 ## How It Works
 

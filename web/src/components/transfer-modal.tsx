@@ -46,15 +46,22 @@ export function TransferModal({ open, operation, error, onClose }: TransferModal
     }
 
     let hasRealEvents = false;
+    const fallbackSteps = DEFAULT_STEPS[operation];
+    const terminalStep = fallbackSteps[fallbackSteps.length - 1];
+
+    const handleProgress = (step: ProgressStep) => {
+      if (step.op !== operation) return;
+      hasRealEvents = true;
+      setCurrentStep(step);
+      if (step.status === "done" && step.step === terminalStep) {
+        setIsDone(true);
+      }
+    };
 
     const handleCustomEvent = (e: Event) => {
       const customEvent = e as CustomEvent<ProgressStep>;
       if (customEvent.detail) {
-        hasRealEvents = true;
-        setCurrentStep(customEvent.detail);
-        if (customEvent.detail.status === "done") {
-          setIsDone(true);
-        }
+        handleProgress(customEvent.detail);
       }
     };
     window.addEventListener("enbu:progress", handleCustomEvent);
@@ -64,16 +71,11 @@ export function TransferModal({ open, operation, error, onClose }: TransferModal
 
     if (wailsRuntime?.EventsOn) {
       unsubscribeWails = wailsRuntime.EventsOn("enbu:progress", (step: ProgressStep) => {
-        hasRealEvents = true;
-        setCurrentStep(step);
-        if (step.status === "done") {
-          setIsDone(true);
-        }
+        handleProgress(step);
       });
     }
 
     // Fallback simulation timer for mock environment
-    const fallbackSteps = DEFAULT_STEPS[operation];
     let stepIdx = 0;
 
     const timer = setInterval(() => {

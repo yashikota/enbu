@@ -13,6 +13,7 @@ import (
 
 	agecrypto "filippo.io/age"
 	"github.com/enbu-net/enbu/utils/age"
+	"github.com/enbu-net/enbu/utils/bundle"
 	"github.com/enbu-net/enbu/utils/keystore"
 	"github.com/enbu-net/enbu/utils/oci"
 )
@@ -74,6 +75,15 @@ func (s *staticTokenProvider) LoadToken() (string, string, error) { return s.tok
 type staticRepoDetector struct{ owner, repo string }
 
 func (s *staticRepoDetector) LoadRepo() (string, string, error) { return s.owner, s.repo, nil }
+
+type storeErrorSecretCache struct {
+	SecretCache
+	err error
+}
+
+func (c *storeErrorSecretCache) Store(string, []byte) error {
+	return c.err
+}
 
 type memKeyStore struct {
 	mu   sync.RWMutex
@@ -202,7 +212,7 @@ func TestPullSecrets_UpdatesCache(t *testing.T) {
 	}
 }
 
-func TestPullSecrets_NoRemoteSecretsClearsCache(t *testing.T) {
+func TestPullSecrets_NoRemoteSecretsRecordsEmptyCache(t *testing.T) {
 	kp := mustKeyPair(t)
 	a := newTestApp(t, "owner", "repo", "default", kp, nil)
 	ref := a.secretsRef("owner", "repo", "default")
@@ -220,8 +230,118 @@ func TestPullSecrets_NoRemoteSecretsClearsCache(t *testing.T) {
 	if found {
 		t.Fatal("found = true, want false")
 	}
-	if _, err := a.secretCache().Load(ref); !errors.Is(err, ErrSecretCacheMiss) {
-		t.Fatalf("cache load error = %v, want ErrSecretCacheMiss", err)
+	cached, err := a.secretCache().Load(ref)
+	if err != nil {
+		t.Fatalf("loading empty cache marker: %v", err)
+	}
+	if len(cached) != 0 {
+		t.Fatalf("cached data = %q, want empty marker", cached)
+	}
+	secrets, cachedState, err := a.ListSecretsWithCacheState(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("ListSecretsWithCacheState: %v", err)
+	}
+	if !cachedState {
+		t.Fatal("cached = false, want true after successful empty pull")
+	}
+	if len(secrets) != 0 {
+		t.Fatalf("secrets = %v, want empty", secrets)
+	}
+}
+
+func TestPullSecrets_EmptyCacheStoreErrorHasContext(t *testing.T) {
+	kp := mustKeyPair(t)
+	a := newTestApp(t, "owner", "repo", "default", kp, nil)
+	a.SecretCache = &storeErrorSecretCache{
+		SecretCache: newMemorySecretCache(),
+		err:         errors.New("permission denied"),
+	}
+
+	_, _, err := a.PullSecrets(context.Background(), "default")
+	if err == nil {
+		t.Fatal("expected cache store error")
+	}
+	if !strings.Contains(err.Error(), "recording empty remote secrets: storing current state: permission denied") {
+		t.Fatalf("error = %q", err)
+	}
+}
+
+func TestPullThenExport_NoRemoteSecretsWritesEmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	output := filepath.Join(dir, ".env")
+	if err := os.WriteFile(output, []byte("STALE=value\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	kp := mustKeyPair(t)
+	a := newTestApp(t, "owner", "repo", "default", kp, nil)
+	a.RepositoryDir = dir
+
+	if _, _, err := a.PullSecrets(context.Background(), "default"); err != nil {
+		t.Fatalf("PullSecrets: %v", err)
+	}
+	result, err := a.ExportSecretsToFile(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("ExportSecretsToFile: %v", err)
+	}
+	if result.Count != 0 {
+		t.Fatalf("export count = %d, want 0", result.Count)
+	}
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != 0 {
+		t.Fatalf("exported data = %q, want empty", data)
+	}
+}
+
+func TestDeleteSecret_NoRemoteSecretsRecordsEmptyCache(t *testing.T) {
+	kp := mustKeyPair(t)
+	a := newTestApp(t, "owner", "repo", "default", kp, nil)
+	ref := a.secretsRef("owner", "repo", "default")
+	if err := a.secretCache().Store(ref, []byte("stale")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := a.DeleteSecret(context.Background(), "default", "MISSING"); err != nil {
+		t.Fatalf("DeleteSecret: %v", err)
+	}
+	cached, err := a.secretCache().Load(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cached) != 0 {
+		t.Fatalf("cached data = %q, want empty marker", cached)
+	}
+}
+
+func TestDeleteSecret_MissingKeyRefreshesCache(t *testing.T) {
+	kp := mustKeyPair(t)
+	a := newTestApp(t, "owner", "repo", "default", kp, map[string]string{"REMOTE": "current"})
+	ref := a.secretsRef("owner", "repo", "default")
+
+	stalePlaintext := bundle.Marshal(map[string]string{"STALE": "value"})
+	staleCiphertext, err := age.EncryptForPublicKeys(stalePlaintext, []string{kp.PublicKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.secretCache().Store(ref, staleCiphertext); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := a.DeleteSecret(context.Background(), "default", "MISSING"); err != nil {
+		t.Fatalf("DeleteSecret: %v", err)
+	}
+	secrets, err := a.ListSecrets(context.Background(), "default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secrets["REMOTE"] != "current" {
+		t.Fatalf("secrets = %v, want current remote state", secrets)
+	}
+	if _, ok := secrets["STALE"]; ok {
+		t.Fatalf("stale secret remained cached: %v", secrets)
 	}
 }
 

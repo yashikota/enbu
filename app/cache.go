@@ -103,9 +103,9 @@ func (a *App) secretCache() SecretCache {
 	if a.SecretCache != nil {
 		return a.SecretCache
 	}
-	if a.fallbackCache == nil {
+	a.fallbackOnce.Do(func() {
 		a.fallbackCache = newMemorySecretCache()
-	}
+	})
 	return a.fallbackCache
 }
 

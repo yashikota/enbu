@@ -8,10 +8,13 @@ import (
 )
 
 type recordingEvents struct {
-	steps []ProgressStep
+	messages []string
+	steps    []ProgressStep
 }
 
-func (*recordingEvents) OnProgress(string) {}
+func (r *recordingEvents) OnProgress(message string) {
+	r.messages = append(r.messages, message)
+}
 
 func (r *recordingEvents) OnStepProgress(step ProgressStep) {
 	r.steps = append(r.steps, step)

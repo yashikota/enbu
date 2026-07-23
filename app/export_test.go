@@ -3,6 +3,8 @@ package app
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/enbu-net/enbu/utils/age"
@@ -50,6 +52,29 @@ func TestDotenvExporterWritesToWriter(t *testing.T) {
 	}
 	if output.String() != "TOKEN=\"secret\"\n" {
 		t.Fatalf("output = %q", output.String())
+	}
+}
+
+func TestDotenvExporterCreatesOutputDirectory(t *testing.T) {
+	dir := t.TempDir()
+	exporter := DotenvExporter{RepositoryDir: dir}
+
+	destination, err := exporter.Export(context.Background(), ExportInput{
+		Output:  filepath.Join("config", ".env"),
+		Secrets: map[string]string{"TOKEN": "secret"},
+	})
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if destination != filepath.Join("config", ".env") {
+		t.Fatalf("destination = %q", destination)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "config", ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "TOKEN=\"secret\"\n" {
+		t.Fatalf("output = %q", data)
 	}
 }
 

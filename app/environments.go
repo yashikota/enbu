@@ -137,6 +137,7 @@ func (a *App) DeleteEnvironment(name string) error {
 	if a.RepoDetector != nil {
 		owner, repo, err := a.RepoDetector.LoadRepo()
 		if err != nil {
+			a.emit(fmt.Sprintf("Warning: environment was deleted, but its local secret cache could not be removed: %v", err))
 			return nil
 		}
 		ref := a.secretsRef(owner, repo, name)

@@ -101,6 +101,30 @@ func TestListRecipients_RegistryFailureIsNotHidden(t *testing.T) {
 	}
 }
 
+func TestListRecipients_SkipsRecipientRemovedAfterListing(t *testing.T) {
+	base := newMemRegistry()
+	ref := "ghcr.io/alice/myrepo-enbu"
+	if err := base.Push(context.Background(), ref+":recipient-alice-aabbccdd", "", nil, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{
+		Registry: &pullErrorRegistry{
+			memRegistry: base,
+			err:         fmt.Errorf("pulling recipient: %w", oci.ErrNotFound),
+		},
+		TokenProvider: &staticTokenProvider{token: "tok", username: "alice"},
+		RepoDetector:  &staticRepoDetector{owner: "alice", repo: "myrepo"},
+	}
+
+	recipients, err := a.ListRecipients(context.Background())
+	if err != nil {
+		t.Fatalf("ListRecipients: %v", err)
+	}
+	if len(recipients) != 0 {
+		t.Fatalf("recipients = %v, want empty", recipients)
+	}
+}
+
 type concurrentRegistry struct {
 	*memRegistry
 	active int32

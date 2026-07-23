@@ -222,6 +222,7 @@ export function HomePage() {
   const [recipientsLoading, setRecipientsLoading] = useState(false);
   const [recipientsError, setRecipientsError] = useState("");
   const recipientsRequestRef = useRef(0);
+  const secretTransferInFlightRef = useRef(false);
   const addEnvironmentTriggerRef = useRef<HTMLButtonElement>(null);
   const [transferModal, setTransferModal] = useState<{
     open: boolean;
@@ -779,8 +780,11 @@ export function HomePage() {
                   size="sm"
                   variant="outline"
                   loading={pullLoading}
+                  disabled={exportLoading || workspaceLoading}
                   title={t("dashboard.pullDescription")}
                   onClick={async () => {
+                    if (secretTransferInFlightRef.current || workspaceLoading) return;
+                    secretTransferInFlightRef.current = true;
                     setPullLoading(true);
                     try {
                       await runWithTransferAnimation("pull", async () => {
@@ -791,6 +795,7 @@ export function HomePage() {
                       setActionError(err instanceof Error ? err.message : String(err));
                     } finally {
                       setPullLoading(false);
+                      secretTransferInFlightRef.current = false;
                     }
                   }}
                 >
@@ -801,8 +806,11 @@ export function HomePage() {
                   size="sm"
                   variant="outline"
                   loading={exportLoading}
+                  disabled={pullLoading || workspaceLoading}
                   title={t("dashboard.exportDescription")}
                   onClick={async () => {
+                    if (secretTransferInFlightRef.current || workspaceLoading) return;
+                    secretTransferInFlightRef.current = true;
                     setExportLoading(true);
                     try {
                       await runWithTransferAnimation("export", async () => {
@@ -812,6 +820,7 @@ export function HomePage() {
                       setActionError(err instanceof Error ? err.message : String(err));
                     } finally {
                       setExportLoading(false);
+                      secretTransferInFlightRef.current = false;
                     }
                   }}
                 >

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -66,5 +67,25 @@ func TestFileSecretCacheSeparatesReferences(t *testing.T) {
 
 	if cache.path(first) == cache.path(second) {
 		t.Fatal("different references resolved to the same cache path")
+	}
+}
+
+func TestSecretCacheFallbackInitializationIsConcurrentSafe(t *testing.T) {
+	a := &App{}
+	caches := make([]SecretCache, 32)
+	var wg sync.WaitGroup
+	for i := range caches {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			caches[i] = a.secretCache()
+		}()
+	}
+	wg.Wait()
+
+	for i := 1; i < len(caches); i++ {
+		if caches[i] != caches[0] {
+			t.Fatal("concurrent calls returned different fallback caches")
+		}
 	}
 }

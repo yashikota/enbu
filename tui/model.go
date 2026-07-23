@@ -1113,11 +1113,19 @@ func (m *model) pullSecrets() tea.Cmd {
 		if m.app == nil {
 			return operationDoneMsg{message: "Pulled secrets"}
 		}
-		if _, _, err := m.app.PullSecrets(context.Background(), m.current); err != nil {
+		_, found, err := m.app.PullSecrets(context.Background(), m.current)
+		if err != nil {
 			return errMsg{err}
 		}
-		return operationDoneMsg{message: "Pulled secrets"}
+		return operationDoneMsg{message: pullResultMessage(found)}
 	}
+}
+
+func pullResultMessage(found bool) string {
+	if !found {
+		return "No secrets have been uploaded for this environment."
+	}
+	return "Pulled secrets"
 }
 
 func (m *model) exportSecrets() tea.Cmd {

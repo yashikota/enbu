@@ -39,6 +39,9 @@ func (a *App) ListSecretsWithCacheState(ctx context.Context, env string) (map[st
 		}
 		return nil, false, err
 	}
+	if len(ciphertext) == 0 {
+		return map[string]string{}, true, nil
+	}
 
 	identities, err := LoadIdentitiesForRepo(a.KeyStore, owner, repo)
 	if err != nil {
@@ -265,9 +268,12 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 
 	for attempt := range maxRetries {
 		a.emitStepProgress("delete", "pull_secrets", "start")
-		secrets, baseDigest, err := PullSecretsWithDigest(ctx, a.Registry, secretsRef, accessToken, identities...)
+		secrets, baseDigest, ciphertext, err := pullSecretsWithDigestAndCiphertext(ctx, a.Registry, secretsRef, accessToken, identities...)
 		if err != nil {
 			if IsNotFoundError(err) {
+				if err := a.refreshSecretCache(secretsRef, nil); err != nil {
+					return fmt.Errorf("recording empty remote secrets: %w", err)
+				}
 				a.emitStepProgress("delete", "pull_secrets", "done")
 				return nil
 			}
@@ -275,6 +281,9 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 		}
 
 		if _, ok := secrets[key]; !ok {
+			if err := a.refreshSecretCache(secretsRef, ciphertext); err != nil {
+				return fmt.Errorf("refreshing secrets after delete no-op: %w", err)
+			}
 			a.emitStepProgress("delete", "pull_secrets", "done")
 			return nil
 		}
@@ -284,7 +293,7 @@ func (a *App) DeleteSecret(ctx context.Context, env, key string) error {
 
 		a.emitStepProgress("delete", "encrypt", "start")
 		plaintext := bundle.Marshal(secrets)
-		ciphertext, err := age.EncryptForPublicKeys(plaintext, publicKeys)
+		ciphertext, err = age.EncryptForPublicKeys(plaintext, publicKeys)
 		if err != nil {
 			return fmt.Errorf("encrypting secrets: %w", err)
 		}
@@ -332,8 +341,8 @@ func (a *App) PullSecrets(ctx context.Context, env string) (int, bool, error) {
 	ciphertext, err := a.Registry.Pull(ctx, ref, accessToken)
 	if err != nil {
 		if IsNotFoundError(err) {
-			if err := a.secretCache().Delete(ref); err != nil {
-				return 0, false, err
+			if err := a.refreshSecretCache(ref, nil); err != nil {
+				return 0, false, fmt.Errorf("recording empty remote secrets: %w", err)
 			}
 			a.emitStepProgress("pull", "download", "done")
 			a.emit("No secrets have been uploaded for this environment.")
@@ -365,6 +374,17 @@ func (a *App) PullSecrets(ctx context.Context, env string) (int, bool, error) {
 	a.emitStepProgress("pull", "cache", "done")
 	a.emit(fmt.Sprintf("Pulled %d secrets", len(secrets)))
 	return len(secrets), true, nil
+}
+
+func (a *App) refreshSecretCache(ref string, ciphertext []byte) error {
+	cache := a.secretCache()
+	if err := cache.Store(ref, ciphertext); err != nil {
+		if deleteErr := cache.Delete(ref); deleteErr != nil {
+			return fmt.Errorf("storing current state: %w; invalidating stale state: %v", err, deleteErr)
+		}
+		return fmt.Errorf("storing current state: %w", err)
+	}
+	return nil
 }
 
 var errConflict = errors.New("secrets changed by another user")

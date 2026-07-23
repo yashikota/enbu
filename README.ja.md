@@ -125,7 +125,7 @@ output = ".env.dev"
 output = ".env.prod"
 ```
 
-`add`、`edit`、`delete`、`pull`、`export`、`sync` で `-e`/`--env` を指定すると現在の環境を一時的に上書きします。recipient は全環境で共有され、アクセス制御は sync 時の OPA/Rego ポリシーで行います。`-e` を省略すると `switch` で設定した環境が使われます。
+`add`、`edit`、`delete`、`pull`、`export`、`sync` で `-e`/`--env` を指定すると現在の環境を一時的に上書きします。recipient は全環境で共有されます。現在は環境単位のアクセス制御を強制しておらず、sync 時の OPA/Rego ポリシー評価は今後実装する予定です。`-e` を省略すると `switch` で設定した環境が使われます。
 
 ## 鍵の保管
 
@@ -143,7 +143,7 @@ output = ".env.prod"
 export ENBU_BACKEND=text  # 平文ファイル (0600) で保存
 ```
 
-pullしたシークレット本体はキーチェーンへ保存されません。age暗号文のままOSのユーザーキャッシュへ保存され、一覧表示またはexport時だけメモリ上で復号されます。
+pullしたシークレット本体はキーチェーンへ保存されず、OSのユーザーキャッシュ上ではage暗号文のままです。pull時は検証のため一時的にメモリ上で復号し、一覧表示やexport時も必要な間だけメモリ上で復号します。
 
 ## 仕組み
 

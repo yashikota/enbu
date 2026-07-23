@@ -84,17 +84,20 @@ func (a *App) ExportSecrets(ctx context.Context, env string, exporter Exporter) 
 	}
 	a.emitStepProgress("export", "load", "done")
 
-	identities, err := LoadIdentitiesForRepo(a.KeyStore, owner, repo)
-	if err != nil {
-		return nil, err
-	}
+	secrets := map[string]string{}
+	if len(ciphertext) > 0 {
+		identities, err := LoadIdentitiesForRepo(a.KeyStore, owner, repo)
+		if err != nil {
+			return nil, err
+		}
 
-	a.emitStepProgress("export", "decrypt", "start")
-	secrets, err := decryptSecretBundle(ciphertext, identities...)
-	if err != nil {
-		return nil, fmt.Errorf("decrypting cached secrets: %w", err)
+		a.emitStepProgress("export", "decrypt", "start")
+		secrets, err = decryptSecretBundle(ciphertext, identities...)
+		if err != nil {
+			return nil, fmt.Errorf("decrypting cached secrets: %w", err)
+		}
+		a.emitStepProgress("export", "decrypt", "done")
 	}
-	a.emitStepProgress("export", "decrypt", "done")
 
 	a.emitStepProgress("export", "export", "start")
 	destination, err := exporter.Export(ctx, ExportInput{
@@ -136,6 +139,9 @@ func (a *App) cacheAfterRemoteUpdate(ref string, ciphertext []byte) {
 
 func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("creating output directory: %w", err)
+	}
 	tmp, err := os.CreateTemp(dir, ".enbu-export-*.tmp")
 	if err != nil {
 		return err
