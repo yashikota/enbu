@@ -46,6 +46,7 @@ enbu auth login
 ```
 
 GitHubにログインします  
+ヘッドレス環境では、`enbu auth login --device`を実行し、表示されたコードをGitHubで入力します。
 
 ### 2. リポジトリの初期化
 
