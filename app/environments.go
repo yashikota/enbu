@@ -131,7 +131,20 @@ func (a *App) DeleteEnvironment(name string) error {
 		return err
 	}
 
-	return a.saveProject(cfg)
+	if err := a.saveProject(cfg); err != nil {
+		return err
+	}
+	if a.RepoDetector != nil {
+		owner, repo, err := a.RepoDetector.LoadRepo()
+		if err != nil {
+			return nil
+		}
+		ref := a.secretsRef(owner, repo, name)
+		if err := a.secretCache().Delete(ref); err != nil {
+			a.emit(fmt.Sprintf("Warning: environment was deleted, but its local secret cache could not be removed: %v", err))
+		}
+	}
+	return nil
 }
 
 func (a *App) RenameEnvironment(oldName, newName string) error {

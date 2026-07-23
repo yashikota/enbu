@@ -11,6 +11,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  FileOutput,
   KeyRound,
   Layers3,
   ListTree,
@@ -206,6 +207,7 @@ export function HomePage() {
   const [privateRepository, setPrivateRepository] = useState(true);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [pullLoading, setPullLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
   const [actionError, setActionError] = useState("");
   const [environments, setEnvironments] = useState<Environment[]>([]);
@@ -223,12 +225,12 @@ export function HomePage() {
   const addEnvironmentTriggerRef = useRef<HTMLButtonElement>(null);
   const [transferModal, setTransferModal] = useState<{
     open: boolean;
-    op: "add" | "pull" | "sync" | "delete" | null;
+    op: "add" | "pull" | "export" | "sync" | "delete" | null;
     error: string | null;
   }>({ open: false, op: null, error: null });
 
   const runWithTransferAnimation = useCallback(
-    async (op: "add" | "pull" | "sync" | "delete", task: () => Promise<void>) => {
+    async (op: "add" | "pull" | "export" | "sync" | "delete", task: () => Promise<void>) => {
       setTransferModal({ open: true, op, error: null });
       try {
         await task();
@@ -795,6 +797,27 @@ export function HomePage() {
                   <Download size={14} />
                   {t("dashboard.pull")}
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  loading={exportLoading}
+                  title={t("dashboard.exportDescription")}
+                  onClick={async () => {
+                    setExportLoading(true);
+                    try {
+                      await runWithTransferAnimation("export", async () => {
+                        await backend.exportSecrets(currentEnvironment);
+                      });
+                    } catch (err) {
+                      setActionError(err instanceof Error ? err.message : String(err));
+                    } finally {
+                      setExportLoading(false);
+                    }
+                  }}
+                >
+                  <FileOutput size={14} />
+                  {t("dashboard.export")}
+                </Button>
               </HStack>
             </SectionHeader>
             {workspaceLoading ? (
@@ -837,7 +860,7 @@ export function HomePage() {
                 ))}
                 {(secrets?.secrets.length ?? 0) === 0 && (
                   <Text color="fg.muted" textAlign="center" py="8">
-                    {t("dashboard.empty")}
+                    {t(secrets?.cached === false ? "dashboard.cacheEmpty" : "dashboard.empty")}
                   </Text>
                 )}
               </Box>

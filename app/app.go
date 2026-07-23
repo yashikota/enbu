@@ -16,12 +16,14 @@ type App struct {
 	Registry      Registry
 	TokenProvider TokenProvider
 	KeyStore      KeyStore
+	SecretCache   SecretCache
 	RepoDetector  RepoDetector
 	Git           gitprovider.Client
 	Platform      PlatformClient
 	Events        EventHandler
 	RegistryHost  string
 	RepositoryDir string
+	fallbackCache SecretCache
 }
 
 func (a *App) SetRepositoryDir(dir string) {
@@ -97,6 +99,7 @@ func New() *App {
 		Registry:      &defaultRegistry{},
 		TokenProvider: &defaultTokenProvider{},
 		KeyStore:      keystoreImpl,
+		SecretCache:   newFileSecretCache(),
 		RepoDetector:  &defaultRepoDetector{git: gitClient},
 		Git:           gitClient,
 	}

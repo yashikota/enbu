@@ -50,10 +50,20 @@ func TestSuccessfulProgressPathsEmitDone(t *testing.T) {
 		a := newTestApp(t, "owner", "repo", "default", mustKeyPair(t), map[string]string{"KEY": "value"})
 		events := &recordingEvents{}
 		a.Events = events
-		if _, _, _, err := a.PullSecrets(context.Background(), "default"); err != nil {
+		if _, _, err := a.PullSecrets(context.Background(), "default"); err != nil {
 			t.Fatal(err)
 		}
-		assertLastStep(t, events.steps, ProgressStep{Op: "pull", Step: "decrypt", Status: "done"})
+		assertLastStep(t, events.steps, ProgressStep{Op: "pull", Step: "cache", Status: "done"})
+	})
+
+	t.Run("pull without secrets", func(t *testing.T) {
+		a := newTestApp(t, "owner", "repo", "default", mustKeyPair(t), nil)
+		events := &recordingEvents{}
+		a.Events = events
+		if _, _, err := a.PullSecrets(context.Background(), "default"); err != nil {
+			t.Fatal(err)
+		}
+		assertLastStep(t, events.steps, ProgressStep{Op: "pull", Step: "download", Status: "done"})
 	})
 
 	t.Run("delete absent secret", func(t *testing.T) {

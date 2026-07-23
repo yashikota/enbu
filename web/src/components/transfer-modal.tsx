@@ -6,21 +6,22 @@ import { useI18n } from "../lib/i18n";
 import { useFocusTrap } from "../lib/use-focus-trap";
 
 export interface ProgressStep {
-  op: "add" | "pull" | "sync" | "delete";
+  op: "add" | "pull" | "export" | "sync" | "delete";
   step: string;
   status: "start" | "done";
 }
 
 interface TransferModalProps {
   open: boolean;
-  operation: "add" | "pull" | "sync" | "delete" | null;
+  operation: "add" | "pull" | "export" | "sync" | "delete" | null;
   error?: string | null;
   onClose: () => void;
 }
 
-const DEFAULT_STEPS: Record<"add" | "pull" | "sync" | "delete", string[]> = {
+const DEFAULT_STEPS: Record<"add" | "pull" | "export" | "sync" | "delete", string[]> = {
   add: ["pull_recipients", "pull_secrets", "encrypt", "push"],
-  pull: ["pull_secrets", "decrypt", "write"],
+  pull: ["download", "validate", "cache"],
+  export: ["load", "decrypt", "export"],
   sync: ["pull_secrets", "pull_recipients", "reencrypt", "push"],
   delete: ["pull_recipients", "pull_secrets", "encrypt", "push"],
 };
@@ -118,14 +119,16 @@ export function TransferModal({ open, operation, error, onClose }: TransferModal
 
   const stepType = currentStep?.step;
   const isLeftToRight = stepType === "push" || stepType === "reencrypt";
-  const isRightToLeft = stepType === "pull_secrets" || stepType === "pull_recipients";
-  const isLocal = stepType === "encrypt" || stepType === "decrypt" || stepType === "write";
+  const isRightToLeft = stepType === "pull_secrets" || stepType === "pull_recipients" || stepType === "download";
+  const isLocal = stepType === "encrypt" || stepType === "decrypt" || stepType === "write" || stepType === "validate" || stepType === "cache" || stepType === "load" || stepType === "export";
 
   const modalTitle =
     operation === "add"
       ? t("transfer.addTitle")
       : operation === "pull"
       ? t("transfer.pullTitle")
+      : operation === "export"
+      ? t("transfer.exportTitle")
       : operation === "delete"
       ? t("transfer.deleteTitle")
       : t("transfer.syncTitle");

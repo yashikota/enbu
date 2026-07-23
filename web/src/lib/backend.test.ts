@@ -54,6 +54,9 @@ beforeEach(() => {
         PullSecrets: vi.fn(async (env: string) => {
           window.calls?.push(["pull", env]);
         }),
+        ExportSecrets: vi.fn(async (env: string) => {
+          window.calls?.push(["export", env]);
+        }),
         SyncSecrets: vi.fn(async (env: string) => {
           window.calls?.push(["sync", env]);
         }),
@@ -114,6 +117,7 @@ describe("backend desktop adapter", () => {
     await backend.editSecret("TOKEN", "new", "default");
     await backend.deleteSecret("TOKEN", "default");
     await backend.pullSecrets("default");
+    await backend.exportSecrets("default");
     await backend.syncSecrets("default");
 
     expect(window.calls).toEqual([
@@ -125,6 +129,7 @@ describe("backend desktop adapter", () => {
       ["edit", "default", "TOKEN", "new"],
       ["delete", "default", "TOKEN"],
       ["pull", "default"],
+      ["export", "default"],
       ["sync", "default"],
     ]);
   });

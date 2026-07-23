@@ -42,6 +42,7 @@ vi.mock("../lib/backend", () => ({
     editSecret: vi.fn(),
     deleteSecret: vi.fn(),
     pullSecrets: vi.fn(),
+    exportSecrets: vi.fn(),
     syncSecrets: vi.fn(),
     listRepositories: vi.fn(async () => []),
     removeRepository: vi.fn(),
@@ -717,6 +718,26 @@ describe("dashboard review regressions", () => {
       environment: "default",
       secrets: [{ key: "KEY", value: "value" }],
     });
+  });
+
+  it("prompts for pull when the environment has no local cache", async () => {
+    oauthMocks.repoStatus.mockResolvedValue(initializedRepo("/a"));
+    backendMock.listRecipients.mockResolvedValue([]);
+    backendMock.listSecrets.mockResolvedValue({
+      environment: "default",
+      cached: false,
+      secrets: [],
+    });
+
+    renderAuthenticatedHome();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain(
+      "No cached secrets. Pull to download this environment.",
+    );
   });
 
   it("trims duplicate keys before validation and does not call the backend", async () => {
