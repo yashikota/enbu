@@ -32,18 +32,19 @@ type repositoryPlatform interface {
 }
 
 type Service struct {
-	app       *app.App
-	ctx       context.Context
-	pickDir   DirectoryPicker
-	openURL   BrowserOpener
-	git       gitprovider.Client
-	github    func(string) repositoryPlatform
-	repoMu    sync.Mutex
-	authMu    sync.Mutex
-	repoPath  string
-	sessions  map[string]*oauthSession
-	authLogin func(context.Context, auth.BrowserOpener) (*auth.StoredToken, error)
-	emitEvent func(context.Context, string, ...interface{})
+	app        *app.App
+	ctx        context.Context
+	pickDir    DirectoryPicker
+	openURL    BrowserOpener
+	git        gitprovider.Client
+	github     func(string) repositoryPlatform
+	repoMu     sync.Mutex
+	authMu     sync.Mutex
+	repoPath   string
+	sessions   map[string]*oauthSession
+	authLogin  func(context.Context, auth.BrowserOpener) (*auth.StoredToken, error)
+	emitEvent  func(context.Context, string, ...interface{})
+	AppVersion string
 }
 
 type oauthSession struct {
@@ -606,6 +607,13 @@ func (s *Service) DiffHistory(env string, from, to int) (*app.Diff, error) {
 
 func (s *Service) RestoreHistory(env string, index int) error {
 	return s.withRepo(func() error { return s.app.RestoreHistory(s.context(), env, index) })
+}
+
+func (s *Service) GetAppVersion() string {
+	if s.AppVersion != "" {
+		return s.AppVersion
+	}
+	return "(unset)"
 }
 
 func (s *Service) loadSelectedRepo() {

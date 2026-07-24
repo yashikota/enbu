@@ -21,6 +21,8 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+var Version string
+
 type slogWailsLogger struct{}
 
 type windowActions struct {
@@ -97,6 +99,7 @@ func main() {
 	}
 
 	core := desktop.NewService(app.New())
+	core.AppVersion = Version
 	service := &DesktopService{service: core}
 	onSecondInstanceLaunch, onURLOpen := activationHandlers(
 		core.Context,

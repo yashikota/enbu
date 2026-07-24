@@ -87,6 +87,7 @@ beforeEach(() => {
             };
           },
         ),
+        GetAppVersion: vi.fn(async () => "v0.7.5"),
       },
     },
   };

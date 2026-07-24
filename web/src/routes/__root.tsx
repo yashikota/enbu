@@ -401,6 +401,14 @@ export function RepositoryContextMenu({
 export function AccountMenu({ status, loading }: { status: AuthStatus | null; loading: boolean }) {
   const { t } = useI18n();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const [appVersion, setAppVersion] = useState("");
+
+  useEffect(() => {
+    backend
+      .appVersion()
+      .then(setAppVersion)
+      .catch(() => {});
+  }, []);
 
   const authenticated = Boolean(status?.authenticated);
   const username = status?.username ?? "";
@@ -503,6 +511,14 @@ export function AccountMenu({ status, loading }: { status: AuthStatus | null; lo
               >
                 {t("auth.logout")}
               </Button>
+            </>
+          )}
+          {appVersion && (
+            <>
+              <Separator mt="2" />
+              <Text fontSize="2xs" color="fg.subtle" textAlign="right" pt="2">
+                {appVersion}
+              </Text>
             </>
           )}
         </Popover.Content>

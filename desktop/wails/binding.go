@@ -122,6 +122,10 @@ func (s *DesktopService) WriteConfig(content string) error {
 	return s.service.WriteConfig(content)
 }
 
+func (s *DesktopService) GetAppVersion() string {
+	return s.service.GetAppVersion()
+}
+
 func (s *DesktopService) GitInit(path string) (desktop.RepoInfo, error) {
 	return s.service.GitInit(path)
 }
