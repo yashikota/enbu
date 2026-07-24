@@ -67,6 +67,7 @@ type DesktopService = {
     repoName: string,
     privateRepository: boolean,
   ) => Promise<GUIRepoStatus["repo"]>;
+  GetAppVersion: () => Promise<string>;
 };
 
 type DesktopAuthStatus = Omit<AuthStatus, "repo"> & {
@@ -297,6 +298,9 @@ const realBackend = {
   },
   async writeConfig(content: string): Promise<void> {
     await service()?.WriteConfig(content);
+  },
+  async appVersion(): Promise<string> {
+    return (await service()?.GetAppVersion()) ?? "";
   },
 };
 

@@ -212,4 +212,7 @@ export const mockBackend = {
   async writeConfig(content: string): Promise<void> {
     mockConfig = content;
   },
+  async appVersion(): Promise<string> {
+    return "";
+  },
 };

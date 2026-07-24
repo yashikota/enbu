@@ -48,6 +48,7 @@ vi.mock("../lib/backend", () => ({
     listRecipients: vi.fn(async () => []),
     readConfig: vi.fn(async () => ""),
     writeConfig: vi.fn(),
+    appVersion: vi.fn(async () => ""),
   },
   openURL: vi.fn(),
 }));
