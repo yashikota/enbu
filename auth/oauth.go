@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	authEndpoint       = "https://auth.enbu.net"
+	authEndpoint       = "https://auth.enbu-net.workers.dev"
 	callbackPath       = "/oauth/callback"
 	loginTimeout       = 10 * time.Minute
 	maxResponseBytes   = 4 * 1024
