@@ -1355,7 +1355,12 @@ export function SecretRow({
       _last={{ borderBottomWidth: "0" }}
       _hover={{ bg: "bg.muted" }}
     >
-      <HStack minW="0" gap="1">
+      <HStack
+        minW="0"
+        gap="1"
+        gridColumn={{ base: "1", md: "auto" }}
+        gridRow={{ base: "1", md: "auto" }}
+      >
         <Text flex="1" minW="0" fontFamily="mono" fontSize="sm" fontWeight="bold" truncate>
           {secretKey}
         </Text>
@@ -1381,7 +1386,8 @@ export function SecretRow({
         value={editValue}
         type={visible ? "text" : "password"}
         h="38px"
-        display={{ base: "none", md: "block" }}
+        gridColumn={{ base: "1 / -1", md: "auto" }}
+        gridRow={{ base: "2", md: "auto" }}
         borderColor="border.default"
         borderRadius="md"
         onChange={(e) => setEditValue(e.target.value)}
@@ -1389,7 +1395,7 @@ export function SecretRow({
           if (e.target.value !== secretValue) await onEdit(e.target.value);
         }}
       />
-      <HStack gap="1">
+      <HStack gap="1" gridColumn={{ base: "2", md: "auto" }} gridRow={{ base: "1", md: "auto" }}>
         <Button
           variant="ghost"
           w="34px"

@@ -325,6 +325,22 @@ describe("SecretRow", () => {
     renderSecretRow({ secretKey: "API_KEY", secretValue: "super-secret" });
     expect(container.textContent).toContain("API_KEY");
   });
+
+  it("renders the value input at all viewport sizes (not hidden)", () => {
+    renderSecretRow({ secretKey: "API_KEY", secretValue: "super-secret" });
+    const valueInput = queryInput("super-secret");
+    expect(valueInput).toBeTruthy();
+    // The input must not carry display:none — it was previously hidden on mobile
+    expect(valueInput?.style.display).not.toBe("none");
+  });
+
+  it("value input has correct aria-label linking it to its key", () => {
+    renderSecretRow({ secretKey: "API_KEY", secretValue: "super-secret" });
+    const valueInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Value: API_KEY"]',
+    );
+    expect(valueInput).toBeTruthy();
+  });
 });
 
 describe("RepositoryContextMenu", () => {
