@@ -27,14 +27,14 @@ func TestNew_UnknownBackend(t *testing.T) {
 }
 
 func TestNew_DefaultBackend(t *testing.T) {
+	keyring.MockInit()
 	t.Setenv("ENBU_BACKEND", "")
-	// Don't call real keyring - result depends on environment; just verify no panic.
 	b, err := New()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if b == nil {
-		t.Fatal("expected non-nil backend")
+	if _, ok := b.(*KeyringBackend); !ok {
+		t.Fatalf("expected *KeyringBackend, got %T", b)
 	}
 }
 
