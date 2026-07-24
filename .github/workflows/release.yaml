@@ -334,3 +334,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release edit "$GITHUB_REF_NAME" --draft=false
+
+      - name: Trigger homebrew-tap update
+        shell: bash
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          gh api repos/enbu-net/homebrew-tap/dispatches \
+            --method POST \
+            -H "Authorization: Bearer $HOMEBREW_TAP_TOKEN" \
+            -f event_type=enbu-released
