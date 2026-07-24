@@ -71,11 +71,20 @@ tasks:
     dir: desktop/wails
     vars:
       VERSION:
-        sh: git -C ../.. describe --tags --always --dirty 2>/dev/null || echo "(unset)"
+        sh: git describe --tags --always --dirty 2>/dev/null || echo "(unset)"
     cmds:
       - mkdir -p build
       - cp ../../assets/icon.png build/appicon.png
       - go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build -nosyncgomod -m -ldflags "-X main.Version={{.VERSION}}"
+
+  gui/run:
+    desc: Run GUI desktop app in dev mode
+    dir: desktop/wails
+    vars:
+      VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo "(unset)"
+    cmds:
+      - go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 dev -nosyncgomod -ldflags "-X main.Version={{.VERSION}}"
 
   all/check:
     desc: Format and lint all code
