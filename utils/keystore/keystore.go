@@ -22,7 +22,11 @@ func New() (Backend, error) {
 
 	switch backendType {
 	case "keyring":
-		return &KeyringBackend{}, nil
+		kb := &KeyringBackend{}
+		if err := kb.probe(); err != nil {
+			return &TextBackend{}, nil
+		}
+		return kb, nil
 	case "text":
 		return &TextBackend{}, nil
 	default:
