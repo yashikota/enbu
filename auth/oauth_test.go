@@ -137,7 +137,7 @@ func TestCallbackDenialDoesNotLeakDescription(t *testing.T) {
 
 func TestOAuthLoginEndToEnd(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	stubKeyring(t)
+	stubBackend(t)
 	originalUser := getGitHubUser
 	getGitHubUser = func(context.Context, string) (string, int64, error) { return "octo", 123, nil }
 	t.Cleanup(func() { getGitHubUser = originalUser })

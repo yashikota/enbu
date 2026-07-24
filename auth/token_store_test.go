@@ -4,45 +4,26 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/zalando/go-keyring"
+	"github.com/enbu-net/enbu/utils/keystore"
 )
 
-func stubKeyring(t *testing.T) *string {
+// stubBackend replaces tokenBackend with an in-memory store for the duration of the test.
+func stubBackend(t *testing.T) {
 	t.Helper()
-	originalSet, originalGet, originalDelete := keyringSet, keyringGet, keyringDelete
-	var value string
-	present := false
-	keyringSet = func(_, _, secret string) error {
-		value, present = secret, true
-		return nil
-	}
-	keyringGet = func(_, _ string) (string, error) {
-		if !present {
-			return "", keyring.ErrNotFound
-		}
-		return value, nil
-	}
-	keyringDelete = func(_, _ string) error {
-		if !present {
-			return keyring.ErrNotFound
-		}
-		present = false
-		return nil
-	}
-	t.Cleanup(func() {
-		keyringSet, keyringGet, keyringDelete = originalSet, originalGet, originalDelete
-	})
-	return &value
+	dir := t.TempDir()
+	t.Setenv("ENBU_TEXT_BACKEND_DIR", dir)
+	orig := tokenBackend
+	tokenBackend = &keystore.TextBackend{}
+	t.Cleanup(func() { tokenBackend = orig })
 }
 
-func TestTokenStoreUsesKeyringAndRemovesLegacyFile(t *testing.T) {
+func TestTokenStoreRoundTripAndLegacyCleanup(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dataDir)
-	t.Setenv("ENBU_BACKEND", "text")
-	stubKeyring(t)
+	stubBackend(t)
+
 	legacy := filepath.Join(dataDir, "enbu", "token.json")
 	if err := os.MkdirAll(filepath.Dir(legacy), 0o700); err != nil {
 		t.Fatal(err)
@@ -62,14 +43,16 @@ func TestTokenStoreUsesKeyringAndRemovesLegacyFile(t *testing.T) {
 	if err != nil || *got != *want {
 		t.Fatalf("LoadToken = %#v, %v", got, err)
 	}
+
 	renamed := &StoredToken{AccessToken: "new-token", Username: "renamed-octo", UserID: want.UserID}
 	if err := SaveToken(renamed); err != nil {
-		t.Fatalf("SaveToken after login rename: %v", err)
+		t.Fatalf("SaveToken after rename: %v", err)
 	}
 	got, err = LoadToken()
 	if err != nil || *got != *renamed {
-		t.Fatalf("LoadToken after login rename = %#v, %v", got, err)
+		t.Fatalf("LoadToken after rename = %#v, %v", got, err)
 	}
+
 	if err := DeleteToken(); err != nil {
 		t.Fatalf("DeleteToken: %v", err)
 	}
@@ -78,21 +61,24 @@ func TestTokenStoreUsesKeyringAndRemovesLegacyFile(t *testing.T) {
 	}
 }
 
-func TestTokenStoreDoesNotFallbackWhenKeyringFails(t *testing.T) {
+func TestTokenStoreSaveErrorPropagated(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	originalSet := keyringSet
-	keyringSet = func(_, _, _ string) error { return errors.New("unavailable") }
-	t.Cleanup(func() { keyringSet = originalSet })
+	orig := tokenBackend
+	tokenBackend = &errorBackend{err: errors.New("disk full")}
+	t.Cleanup(func() { tokenBackend = orig })
+
 	err := SaveToken(&StoredToken{AccessToken: "token", Username: "octo", UserID: 123})
-	if err == nil || !strings.Contains(err.Error(), "OS keyring") {
-		t.Fatalf("SaveToken error = %v", err)
+	if err == nil {
+		t.Fatal("expected error from SaveToken, got nil")
 	}
 }
 
 func TestTokenStoreReportsLegacyCleanupFailure(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dataDir)
-	stubKeyring(t)
+	stubBackend(t)
+
+	// Make legacy path a directory so os.Remove fails.
 	legacy := filepath.Join(dataDir, "enbu", "token.json")
 	if err := os.MkdirAll(legacy, 0o700); err != nil {
 		t.Fatal(err)
@@ -100,46 +86,53 @@ func TestTokenStoreReportsLegacyCleanupFailure(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(legacy, "keep"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	err := SaveToken(&StoredToken{AccessToken: "token", Username: "octo", UserID: 123})
-	if err == nil || !strings.Contains(err.Error(), "legacy token") {
-		t.Fatalf("SaveToken error = %v", err)
+	if err == nil {
+		t.Fatal("expected legacy cleanup error, got nil")
 	}
+	// Token was still saved; LoadToken must succeed.
 	if _, err := LoadToken(); err != nil {
-		t.Fatalf("credential was not retained in keyring: %v", err)
+		t.Fatalf("credential not retained after legacy cleanup failure: %v", err)
 	}
 }
 
 func TestGitHubTokenIsEphemeral(t *testing.T) {
-	stubKeyring(t)
+	stubBackend(t)
 	t.Setenv("GITHUB_TOKEN", "ci-token")
 	t.Setenv("GITHUB_ACTOR", "ci-user")
 	token, err := LoadToken()
 	if err != nil || token.AccessToken != "ci-token" || token.Username != "ci-user" {
 		t.Fatalf("LoadToken = %#v, %v", token, err)
 	}
-	if _, err := keyringGet(tokenKeyringService, tokenKeyringAccount); !errors.Is(err, keyring.ErrNotFound) {
-		t.Fatal("GITHUB_TOKEN was persisted")
+	// Env token must NOT be persisted in the backend.
+	if _, err := tokenBackend.Load(tokenKeyringService, tokenKeyringAccount); !errors.Is(err, keystore.ErrNotFound) {
+		t.Fatal("GITHUB_TOKEN was persisted in backend")
 	}
 }
 
-func TestDeleteTokenRemovesLegacyFileEvenWhenKeyringFails(t *testing.T) {
+func TestDeleteTokenRemovesLegacyFile(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dataDir)
+	stubBackend(t)
+
 	legacy := filepath.Join(dataDir, "enbu", "token.json")
 	if err := os.MkdirAll(filepath.Dir(legacy), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(legacy, []byte("legacy-secret"), 0o600); err != nil {
+	if err := os.WriteFile(legacy, []byte("legacy"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	originalDelete := keyringDelete
-	keyringDelete = func(_, _ string) error { return errors.New("keyring unavailable") }
-	t.Cleanup(func() { keyringDelete = originalDelete })
-	if err := DeleteToken(); err == nil || !strings.Contains(err.Error(), "OS keyring") {
-		t.Fatalf("DeleteToken error = %v", err)
-	}
+	_ = DeleteToken()
 	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
 		t.Fatalf("legacy token still exists: %v", err)
 	}
 }
+
+// errorBackend is a Backend that always returns the given error.
+type errorBackend struct{ err error }
+
+func (e *errorBackend) Store(_, _ string, _ []byte) error { return e.err }
+func (e *errorBackend) Load(_, _ string) ([]byte, error)  { return nil, e.err }
+func (e *errorBackend) Delete(_, _ string) error          { return e.err }

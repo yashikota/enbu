@@ -15,7 +15,7 @@ import (
 
 func TestDeviceLoginEndToEnd(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	stubKeyring(t)
+	stubBackend(t)
 	originalUser := getGitHubUser
 	getGitHubUser = func(_ context.Context, token string) (string, int64, error) {
 		if token != "github-token" {

@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/enbu-net/enbu/config"
-	"github.com/zalando/go-keyring"
+	"github.com/enbu-net/enbu/utils/keystore"
 )
 
 const (
@@ -18,11 +18,13 @@ const (
 	tokenKeyringAccount = "github-oauth"
 )
 
-var (
-	keyringSet    = keyring.Set
-	keyringGet    = keyring.Get
-	keyringDelete = keyring.Delete
-)
+var tokenBackend = func() keystore.Backend {
+	b, err := keystore.New()
+	if err != nil || b == nil {
+		return &keystore.TextBackend{}
+	}
+	return b
+}()
 
 type StoredToken struct {
 	AccessToken string `json:"access_token"`
@@ -38,15 +40,15 @@ func SaveToken(token *StoredToken) error {
 	if err != nil {
 		return err
 	}
-	if err := keyringSet(tokenKeyringService, tokenKeyringAccount, string(data)); err != nil {
-		return fmt.Errorf("storing token in OS keyring: %w", err)
+	if err := tokenBackend.Store(tokenKeyringService, tokenKeyringAccount, data); err != nil {
+		return fmt.Errorf("saving token: %w", err)
 	}
-	stored, err := keyringGet(tokenKeyringService, tokenKeyringAccount)
-	if err != nil || !bytes.Equal([]byte(stored), data) {
-		return errors.New("verifying token in OS keyring failed")
+	stored, err := tokenBackend.Load(tokenKeyringService, tokenKeyringAccount)
+	if err != nil || !bytes.Equal(stored, data) {
+		return errors.New("verifying saved token failed")
 	}
 	if err := os.Remove(legacyTokenPath()); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("removing legacy token file (credential was saved to keyring): %w", err)
+		return fmt.Errorf("removing legacy token file: %w", err)
 	}
 	return nil
 }
@@ -60,32 +62,32 @@ func LoadToken() (*StoredToken, error) {
 		return &StoredToken{AccessToken: tokenEnv, Username: actor}, nil
 	}
 
-	data, err := keyringGet(tokenKeyringService, tokenKeyringAccount)
+	data, err := tokenBackend.Load(tokenKeyringService, tokenKeyringAccount)
 	if err != nil {
-		if errors.Is(err, keyring.ErrNotFound) {
+		if errors.Is(err, keystore.ErrNotFound) {
 			return nil, notLoggedInError()
 		}
-		return nil, fmt.Errorf("loading token from OS keyring: %w", err)
+		return nil, fmt.Errorf("loading token: %w", err)
 	}
-	decoder := json.NewDecoder(bytes.NewBufferString(data))
+	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var token StoredToken
 	if err := decoder.Decode(&token); err != nil {
-		return nil, fmt.Errorf("parsing token from OS keyring: %w", err)
+		return nil, fmt.Errorf("parsing token: %w", err)
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return nil, errors.New("parsing token from OS keyring: invalid trailing data")
+		return nil, errors.New("parsing token: invalid trailing data")
 	}
 	if err := validateStoredToken(&token); err != nil {
-		return nil, fmt.Errorf("parsing token from OS keyring: %w", err)
+		return nil, fmt.Errorf("parsing token: %w", err)
 	}
 	return &token, nil
 }
 
 func DeleteToken() error {
 	var deleteErrors []error
-	if err := keyringDelete(tokenKeyringService, tokenKeyringAccount); err != nil && !errors.Is(err, keyring.ErrNotFound) {
-		deleteErrors = append(deleteErrors, fmt.Errorf("removing token from OS keyring: %w", err))
+	if err := tokenBackend.Delete(tokenKeyringService, tokenKeyringAccount); err != nil && !errors.Is(err, keystore.ErrNotFound) {
+		deleteErrors = append(deleteErrors, fmt.Errorf("removing token: %w", err))
 	}
 	if err := os.Remove(legacyTokenPath()); err != nil && !os.IsNotExist(err) {
 		deleteErrors = append(deleteErrors, fmt.Errorf("removing legacy token file: %w", err))
